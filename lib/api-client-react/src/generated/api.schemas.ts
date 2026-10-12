@@ -8822,6 +8822,8 @@ export interface HrPolicyCapabilities {
   canMaintain: boolean;
   canReview: boolean;
   canPublish: boolean;
+  /** Request-scoped Super Admin administration; does not confer specialist review authority. */
+  platformAdministration?: boolean;
   reviewAuthorityRoles: HrPolicyCapabilitiesReviewAuthorityRolesItem[];
   canReviewHistory: boolean;
   canResolveHandoffs: boolean;

@@ -15,6 +15,12 @@ The active client/workspace name must remain visually identifiable even when the
 
 The product is SaaS, and the user requires one platform-wide administrator for client setup and administration, rather than relying only on separate client owners.
 
+On 2026-10-12, the user confirmed full cross-client Super Admin administration in both development and the published app, including confidential client records, policy maintenance and authority management.
+
+**Why:** Requiring a separate maintainer/operator appointment for the authenticated platform administrator blocked the user's intended SaaS administration model.
+
+**How to apply:** Give the authenticated privileged session administrative access without permanently promoting a shared demo identity. Retain secure login, actor-attributed history, personal Vault consent and external-action safety checks, as stated in the scope the user accepted. Administrative publication still relies on a real, current independent review; never label platform administration as professional credentials or evidence verification.
+
 The initial cross-client administration is intended for two operators. The user wants to reuse the Demo Administrator identity as Super Admin during development and defer tying it to a verified personal email until later. Do not insist on two separate administrator identities as a product requirement.
 
 **Why:** The user explicitly requested one administrator with universal rights and said finer restrictions can be introduced later, then clarified that the same account should serve both demo and super-admin purposes while the product is in development.

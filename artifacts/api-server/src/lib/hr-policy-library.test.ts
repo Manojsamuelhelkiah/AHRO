@@ -1,11 +1,14 @@
 import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
+import type { Request, Response } from "express";
 import { after, before, test } from "node:test";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
   onbGovernanceAuthorityAssignments,
+  onbGovernanceHistory,
   onbHrPolicyHandoffs,
   onbHrPolicyExcerpts,
   onbHrPolicySources,
@@ -26,8 +29,14 @@ import {
   retirePolicy,
   submitPolicyReview,
   publishPolicy,
+  policyCapabilities as getPolicyCapabilities,
+  getPolicyVersion as readPolicyVersion,
 } from "./hr-policy-library";
-import { governanceRole } from "./onboarding/governance";
+import { governanceRole, isVerifiedGovernanceOperator, assignGovernanceAuthority, revokeGovernanceAuthority } from "./onboarding/governance";
+import {
+  ADMIN_APPROVAL_KEY, ADMIN_COOKIE, ADMIN_LIFETIME_MS,
+  bindPlatformSuperAdminTenant, createPlatformAdminContext, signAdminGrant,
+} from "./private-platform-admin";
 
 const suffix = `${process.pid}-${randomUUID()}`;
 const orgA = `policy-a-${suffix}`;
@@ -37,6 +46,126 @@ const reviewer = `policy-reviewer-${suffix}`;
 const member = `policy-member-${suffix}`;
 const other = `policy-other-${suffix}`;
 const today = new Date().toISOString().slice(0, 10);
+const platformActor = `policy-platform-${suffix}`;
+
+async function asPlatformAdmin<T>(
+  environment: "development" | "production", organizationId: string,
+  action: (finish: () => void) => Promise<T>,
+): Promise<T> {
+  const previousEnv = process.env.NODE_ENV, previousSecret = process.env.SESSION_SECRET;
+  const fixtureSecret = "policy-platform-fixture-secret-at-least-32-characters";
+  process.env.NODE_ENV = environment;
+  process.env.SESSION_SECRET = fixtureSecret;
+  const issuedAt = Date.now();
+  const proof = {
+    userId: platformActor, sessionId: "sess_policy_platform_fixture",
+    generation: "policy-platform-fixture", environment, issuedAt,
+    expiresAt: issuedAt + ADMIN_LIFETIME_MS,
+  };
+  const middleware = createPlatformAdminContext({
+    getUser: async () => ({
+      id: platformActor, primaryEmailAddressId: "idn_policy_fixture", twoFactorEnabled: true,
+      emailAddresses: [{ id: "idn_policy_fixture", verification: { status: "verified" } }],
+      privateMetadata: { [ADMIN_APPROVAL_KEY]: {
+        userId: platformActor, primaryEmailId: "idn_policy_fixture", environment,
+        generation: proof.generation, decisionRef: "fixture-platform-approval",
+      } },
+    }),
+    getSession: async () => ({ userId: platformActor, status: "active" }),
+    isDemo: async () => false,
+  });
+  const req = {
+    authUserId: platformActor, method: "POST",
+    auth: Object.assign(() => ({
+      userId: platformActor, sessionId: proof.sessionId,
+      sessionClaims: { fva: [0, 0] }, tokenType: "session_token",
+    }), { [Symbol.for("@clerk/express.auth")]: true }),
+    headers: { cookie: `${ADMIN_COOKIE}=${signAdminGrant(proof, fixtureSecret)}` },
+    header: (key: string) => ({ origin: "https://fixture.test", host: "fixture.test" } as Record<string, string>)[key],
+  } as unknown as Request;
+  const res = Object.assign(new EventEmitter(), {
+    status(code: number) { throw new Error(`Platform fixture denied: ${code}`); },
+    json() { return this; },
+  }) as unknown as Response;
+  let pending: Promise<T> | undefined;
+  try {
+    await middleware(req, res, () => {
+      bindPlatformSuperAdminTenant(organizationId);
+      pending = action(() => res.emit("finish"));
+    });
+    assert.ok(pending, "Private administrator context was established");
+    return await pending;
+  } finally {
+    res.emit("finish");
+    if (previousEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousEnv;
+    if (previousSecret === undefined) delete process.env.SESSION_SECRET; else process.env.SESSION_SECRET = previousSecret;
+  }
+}
+
+test("private Super Admin administers client policy sources and authority assignments in both environments", { concurrency: false }, async () => {
+  for (const environment of ["development", "production"] as const) {
+    await asPlatformAdmin(environment, orgB, async (finish) => {
+      const capabilities = await getPolicyCapabilities(orgB, platformActor);
+      assert.equal(capabilities.platformAdministration, true);
+      assert.equal(capabilities.canMaintain, true);
+      assert.equal(capabilities.canPublish, true);
+      assert.equal(capabilities.canReviewHistory, true);
+      assert.equal(capabilities.canResolveHandoffs, true);
+      assert.equal(capabilities.canReview, false, "Administration must not fabricate specialist credentials");
+      assert.equal(isVerifiedGovernanceOperator(platformActor, orgB), true);
+      assert.equal(isVerifiedGovernanceOperator(platformActor, orgA), false);
+      assert.equal(isVerifiedGovernanceOperator(other, orgB), false);
+      const created = await createPolicy(orgB, platformActor, draft({
+        title: `Platform policy ${environment}`, audience: ["member"],
+      }));
+      assert.ok((await listPolicies(orgB, platformActor)).some(row => row.policyId === created.policyId));
+      assert.equal((await readPolicyVersion(orgB, platformActor, created.policyId, 1)).text, draft().text);
+      const revised = await revisePolicy(orgB, platformActor, created.policyId, draft({
+        expectedVersion: 1, audience: ["member"], text: "Administratively edited policy source.",
+      }));
+      await submitPolicyReview(orgB, platformActor, created.policyId, { expectedVersion: revised.version });
+      await expectPolicyError(() => publishPolicy(orgB, platformActor, created.policyId, {
+        expectedVersion: revised.version, publicationVerificationReference: "fixture-unreviewed",
+      }), 409);
+      await expectPolicyError(() => reviewPolicy(orgB, platformActor, created.policyId, {
+        version: revised.version, outcome: "approved", verificationReference: "fixture-self-review",
+      }), 403);
+      await reviewPolicy(orgB, reviewer, created.policyId, {
+        version: revised.version, outcome: "approved", verificationReference: "fixture-independent-review",
+      });
+      const published = await publishPolicy(orgB, platformActor, created.policyId, {
+        expectedVersion: revised.version, publicationVerificationReference: "fixture-administrative-publication",
+      });
+      assert.equal(published.status, "published");
+      assert.equal(published.publisherUserId, platformActor);
+      const [record] = await db.select().from(onbHrPolicyVersions).where(and(
+        eq(onbHrPolicyVersions.organizationId, orgB),
+        eq(onbHrPolicyVersions.policyId, created.policyId), eq(onbHrPolicyVersions.version, revised.version),
+      ));
+      assert.equal(record.publisherAuthorityAssignmentId, null);
+      assert.ok(record.reviewerAuthorityAssignmentId);
+      await retirePolicy(orgB, platformActor, created.policyId, { version: revised.version });
+      assert.equal((await readPolicyVersion(orgB, platformActor, created.policyId, revised.version)).policy.status, "retired");
+      const handoff = await createPolicyHandoff(orgB, reviewer, { question: `Clarification ${environment}` });
+      const resolved = await resolvePolicyHandoff(orgB, platformActor, handoff.handoff.id, { resolution: "Recorded administrative clarification; policy review remains separate." });
+      assert.equal(resolved.handoff.resolvedByUserId, platformActor);
+      assert.equal(resolved.handoff.resolverAuthorityAssignmentId, null);
+      await expectPolicyError(() => createPolicy(orgA, platformActor, draft()), 403);
+      const assignment = await assignGovernanceAuthority(orgB, {
+        userId: platformActor, organizationRole: "owner",
+      }, { role: "hr-policy-maintain", assigneeUserId: other, verificationReference: "fixture-authorized-maintainer" });
+      assert.equal(assignment.verificationStatus, "verified");
+      await revokeGovernanceAuthority(orgB, { userId: platformActor, organizationRole: "owner" }, assignment.id);
+      const grants = await db.select().from(onbGovernanceAuthorityAssignments)
+        .where(eq(onbGovernanceAuthorityAssignments.assigneeUserId, platformActor));
+      assert.equal(grants.length, 0, "No permanent specialist grants are created for the platform identity");
+      finish();
+      assert.equal(isVerifiedGovernanceOperator(platformActor, orgB), false);
+      await expectPolicyError(() => getPolicyCapabilities(orgB, platformActor), 403);
+    });
+  }
+  await expectPolicyError(() => createPolicy(orgB, platformActor, draft()), 403);
+});
 
 const draft = (overrides: Record<string, unknown> = {}) => ({
   title: "Relocation policy",
@@ -74,11 +203,13 @@ before(async () => {
     { organizationId: orgA, clerkUserId: reviewer, role: "admin" },
     { organizationId: orgA, clerkUserId: member, role: "member" },
     { organizationId: orgB, clerkUserId: other, role: "owner" },
+    { organizationId: orgB, clerkUserId: reviewer, role: "member" },
   ]);
   await db.insert(onbGovernanceAuthorityAssignments).values([
     { organizationId: orgA, authorityRole: "hr-policy-maintain", assigneeUserId: author, verifiedByUserId: "operator", verificationReference: "verified-maintain" },
     { organizationId: orgA, authorityRole: "hr-compliance", assigneeUserId: reviewer, verifiedByUserId: "operator", verificationReference: "verified-review" },
     { organizationId: orgA, authorityRole: "hr-policy-handoff-resolve", assigneeUserId: reviewer, verifiedByUserId: "operator", verificationReference: "verified-resolve" },
+    { organizationId: orgB, authorityRole: "hr-compliance", assigneeUserId: reviewer, verifiedByUserId: "operator", verificationReference: "verified-independent-review" },
   ]);
 });
 
@@ -87,6 +218,7 @@ after(async () => {
   await db.delete(onbHrPolicyExcerpts).where(inArray(onbHrPolicyExcerpts.organizationId, [orgA, orgB]));
   await db.delete(onbHrPolicyVersions).where(inArray(onbHrPolicyVersions.organizationId, [orgA, orgB]));
   await db.delete(onbHrPolicySources).where(inArray(onbHrPolicySources.organizationId, [orgA, orgB]));
+  await db.delete(onbGovernanceHistory).where(inArray(onbGovernanceHistory.organizationId, [orgA, orgB]));
   await db.delete(onbGovernanceAuthorityAssignments).where(inArray(onbGovernanceAuthorityAssignments.organizationId, [orgA, orgB]));
   await db.delete(organizationMembershipsTable).where(inArray(organizationMembershipsTable.organizationId, [orgA, orgB]));
   await deleteTestOrganizations(inArray(organizationsTable.id, [orgA, orgB]));

@@ -16,6 +16,7 @@ import {
   type PolicyExtractSelection,
 } from "./hr-policy-ai";
 import { sentenceForQuestion, containsPromptInjection, policyPermitted, policyCurrent, policyTimely } from "./hr-policy-selection";
+import { isPlatformSuperAdmin } from "./private-platform-admin";
 
 export type PolicyRole = "owner" | "admin" | "member";
 type PolicyStatus = "draft" | "in_review" | "published" | "superseded" | "retired";
@@ -120,6 +121,7 @@ function inputPolicy(value: unknown) {
 }
 
 async function liveMember(tx: any, organizationId: string, userId: string): Promise<PolicyRole> {
+  if (isPlatformSuperAdmin(userId, organizationId)) return "owner";
   const [membership] = await tx.select({ role: organizationMembershipsTable.role })
     .from(organizationMembershipsTable)
     .where(and(
@@ -151,6 +153,14 @@ export async function verifiedAuthority(tx: any, organizationId: string, userId:
   return grant;
 }
 
+// Platform administration is request-scoped, not a permanent specialist grant.
+// Never use this helper to substitute for the independent policy reviewer.
+async function administrativeAuthority(tx: any, organizationId: string, userId: string, role: string) {
+  await liveMember(tx, organizationId, userId);
+  if (isPlatformSuperAdmin(userId, organizationId)) return null;
+  return verifiedAuthority(tx, organizationId, userId, role);
+}
+
 async function authorityStillCurrent(tx: any, organizationId: string, assignmentId: number | null, role: string): Promise<boolean> {
   if (!assignmentId) return false;
   const now = new Date();
@@ -172,6 +182,9 @@ async function authorityStillCurrent(tx: any, organizationId: string, assignment
 }
 
 async function activeAuthorityRoles(tx: any, organizationId: string, userId: string): Promise<Set<string>> {
+  if (isPlatformSuperAdmin(userId, organizationId)) {
+    return new Set(["hr-policy-maintain", "hr-policy-historical-review", "hr-policy-handoff-resolve"]);
+  }
   const now = new Date();
   const grants = await tx.select({ authorityRole: onbGovernanceAuthorityAssignments.authorityRole })
     .from(onbGovernanceAuthorityAssignments)
@@ -209,8 +222,8 @@ async function versionsForPolicy(tx: any, organizationId: string, policyId: stri
   )).orderBy(desc(onbHrPolicyVersions.version)).for("update");
 }
 
-function isAudience(row: { audience: PolicyRole[] }, role: PolicyRole) {
-  return row.audience.includes(role);
+function isAudience(row: { audience: PolicyRole[] }, role: PolicyRole, organizationId: string, userId: string) {
+  return isPlatformSuperAdmin(userId, organizationId) || row.audience.includes(role);
 }
 
 function utcDateOnly(now: Date): string {
@@ -236,7 +249,7 @@ export async function listPolicies(organizationId: string, userId: string) {
     const rows = await tx.select().from(onbHrPolicyVersions).where(
       eq(onbHrPolicyVersions.organizationId, organizationId),
     ).orderBy(desc(onbHrPolicyVersions.createdAt));
-    return rows.filter((row: any) => isAudience(row, role) && (
+    return rows.filter((row: any) => isAudience(row, role, organizationId, userId) && (
       row.status === "published" ||
       authorities.has("hr-policy-maintain") ||
       authorities.has(row.reviewAuthorityRole)
@@ -262,7 +275,7 @@ export async function listPolicyReminders(
   // Phase one is the only authorization gate before the persistence phase.
   // It deliberately touches no policy/version rows.
   const precheckedRole = await db.transaction(async (tx) => {
-    await verifiedAuthority(tx, organizationId, userId, "hr-policy-maintain");
+    await administrativeAuthority(tx, organizationId, userId, "hr-policy-maintain");
     return liveMember(tx, organizationId, userId);
   });
 
@@ -295,7 +308,7 @@ export async function listPolicyReminders(
       dueOn: string;
     }> = [];
     for (const candidate of candidates) {
-      if (!isAudience(candidate, precheckedRole)) continue;
+      if (!isAudience(candidate, precheckedRole, organizationId, userId)) continue;
       if (candidate.reviewBy && candidate.reviewBy <= horizon) {
         reminderValues.push({
           organizationId,
@@ -334,7 +347,7 @@ export async function listPolicyReminders(
   // Reauthorization and current status/audience/date checks make stale durable
   // rows invisible after revocation, supersession, retirement, or revision.
   return db.transaction(async (tx) => {
-    await verifiedAuthority(tx, organizationId, userId, "hr-policy-maintain");
+    await administrativeAuthority(tx, organizationId, userId, "hr-policy-maintain");
     const role = await liveMember(tx, organizationId, userId);
     const rows = await tx.select({
       id: onbHrPolicyReminders.id,
@@ -367,7 +380,7 @@ export async function listPolicyReminders(
 
     // Recheck the per-version audience at return time. This keeps reminders
     // hidden after a role change even when the durable row predates it.
-    return rows.filter((row) => isAudience(row, role)).map((row) => ({
+    return rows.filter((row) => isAudience(row, role, organizationId, userId)).map((row) => ({
       id: row.id,
       policyId: row.policyId,
       version: row.version,
@@ -394,7 +407,7 @@ export async function policyHistory(organizationId: string, userId: string, poli
     // Each historical revision retains its own audience. A maintainer's
     // authority does not bypass a restricted source's explicit access rule.
     return rows.filter((row: any) => {
-      if (!isAudience(row, role)) return false;
+      if (!isAudience(row, role, organizationId, userId)) return false;
       if (row.status === "published") return true;
       if (row.status === "in_review" || row.status === "draft") {
         return authorities.has("hr-policy-maintain") || authorities.has(row.reviewAuthorityRole);
@@ -411,7 +424,7 @@ export async function getPolicyVersion(organizationId: string, userId: string, p
       eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.policyId, policyId),
       eq(onbHrPolicyVersions.version, version),
     )).for("update");
-    if (!row || !isAudience(row, role)) throw new HrPolicyError("Policy version not found.", 404);
+    if (!row || !isAudience(row, role, organizationId, userId)) throw new HrPolicyError("Policy version not found.", 404);
     const authorities = await activeAuthorityRoles(tx, organizationId, userId);
     const contentAllowed = row.status === "published" ||
       ((row.status === "draft" || row.status === "in_review") &&
@@ -426,6 +439,9 @@ export async function policyCapabilities(organizationId: string, userId: string)
   return db.transaction(async (tx) => {
     const role = await liveMember(tx, organizationId, userId);
     const can = async (scope: string) => {
+      if (isPlatformSuperAdmin(userId, organizationId) && [
+        "hr-policy-maintain", "hr-policy-historical-review", "hr-policy-handoff-resolve",
+      ].includes(scope)) return true;
       try { await verifiedAuthority(tx, organizationId, userId, scope); return true; } catch { return false; }
     };
     const reviewAuthorityRoles = await Promise.all(POLICY_REVIEW_AUTHORITIES.map(async (scope) => ({
@@ -435,7 +451,8 @@ export async function policyCapabilities(organizationId: string, userId: string)
       membershipRole: role,
       canMaintain: await can("hr-policy-maintain"),
       canReview: reviewAuthorityRoles.some((item) => item.current),
-      canPublish: reviewAuthorityRoles.some((item) => item.current),
+      canPublish: isPlatformSuperAdmin(userId, organizationId) || reviewAuthorityRoles.some((item) => item.current),
+      platformAdministration: isPlatformSuperAdmin(userId, organizationId),
       reviewAuthorityRoles,
       canReviewHistory: await can("hr-policy-historical-review"),
       canResolveHandoffs: await can("hr-policy-handoff-resolve"),
@@ -448,8 +465,8 @@ export async function policyCapabilities(organizationId: string, userId: string)
 export async function createPolicy(organizationId: string, userId: string, input: unknown) {
   const data = inputPolicy(input);
   return db.transaction(async (tx) => {
-    await verifiedAuthority(tx, organizationId, userId, "hr-policy-maintain");
-    if (!data.audience.includes(await liveMember(tx, organizationId, userId))) {
+    await administrativeAuthority(tx, organizationId, userId, "hr-policy-maintain");
+    if (!isAudience(data, await liveMember(tx, organizationId, userId), organizationId, userId)) {
       throw new HrPolicyError("Policy audience must include the acting maintainer's current membership role.", 403);
     }
     const policyId = randomUUID();
@@ -466,12 +483,12 @@ export async function revisePolicy(organizationId: string, userId: string, polic
   const expected = Number(object(input).expectedVersion);
   if (!Number.isInteger(expected) || expected < 1) throw new HrPolicyError("expectedVersion must be a positive integer.");
   return db.transaction(async (tx) => {
-    await verifiedAuthority(tx, organizationId, userId, "hr-policy-maintain");
+    await administrativeAuthority(tx, organizationId, userId, "hr-policy-maintain");
     const rows = await versionsForPolicy(tx, organizationId, policyId);
     const current = rows[0];
     if (!current) throw new HrPolicyError("Policy source not found.", 404);
-    if (!isAudience(current, await liveMember(tx, organizationId, userId))) throw new HrPolicyError("Policy audience permission required.", 403);
-    if (!data.audience.includes(await liveMember(tx, organizationId, userId))) {
+    if (!isAudience(current, await liveMember(tx, organizationId, userId), organizationId, userId)) throw new HrPolicyError("Policy audience permission required.", 403);
+    if (!isAudience(data, await liveMember(tx, organizationId, userId), organizationId, userId)) {
       throw new HrPolicyError("Policy audience must include the acting maintainer's current membership role.", 403);
     }
     if (current.version !== expected) throw new HrPolicyError("Policy version changed; reload and retry.", 409, "STALE_POLICY_VERSION");
@@ -487,14 +504,14 @@ export async function revisePolicy(organizationId: string, userId: string, polic
 export async function submitPolicyReview(organizationId: string, userId: string, policyId: string, input: unknown) {
   const expected = Number(object(input).expectedVersion);
   return db.transaction(async (tx) => {
-    await verifiedAuthority(tx, organizationId, userId, "hr-policy-maintain");
+    await administrativeAuthority(tx, organizationId, userId, "hr-policy-maintain");
     const rows = await versionsForPolicy(tx, organizationId, policyId);
     const current = rows[0];
     if (!current) throw new HrPolicyError("Policy source not found.", 404);
     if (current.version !== expected || current.status !== "draft" || current.reviewOutcome !== null) {
       throw new HrPolicyError("Only an unreviewed current draft can be submitted for review; create a successor after rejection.", 409);
     }
-    if (!isAudience(current, await liveMember(tx, organizationId, userId))) throw new HrPolicyError("Policy audience permission required.", 403);
+    if (!isAudience(current, await liveMember(tx, organizationId, userId), organizationId, userId)) throw new HrPolicyError("Policy audience permission required.", 403);
     const [updated] = await tx.update(onbHrPolicyVersions).set({
       status: "in_review", updatedAt: new Date(),
     }).where(and(eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.policyId, policyId), eq(onbHrPolicyVersions.version, expected), eq(onbHrPolicyVersions.status, "draft"))).returning();
@@ -516,7 +533,7 @@ export async function reviewPolicy(organizationId: string, userId: string, polic
     )).for("update");
     if (!row) throw new HrPolicyError("Policy version not found.", 404);
     const grant = await verifiedAuthority(tx, organizationId, userId, row.reviewAuthorityRole);
-    if (!isAudience(row, await liveMember(tx, organizationId, userId))) throw new HrPolicyError("Policy audience permission required.", 403);
+    if (!isAudience(row, await liveMember(tx, organizationId, userId), organizationId, userId)) throw new HrPolicyError("Policy audience permission required.", 403);
     if (row.status !== "in_review" || row.reviewOutcome !== null) throw new HrPolicyError("This exact policy version is not awaiting review.", 409);
     if (row.createdByUserId === userId) throw new HrPolicyError("The policy author cannot review their own version.", 403, "POLICY_REVIEW_SOD_REQUIRED");
     const [updated] = await tx.update(onbHrPolicyVersions).set({
@@ -542,8 +559,8 @@ export async function publishPolicy(organizationId: string, userId: string, poli
       eq(onbHrPolicyVersions.version, version),
     )).for("update");
     if (!row) throw new HrPolicyError("Policy version not found.", 404);
-    const publisherGrant = await verifiedAuthority(tx, organizationId, userId, row.reviewAuthorityRole);
-    if (!isAudience(row, await liveMember(tx, organizationId, userId))) throw new HrPolicyError("Policy audience permission required.", 403);
+    const publisherGrant = await administrativeAuthority(tx, organizationId, userId, row.reviewAuthorityRole);
+    if (!isAudience(row, await liveMember(tx, organizationId, userId), organizationId, userId)) throw new HrPolicyError("Policy audience permission required.", 403);
     if (row.status !== "in_review" || row.reviewOutcome !== "approved" ||
         !await authorityStillCurrent(tx, organizationId, row.reviewerAuthorityAssignmentId, row.reviewAuthorityRole)) {
       throw new HrPolicyError("A current verified review for this exact version is required before publishing.", 409, "CURRENT_REVIEW_REQUIRED");
@@ -557,7 +574,7 @@ export async function publishPolicy(organizationId: string, userId: string, poli
       eq(onbHrPolicyVersions.status, "published"),
     ));
     const [updated] = await tx.update(onbHrPolicyVersions).set({
-      status: "published", publisherUserId: userId, publisherAuthorityAssignmentId: publisherGrant.id,
+      status: "published", publisherUserId: userId, publisherAuthorityAssignmentId: publisherGrant?.id ?? null,
       publicationVerificationReference, publishedAt: new Date(), updatedAt: new Date(),
     }).where(and(eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.policyId, policyId), eq(onbHrPolicyVersions.version, version), eq(onbHrPolicyVersions.status, "in_review"), eq(onbHrPolicyVersions.reviewOutcome, "approved"))).returning();
     if (!updated) throw new HrPolicyError("Policy changed; reload and retry.", 409);
@@ -572,8 +589,8 @@ export async function retirePolicy(organizationId: string, userId: string, polic
       eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.policyId, policyId), eq(onbHrPolicyVersions.version, version),
     )).for("update");
     if (!visible) throw new HrPolicyError("Policy version not found.", 404);
-    await verifiedAuthority(tx, organizationId, userId, visible.reviewAuthorityRole);
-    if (!isAudience(visible, await liveMember(tx, organizationId, userId))) throw new HrPolicyError("Policy audience permission required.", 403);
+    await administrativeAuthority(tx, organizationId, userId, visible.reviewAuthorityRole);
+    if (!isAudience(visible, await liveMember(tx, organizationId, userId), organizationId, userId)) throw new HrPolicyError("Policy audience permission required.", 403);
     const [updated] = await tx.update(onbHrPolicyVersions).set({
       status: "retired", retiredAt: new Date(), updatedAt: new Date(),
     }).where(and(eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.policyId, policyId), eq(onbHrPolicyVersions.version, version), or(eq(onbHrPolicyVersions.status, "published"), eq(onbHrPolicyVersions.status, "superseded")))).returning();
@@ -595,8 +612,8 @@ export async function supersedePolicy(organizationId: string, userId: string, po
       tx.select().from(onbHrPolicyVersions).where(and(eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.policyId, policyId), eq(onbHrPolicyVersions.version, replacementVersion))).for("update"),
     ]);
     if (!target || !replacement) throw new HrPolicyError("Policy version not found.", 404);
-    await verifiedAuthority(tx, organizationId, userId, target.reviewAuthorityRole);
-    if (!isAudience(target, await liveMember(tx, organizationId, userId))) throw new HrPolicyError("Policy audience permission required.", 403);
+    await administrativeAuthority(tx, organizationId, userId, target.reviewAuthorityRole);
+    if (!isAudience(target, await liveMember(tx, organizationId, userId), organizationId, userId)) throw new HrPolicyError("Policy audience permission required.", 403);
     if (target.status !== "published" || replacement.status !== "published" || replacement.version <= target.version) {
       throw new HrPolicyError("A later published replacement version is required before superseding.", 409);
     }
@@ -639,7 +656,10 @@ export async function answerPolicyQuestion(
       effectiveFrom: onbHrPolicyVersions.effectiveFrom, effectiveUntil: onbHrPolicyVersions.effectiveUntil,
       reviewBy: onbHrPolicyVersions.reviewBy, status: onbHrPolicyVersions.status,
     }).from(onbHrPolicyVersions).where(and(eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.status, "published")));
-    const permitted = metadata.filter((row: any) => policyPermitted(row, role, selected));
+    const permitted = metadata.filter((row: any) =>
+      isPlatformSuperAdmin(userId, organizationId)
+        ? matchesApplicability(row.applicability, selected)
+        : policyPermitted(row, role, selected));
     const today = new Date().toISOString().slice(0, 10);
     // A past selected date never revives expired or review-overdue material
     // for ordinary assistant advice. Historical use has its own guarded route.
@@ -703,7 +723,7 @@ export async function answerPolicyQuestion(
       eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.policyId, selectedRow.policyId),
       eq(onbHrPolicyVersions.version, selectedRow.version), eq(onbHrPolicyVersions.status, "published"),
     )).for("update");
-    if (!current || !isAudience(current, role) || !matchesApplicability(current.applicability, selected) ||
+    if (!current || !isAudience(current, role, organizationId, userId) || !matchesApplicability(current.applicability, selected) ||
         current.effectiveFrom > appliesOn || current.effectiveFrom > now ||
         (current.effectiveUntil && (current.effectiveUntil < appliesOn || current.effectiveUntil < now)) ||
         (current.reviewBy && current.reviewBy < now) || current.text !== preflight.sourceText) {
@@ -726,11 +746,11 @@ export async function readPolicyExcerpt(organizationId: string, userId: string, 
     const [row] = await tx.select().from(onbHrPolicyVersions).where(and(
       eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.policyId, policyId), eq(onbHrPolicyVersions.version, version),
     )).for("update");
-    if (!row || !isAudience(row, role)) throw new HrPolicyError("Citation excerpt not found.", 404);
+    if (!row || !isAudience(row, role, organizationId, userId)) throw new HrPolicyError("Citation excerpt not found.", 404);
     const today = new Date().toISOString().slice(0, 10);
     const isCurrent = row.status === "published" && row.effectiveFrom <= today &&
       (!row.effectiveUntil || row.effectiveUntil >= today) && (!row.reviewBy || row.reviewBy >= today);
-    if (!isCurrent) await verifiedAuthority(tx, organizationId, userId, "hr-policy-historical-review");
+    if (!isCurrent) await administrativeAuthority(tx, organizationId, userId, "hr-policy-historical-review");
     const [excerpt] = await tx.select().from(onbHrPolicyExcerpts).where(and(
       eq(onbHrPolicyExcerpts.organizationId, organizationId), eq(onbHrPolicyExcerpts.policyId, policyId),
       eq(onbHrPolicyExcerpts.version, version), eq(onbHrPolicyExcerpts.excerptId, excerptId),
@@ -742,7 +762,7 @@ export async function readPolicyExcerpt(organizationId: string, userId: string, 
 
 export async function listPolicyHandoffs(organizationId: string, userId: string) {
   return db.transaction(async (tx) => {
-    await verifiedAuthority(tx, organizationId, userId, "hr-policy-handoff-resolve");
+    await administrativeAuthority(tx, organizationId, userId, "hr-policy-handoff-resolve");
     const rows = await tx.select().from(onbHrPolicyHandoffs).where(eq(onbHrPolicyHandoffs.organizationId, organizationId)).orderBy(desc(onbHrPolicyHandoffs.createdAt));
     return rows.map((row: any) => ({ ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), resolvedAt: row.resolvedAt?.toISOString() ?? null }));
   });
@@ -772,9 +792,9 @@ export async function createPolicyHandoff(organizationId: string, userId: string
 export async function resolvePolicyHandoff(organizationId: string, userId: string, handoffId: number, input: unknown) {
   const resolution = text(object(input).resolution, "resolution", 4000);
   return db.transaction(async (tx) => {
-    const grant = await verifiedAuthority(tx, organizationId, userId, "hr-policy-handoff-resolve");
+    const grant = await administrativeAuthority(tx, organizationId, userId, "hr-policy-handoff-resolve");
     const [updated] = await tx.update(onbHrPolicyHandoffs).set({
-      status: "resolved", resolvedByUserId: userId, resolverAuthorityAssignmentId: grant.id,
+      status: "resolved", resolvedByUserId: userId, resolverAuthorityAssignmentId: grant?.id ?? null,
       resolution, resolvedAt: new Date(), updatedAt: new Date(),
     }).where(and(eq(onbHrPolicyHandoffs.organizationId, organizationId), eq(onbHrPolicyHandoffs.id, handoffId), eq(onbHrPolicyHandoffs.status, "open"))).returning();
     if (!updated) throw new HrPolicyError("Open policy handoff not found.", 404);

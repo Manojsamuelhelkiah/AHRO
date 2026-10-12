@@ -14245,6 +14245,9 @@ components:
         canMaintain: { type: boolean }
         canReview: { type: boolean }
         canPublish: { type: boolean }
+        platformAdministration:
+          type: boolean
+          description: Request-scoped Super Admin administration; does not confer specialist review authority.
         reviewAuthorityRoles:
           type: array
           items:

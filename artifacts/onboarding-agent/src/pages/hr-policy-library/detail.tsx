@@ -253,10 +253,10 @@ function LifecycleActions({ policy, onAction, capabilities }: {
   const requiresSuccessor = draft?.status === 'draft' && draft.reviewOutcome === 'rejected';
   const canSubmit = Boolean(capabilities?.canMaintain && draft?.status === 'draft' && draft.reviewOutcome !== 'rejected');
   const canReview = Boolean(draft?.status === 'in_review' && draft.reviewOutcome === null && draft.createdByUserId !== userId && hasSpecialistAuthority(draft));
-  const canPublish = Boolean(draft?.status === 'in_review' && draft.reviewOutcome === 'approved' && hasSpecialistAuthority(draft));
-  const canRetire = Boolean(current && ['published', 'superseded'].includes(current.status) && hasSpecialistAuthority(current));
+  const canPublish = Boolean(draft?.status === 'in_review' && draft.reviewOutcome === 'approved' && (hasSpecialistAuthority(draft) || capabilities?.platformAdministration));
+  const canRetire = Boolean(current && ['published', 'superseded'].includes(current.status) && (hasSpecialistAuthority(current) || capabilities?.platformAdministration));
   const replacements = current?.status === 'published' ? policy.all.filter((version) => version.status === 'published' && version.version > current.version) : [];
-  const canSupersede = Boolean(current?.status === 'published' && hasSpecialistAuthority(current) && replacements.length);
+  const canSupersede = Boolean(current?.status === 'published' && (hasSpecialistAuthority(current) || capabilities?.platformAdministration) && replacements.length);
   const act = (mutation: (data: any, callbacks: any) => void, data: unknown) => mutation(data, {
     onSuccess: () => { toast({ title: 'Policy updated', description: 'The governed lifecycle change was recorded.' }); onAction(); },
     onError: (error: Error) => toast({ title: 'Policy action failed', description: error.message, variant: 'destructive' }),
@@ -273,7 +273,7 @@ function LifecycleActions({ policy, onAction, capabilities }: {
       <button onClick={() => act(publishPolicy, { expectedVersion: draft!.version, publicationVerificationReference: publicationReference })} disabled={publishing || !publicationReference.trim()} className={`${actionButtonClass} bg-green-50 text-green-700 border-green-200`}><CheckCircle className="h-4 w-4" />Publish version {draft!.version}</button></>}
     {canSupersede && <><select value={replacementVersion} onChange={(e) => setReplacementVersion(e.target.value)} className={`${fieldClass} text-sm`}><option value="">Select published replacement</option>{replacements.map((version) => <option key={version.version} value={version.version}>Version {version.version}</option>)}</select>
       <button onClick={() => act(supersedePolicy, { version: current!.version, replacementVersion: Number(replacementVersion) })} disabled={superseding || !replacementVersion} className={`${actionButtonClass} bg-amber-50 text-amber-700 border-amber-200`}><Clock className="h-4 w-4" />Supersede version {current!.version}</button></>}
-    {current?.status === 'published' && hasSpecialistAuthority(current) && !replacements.length && <p className="text-xs text-[var(--text-muted)]">A later published version of this source is required before version {current.version} can be superseded.</p>}
+    {current?.status === 'published' && (hasSpecialistAuthority(current) || capabilities?.platformAdministration) && !replacements.length && <p className="text-xs text-[var(--text-muted)]">A later published version of this source is required before version {current.version} can be superseded.</p>}
     {canRetire && <button onClick={() => act(retirePolicy, { version: current!.version })} disabled={retiring} className={`${actionButtonClass} bg-red-50 text-red-700 border-red-200`}>{retiring ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}Retire version {current!.version}</button>}
     {!canSubmit && !canReview && !canPublish && !canSupersede && !canRetire && <p className="text-sm text-[var(--text-muted)] text-center py-2">No lifecycle actions available for your current verified authority and policy state.</p>}
   </div>;

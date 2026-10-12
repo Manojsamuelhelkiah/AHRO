@@ -153,7 +153,7 @@ router.post("/governance/assignments", async (req, res, next) => {
   try {
     const body = requestBody(req.body);
     const currentActor = actor(req);
-    const assignment = isVerifiedGovernanceOperator(currentActor.userId)
+    const assignment = isVerifiedGovernanceOperator(currentActor.userId, getOrganizationId(req))
       ? await assignGovernanceAuthority(getOrganizationId(req), currentActor, body)
       : await requestGovernanceAuthority(getOrganizationId(req), currentActor, body);
     res.status(201).json({ assignment });

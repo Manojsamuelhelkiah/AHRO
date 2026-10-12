@@ -15,6 +15,7 @@ import {
   GOVERNANCE_REQUIREMENTS,
 } from "./governance-catalog";
 import { canonicalAuthorityRoleId } from "./workforce-policies";
+import { isPlatformSuperAdmin } from "../private-platform-admin";
 import { makeSharedTick } from "./shared-tick";
 import {
   assertGovernanceMutationAllowed,
@@ -132,11 +133,12 @@ function requireEditor(actor: GovernanceActor): void {
 }
 
 /**
- * A server-managed allow-list is the bootstrap trust root. There is
- * intentionally no owner/admin fallback: a tenant role can never be used to
- * self-declare legal, privacy, safety, or other specialist authority.
+ * Operators come from the protected allow-list or an authenticated Super Admin
+ * request. There is no tenant-owner/admin fallback, identity-wide promotion, or
+ * background-job inheritance of the session's administrative permission.
  */
-export function isVerifiedGovernanceOperator(userId: string): boolean {
+export function isVerifiedGovernanceOperator(userId: string, organizationId?: string): boolean {
+  if (isPlatformSuperAdmin(userId, organizationId)) return true;
   return new Set(
     (process.env.GOVERNANCE_VERIFIED_OPERATOR_IDS ?? "")
       .split(",")
@@ -145,8 +147,8 @@ export function isVerifiedGovernanceOperator(userId: string): boolean {
   ).has(userId);
 }
 
-function requireVerifiedOperator(actor: GovernanceActor): void {
-  if (!isVerifiedGovernanceOperator(actor.userId)) {
+function requireVerifiedOperator(actor: GovernanceActor, organizationId: string): void {
+  if (!isVerifiedGovernanceOperator(actor.userId, organizationId)) {
     throw new GovernancePermissionError(
       "A server-verified governance operator is required; tenant administration alone cannot assign specialist authority.",
     );
@@ -510,7 +512,7 @@ export async function reviseGovernanceDecision(
       (nextWorkflows !== undefined &&
         JSON.stringify(nextWorkflows) !== JSON.stringify(current.impactedWorkflows))
     ) {
-      requireVerifiedOperator(actor);
+      requireVerifiedOperator(actor, organizationId);
     }
     const revision = current.revision + 1;
     const reviewDueAt = input.reviewDueAt === undefined ? current.reviewDueAt : dueDate(input.reviewDueAt);
@@ -738,7 +740,7 @@ export async function assignGovernanceAuthority(
   actor: GovernanceActor,
   input: { role?: unknown; assigneeUserId?: unknown; verificationReference?: unknown; expiresAt?: unknown },
 ) {
-  requireVerifiedOperator(actor);
+  requireVerifiedOperator(actor, organizationId);
   const assigneeUserId = cleanText(input.assigneeUserId, "assigneeUserId")!;
   const assignment = await db.transaction(async (tx) => {
   await assertGovernanceMutationAllowed(tx, organizationId);
@@ -813,7 +815,7 @@ export async function verifyGovernanceAuthority(
   assignmentId: unknown,
   verificationReference: unknown,
 ) {
-  requireVerifiedOperator(actor);
+  requireVerifiedOperator(actor, organizationId);
   const id = Number(assignmentId);
   if (!Number.isInteger(id) || id < 1) throw new GovernanceValidationError("A valid assignment id is required.");
   const assignment = await db.transaction(async (tx) => {
@@ -844,7 +846,7 @@ export async function revokeGovernanceAuthority(
   actor: GovernanceActor,
   assignmentId: unknown,
 ) {
-  requireVerifiedOperator(actor);
+  requireVerifiedOperator(actor, organizationId);
   const id = Number(assignmentId);
   if (!Number.isInteger(id) || id < 1) throw new GovernanceValidationError("A valid assignment id is required.");
   const assignment = await db.transaction(async (tx) => {
@@ -894,7 +896,7 @@ export async function reconcileGovernanceDispatch(
   dispatchId: unknown,
   reconciliationReference: unknown,
 ) {
-  requireVerifiedOperator(actor);
+  requireVerifiedOperator(actor, organizationId);
   const id = cleanText(dispatchId, "dispatchId")!;
   const reference = cleanText(reconciliationReference, "reconciliationReference")!;
   if (!await finalizeAmbiguousGovernanceDispatch(organizationId, id, reference)) {

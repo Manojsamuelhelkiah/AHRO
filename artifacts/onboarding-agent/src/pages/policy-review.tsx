@@ -552,7 +552,7 @@ function AuthorityManager() {
         
         <div className="p-[var(--space-md)] bg-[var(--surface-soft)] border-t border-[var(--border)]">
           <h4 className="text-[var(--text-sm)] font-semibold mb-2">Authority nomination and operator assignment</h4>
-          <p className="text-[var(--text-xs)] text-[var(--text-muted)] mb-3">An owner or admin can nominate a member, but nomination grants no review authority. Only the server-verified operator path can create or verify an active specialist assignment; ordinary tenant admins cannot self-declare it.</p>
+          <p className="text-[var(--text-xs)] text-[var(--text-muted)] mb-3">An authenticated Super Admin or server-verified governance operator can create, verify and revoke assignments for the selected client. Other owners and admins can nominate a member, but nomination alone grants no authority. Specialist appointments require a recorded verification reference.</p>
           <div className="flex flex-col md:flex-row gap-2">
             <input 
               type="text" 

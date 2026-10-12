@@ -1023,6 +1023,7 @@ export const GetHrPolicyCapabilitiesResponse = zod.object({
   "canMaintain": zod.boolean(),
   "canReview": zod.boolean(),
   "canPublish": zod.boolean(),
+  "platformAdministration": zod.boolean().optional().describe('Request-scoped Super Admin administration; does not confer specialist review authority.'),
   "reviewAuthorityRoles": zod.array(zod.object({
   "role": zod.enum(['hr-compliance', 'legal', 'occupational-health', 'payroll']),
   "current": zod.boolean()

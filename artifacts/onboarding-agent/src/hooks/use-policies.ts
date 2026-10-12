@@ -52,6 +52,7 @@ export interface PolicyCapabilities {
   canMaintain: boolean;
   canReview: boolean;
   canPublish: boolean;
+  platformAdministration?: boolean;
   reviewAuthorityRoles: Array<{ role: PolicyReviewAuthorityRole; current: boolean }>;
   canReviewHistory: boolean;
   canResolveHandoffs: boolean;
