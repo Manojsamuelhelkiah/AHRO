@@ -6,6 +6,7 @@ type OrganizationMembershipResponse = {
   memberships: Array<{ organizationId: string; role: string }>;
   demoProfile?: "reviewer" | "administrator" | null;
   developmentSuperAdmin?: boolean;
+  platformSuperAdmin?: boolean;
 };
 
 export function useOrganizationRole() {
@@ -33,7 +34,7 @@ export function useOrganizationRole() {
         return response.json() as Promise<OrganizationMembershipResponse>;
       })
       .then((data) => {
-        setIsSuperAdmin(data.developmentSuperAdmin === true);
+        setIsSuperAdmin(data.platformSuperAdmin === true || data.developmentSuperAdmin === true);
         const orgId = pinnedOrgId || data.activeOrganizationId;
         // A different workspace's membership must never grant this page actions.
         const membership = data.memberships.find((m) => m.organizationId === orgId);

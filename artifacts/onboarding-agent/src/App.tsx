@@ -26,6 +26,7 @@ import { SettingsPage } from './pages/settings';
 import { RecommendationsPage } from './pages/recommendations';
 import { GuardrailsPage } from './pages/guardrails';
 import { LoginPage } from './pages/login';
+import { PrivateAdminSession } from './components/private-admin-session';
 import { ClientSetupPage } from './pages/client-setup';
 import { CandidatePage } from './pages/candidate';
 import { DemoControllerIndexPage } from './pages/demo-controller';
@@ -449,6 +450,7 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
+          <Show when="signed-in"><PrivateAdminSession /></Show>
           <Router />
           <Toaster />
         </TooltipProvider>

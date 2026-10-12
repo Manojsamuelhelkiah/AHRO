@@ -27,6 +27,20 @@ When one shared identity serves both restricted demo and privileged development 
 
 **How to apply:** Preserve restricted ordinary sessions and independent specialist/evidence gates. Bind private administration to a fresh active session and the verified current tenant; do not propagate it into background jobs or employee-owned private Vault records. State explicitly when development access does not apply to the published runtime.
 
+Production platform administration must use a separately approved private,
+provider-verified identity with enrolled MFA and fresh factor verification.
+Approval is a protected operator decision, not a public setup form; do not pick
+or approve an administrator from an entered email or assume a demo account is
+the intended person. Keep Development and Production approvals separate.
+
+**Why:** The published-app rollout requires verified private administration
+without converting public demo eligibility into cross-client authority.
+
+**How to apply:** Obtain the intended account and explicit private approval
+before binding it. Treat session revocation/approval withdrawal as loss of
+platform privilege while preserving legitimate tenant roles and independent
+professional, evidence, privacy, and personally owned Vault boundaries.
+
 **How to apply:** Preserve shared storage with explicit server-enforced organization boundaries; dedicated databases or cross-client learning require a separate decision.
 
 Membership removal must revoke access without allowing a shared join code or later reinstatement to revive old specialist grants.

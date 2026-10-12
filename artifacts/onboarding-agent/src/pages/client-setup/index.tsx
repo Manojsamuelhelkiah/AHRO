@@ -36,6 +36,9 @@ import {
 } from '@workspace/api-client-react';
 import type { Rollup, Scenario, ScenarioInputs, ScenarioFlowBasis } from '@workspace/api-client-react';
 import { Building2, Check, ChevronRight, Copy, FileUp, FlaskConical, Users } from 'lucide-react';
+import { CreateClientDialog } from '@/components/create-client-dialog';
+import { enterClientWorkspace } from '@/lib/enter-client-workspace';
+import { findNamedClientWorkspace } from '@/lib/organization-bootstrap';
 
 const STEPS = [
   { id: 'scope', label: 'Scope & Scale' },
@@ -60,10 +63,14 @@ function ClientSetupWizard({
   draftSession,
   useSyntheticDemo,
   canActivateSystemSetup,
+  organization,
+  isSuperAdmin,
 }: {
   draftSession: ClientSetupDraftSession<ClientSetupDraft>;
   useSyntheticDemo: boolean;
   canActivateSystemSetup: boolean;
+  organization: OrganizationSummary;
+  isSuperAdmin: boolean;
 }) {
   const search = useSearch();
   const savedScenarioId = Number(new URLSearchParams(search).get('scenarioId'));
@@ -73,6 +80,8 @@ function ClientSetupWizard({
   const [operationError, setOperationError] = useState<string | null>(null);
   const [activationNotice, setActivationNotice] = useState<string | null>(null);
   const [fileOperationPending, setFileOperationPending] = useState(false);
+  const [enteringWorkspace, setEnteringWorkspace] = useState(false);
+  const [newClientName, setNewClientName] = useState<string | null>(null);
   const [, navigate] = useLocation();
   const estimateBasisRef = useRef<string | null>(null);
   const fileOperationPendingRef = useRef(false);
@@ -293,6 +302,26 @@ function ClientSetupWizard({
 
   const isSimulating = computeRollup.isPending || (computeRollup as any).isLoading;
   const isCommitting = createScenario.isPending || (createScenario as any).isLoading || activateSystemSetup.isPending;
+  const openWorkspace = async () => {
+    if (!canNavigateOrCommit(fileOperationPendingRef.current) || enteringWorkspace) return;
+    if (!isSuperAdmin || form.getValues('clientName').trim() === organization.name.trim()) {
+      navigate('/');
+      return;
+    }
+    setEnteringWorkspace(true);
+    setOperationError(null);
+    try {
+      const clientName = form.getValues('clientName').trim();
+      const current = await organizationRequest('/organizations/current') as CurrentOrganizationResponse;
+      const target = findNamedClientWorkspace(current.memberships, clientName);
+      if (target) await enterClientWorkspace(target);
+      else setNewClientName(clientName);
+    } catch (caught) {
+      setOperationError(caught instanceof Error ? caught.message : 'Could not open the client workspace.');
+    } finally {
+      setEnteringWorkspace(false);
+    }
+  };
 
   if (savedScenarioId > 0 && !scenario && (scenarioLoading || !reloadedScenario || operationError)) {
     return <div role={scenarioLoadError || operationError ? 'alert' : 'status'} className="p-6">
@@ -368,9 +397,10 @@ function ClientSetupWizard({
                    capabilities={systemCapabilities}
                    activationNotice={activationNotice}
                     basis={basisQuery.data}
-                    onOpenWorkspace={() => {
-                      if (canNavigateOrCommit(fileOperationPendingRef.current)) navigate('/');
-                    }}
+                    onOpenWorkspace={() => void openWorkspace()}
+                    workspaceName={organization.name}
+                    isSuperAdmin={isSuperAdmin}
+                    isEnteringWorkspace={enteringWorkspace}
                     canActivateSystemSetup={canActivateSystemSetup}
                />}
             </div>
@@ -388,6 +418,7 @@ function ClientSetupWizard({
                )}
             </div>
           </FormProvider>
+          {newClientName !== null && <CreateClientDialog initialName={newClientName} onClose={() => setNewClientName(null)} />}
         </div>
      </div>
   );
@@ -396,6 +427,7 @@ export function ClientSetupPage() {
   const { isLoaded: userLoaded, user } = useUser();
   const [organization, setOrganization] = useState<OrganizationSummary | null>();
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const search = useSearch();
   const organizationAction = organizationActionFromSearch(search);
   const mountedOrganizationIdRef = useRef(getPinnedOrganizationIdForPage());
@@ -405,6 +437,7 @@ export function ClientSetupPage() {
     organizationRequest('/organizations/current')
       .then((data: CurrentOrganizationResponse) => {
         if (!active) return;
+        setIsSuperAdmin(data.platformSuperAdmin === true || data.developmentSuperAdmin === true);
         const selected = data.memberships.find(
           (membership) => membership.organizationId === data.activeOrganizationId,
         ) ?? data.memberships[0];
@@ -470,6 +503,8 @@ export function ClientSetupPage() {
       draftSession={draftSession}
       useSyntheticDemo={organization.organizationId === 'demo'}
       canActivateSystemSetup={organization.role === 'owner' || organization.role === 'admin'}
+      organization={organization}
+      isSuperAdmin={isSuperAdmin}
     />
   );
 }
@@ -830,4 +865,6 @@ type CurrentOrganizationResponse = {
   needsSetup: boolean;
   activeOrganizationId: string | null;
   memberships: OrganizationSummary[];
+  platformSuperAdmin?: boolean;
+  developmentSuperAdmin?: boolean;
 };

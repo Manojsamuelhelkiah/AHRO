@@ -7,7 +7,7 @@ import {
   organizationMembershipsTable,
 } from "@workspace/db/schema";
 import { SYNTHETIC_DEMO_AUTHORITY_SOURCE } from "./onboarding/synthetic-offline";
-import { isDevelopmentSuperAdmin } from "./development-super-admin";
+import { isPlatformSuperAdmin } from "./private-platform-admin";
 
 export type RegisteredDemoProfile = "reviewer" | "administrator";
 const DEMO_PRINCIPAL_PREFIX = "registered_demo_principal:";
@@ -67,7 +67,12 @@ export async function registeredDemoProfile(
 ): Promise<RegisteredDemoProfile | null> {
   // This is request/session scoped, never a permanent elevation of the
   // publicly usable account. Background and ordinary demo sessions stay capped.
-  if (isDevelopmentSuperAdmin(userId)) return null;
+  if (isPlatformSuperAdmin(userId)) return null;
+  return rawRegisteredDemoProfile(userId);
+}
+
+/** Private administrator eligibility must inspect the registry even inside an elevated request. */
+export async function rawRegisteredDemoProfile(userId: string): Promise<RegisteredDemoProfile | null> {
   const [row] = await db.select({ value: onbSettings.value }).from(onbSettings).where(and(
     eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
     eq(onbSettings.key, demoPrincipalSettingKey(userId)),

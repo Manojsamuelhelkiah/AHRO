@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { hroBatchErrorMessage } from "../lib/hro-batch-intake-api";
+import { enterClientWorkspace } from "../lib/enter-client-workspace";
 
-export function CreateClientDialog({ onClose }: { onClose: () => void }) {
-  const [name, setName] = useState("");
+export function CreateClientDialog({ onClose, initialName = "" }: { onClose: () => void; initialName?: string }) {
+  const [name, setName] = useState(initialName);
   const [country, setCountry] = useState("US");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -24,8 +25,7 @@ export function CreateClientDialog({ onClose }: { onClose: () => void }) {
           wasCreated = true;
           setCreated(true);
           if (!result.organization?.id) throw new Error("The client was created but its workspace identity could not be confirmed. Reload the client list before trying again.");
-          window.localStorage.setItem("activeOrganizationId", result.organization.id);
-          window.location.reload();
+          await enterClientWorkspace(result.organization.id);
         } catch (failure) {
           setError(wasCreated ? "The client was created but could not be entered. Reload the page and select it from the client list; do not create it again." : hroBatchErrorMessage(failure, "The client could not be created."));
           setBusy(false);

@@ -648,7 +648,7 @@ describe("Demo Controller access setup", { concurrency: false }, () => {
       });
       assert.equal(completeStarted, true);
       assert.equal(completeRequestId, requestId);
-      assert.match(pageText(), /Completing setup…/);
+      await waitFor(() => pageText().includes("Completing setup…"), "pending setup completion to render");
 
       assert.ok(resolveComplete);
       await act(async () => {

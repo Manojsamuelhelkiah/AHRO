@@ -13,7 +13,7 @@ import {
 } from "./onboarding/governance-dispatch";
 import type { OnboardingDbTransaction } from "./onboarding/settings";
 
-import { isDevelopmentSuperAdmin } from "./development-super-admin";
+import { isPlatformSuperAdmin } from "./private-platform-admin";
 
 export type OrganizationMembershipRole = "owner" | "admin" | "member";
 export type OrganizationAdminRole = "admin" | "member";
@@ -136,7 +136,7 @@ export async function listOrganizationMembers(
         eq(organizationMembershipsTable.clerkUserId, actorUserId),
         isNull(organizationMembershipsTable.revokedAt),
       ));
-    if (!isDevelopmentSuperAdmin(actorUserId, organizationId) && (!actor || (actor.role !== "owner" && actor.role !== "admin"))) return OWNER_REQUIRED;
+    if (!isPlatformSuperAdmin(actorUserId, organizationId) && (!actor || (actor.role !== "owner" && actor.role !== "admin"))) return OWNER_REQUIRED;
     const members = await tx
       .select({
         clerkUserId: organizationMembershipsTable.clerkUserId,
@@ -177,7 +177,7 @@ export async function listRemovedOrganizationMembers(
         eq(organizationMembershipsTable.clerkUserId, actorUserId),
         isNull(organizationMembershipsTable.revokedAt),
       ));
-    if (!isDevelopmentSuperAdmin(actorUserId, organizationId) && (!actor || actor.role !== "owner")) return OWNER_REQUIRED;
+    if (!isPlatformSuperAdmin(actorUserId, organizationId) && (!actor || actor.role !== "owner")) return OWNER_REQUIRED;
     const members = await tx
       .select()
       .from(organizationMembershipsTable)
@@ -209,7 +209,7 @@ export async function changeOrganizationMemberRole(input: {
       input.actorUserId,
       input.targetUserId,
     );
-    if (!isDevelopmentSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || actor.role !== "owner")) return OWNER_REQUIRED;
+    if (!isPlatformSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || actor.role !== "owner")) return OWNER_REQUIRED;
     if (input.targetUserId === input.actorUserId) {
       return conflict("An owner cannot change their own membership role.");
     }
@@ -286,7 +286,7 @@ export async function removeOrganizationMember(input: {
       input.actorUserId,
       input.targetUserId,
     );
-    if (!isDevelopmentSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || actor.role !== "owner")) return OWNER_REQUIRED;
+    if (!isPlatformSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || actor.role !== "owner")) return OWNER_REQUIRED;
     if (input.targetUserId === input.actorUserId) {
       return conflict("An owner cannot remove their own membership.");
     }
@@ -381,7 +381,7 @@ export async function reinstateOrganizationMember(input: {
       input.actorUserId,
       input.targetUserId,
     );
-    if (!isDevelopmentSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || actor.role !== "owner")) return OWNER_REQUIRED;
+    if (!isPlatformSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || actor.role !== "owner")) return OWNER_REQUIRED;
     if (!target || !target.revokedAt) {
       return {
         kind: "error" as const,

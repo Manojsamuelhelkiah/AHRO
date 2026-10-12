@@ -123,7 +123,7 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
     const userId = req.authUserId!;
     const requested = req.header(ORGANIZATION_HEADER)?.trim() || undefined;
     const profile = await registeredDemoProfile(userId);
-    const allMemberships = req.developmentSuperAdmin
+    const allMemberships = (req.developmentSuperAdmin || req.platformSuperAdmin)
       ? (await db.select({
           organizationId: organizationsTable.id, name: organizationsTable.name,
           slug: organizationsTable.slug, primaryCountry: organizationsTable.primaryCountry,
@@ -154,8 +154,8 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
     const activeOrganizationId = requested
       ? (memberships.find(({ organizationId }) => organizationId === requested)
           ?.organizationId ?? null)
-      : req.developmentSuperAdmin
-        ? DEMO_ORGANIZATION_ID
+      : (req.developmentSuperAdmin || req.platformSuperAdmin)
+        ? memberships.find(m => m.organizationId === DEMO_ORGANIZATION_ID)?.organizationId ?? memberships[0]?.organizationId ?? null
         : memberships.length === 1
         ? memberships[0]!.organizationId
         : null;
@@ -168,6 +168,8 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
       // endpoints independently verify the profile and membership.
       demoProfile: profile,
       developmentSuperAdmin: req.developmentSuperAdmin === true,
+      platformSuperAdmin: req.platformSuperAdmin === true || req.developmentSuperAdmin === true,
+      platformAdminMode: req.privatePlatformAdmin ? "private" : req.developmentSuperAdmin ? "development" : null,
     });
   } catch (error) {
     next(error);

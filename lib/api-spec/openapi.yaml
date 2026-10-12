@@ -1005,6 +1005,42 @@ paths:
         "200": { description: Finalized reconciliation receipt }
         "403": { description: Server-verified operator required }
         "409": { description: Ambiguous dispatch absent or already finalized }
+  /platform-admin/session:
+    get:
+      operationId: getPrivateAdminEligibility
+      tags: [organizations]
+      responses:
+        "200":
+          description: Provider-verified private eligibility, not an active grant
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivateAdminEligibility" }
+        "401": { description: Authentication required }
+        "503": { description: Identity provider unavailable }
+    post:
+      operationId: activatePrivateAdminSession
+      tags: [organizations]
+      responses:
+        "200":
+          description: Recent MFA accepted; short-lived session-bound cookie issued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivateAdminSession" }
+        "401": { description: Authentication required }
+        "403": { description: Private approval or recent MFA required }
+        "503": { description: Verification or signing unavailable }
+    delete:
+      operationId: revokePrivateAdminSession
+      tags: [organizations]
+      responses:
+        "200":
+          description: Provider session revoked and cookie cleared
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PrivateAdminSession" }
+        "401": { description: Authentication required }
+        "403": { description: Same-site request required }
+        "503": { description: Revocation unavailable }
   /organizations/current:
     get:
       operationId: getCurrentOrganization
@@ -7785,10 +7821,30 @@ components:
         needsSetup: { type: boolean }
         activeOrganizationId: { type: [string, "null"] }
         demoProfile: { type: [string, "null"], enum: [reviewer, administrator, null] }
+        developmentSuperAdmin: { type: boolean }
+        platformSuperAdmin: { type: boolean }
+        platformAdminMode: { type: [string, "null"], enum: [private, development, null] }
         memberships:
           type: array
           items: { $ref: "#/components/schemas/OrganizationMembership" }
       required: [needsSetup, activeOrganizationId, demoProfile, memberships]
+    PrivateAdminEligibility:
+      type: object
+      properties:
+        eligible: { type: boolean }
+        userId: { type: string }
+        primaryEmailId: { type: [string, "null"] }
+        primaryEmailVerified: { type: boolean }
+        mfaEnrolled: { type: boolean }
+        mfaRequired: { type: boolean }
+        lifetimeMinutes: { type: integer }
+      required: [eligible, userId, primaryEmailId, primaryEmailVerified, mfaEnrolled, mfaRequired, lifetimeMinutes]
+    PrivateAdminSession:
+      type: object
+      properties:
+        active: { type: boolean }
+        expiresAt: { type: string, format: date-time }
+      required: [active]
     OrganizationCreateInput:
       type: object
       additionalProperties: false

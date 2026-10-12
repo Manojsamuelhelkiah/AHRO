@@ -2366,6 +2366,29 @@ export const ReconcileGovernanceDispatchBody = zod.object({
 export const ReconcileGovernanceDispatchResponse = zod.unknown()
 
 
+export const GetPrivateAdminEligibilityResponse = zod.object({
+  "eligible": zod.boolean(),
+  "userId": zod.string(),
+  "primaryEmailId": zod.string().nullable(),
+  "primaryEmailVerified": zod.boolean(),
+  "mfaEnrolled": zod.boolean(),
+  "mfaRequired": zod.boolean(),
+  "lifetimeMinutes": zod.number()
+})
+
+
+export const ActivatePrivateAdminSessionResponse = zod.object({
+  "active": zod.boolean(),
+  "expiresAt": zod.coerce.date().optional()
+})
+
+
+export const RevokePrivateAdminSessionResponse = zod.object({
+  "active": zod.boolean(),
+  "expiresAt": zod.coerce.date().optional()
+})
+
+
 /**
  * The optional X-Organization-Id header selects the active membership. A missing or invalid selection is returned as null rather than crossing tenant boundaries.
  * @summary Get the authenticated user's organization memberships and active selection
@@ -2377,6 +2400,9 @@ export const GetCurrentOrganizationResponse = zod.object({
   "needsSetup": zod.boolean(),
   "activeOrganizationId": zod.string().nullable(),
   "demoProfile": zod.union([zod.literal('reviewer'),zod.literal('administrator'),zod.literal(null)]).nullable(),
+  "developmentSuperAdmin": zod.boolean().optional(),
+  "platformSuperAdmin": zod.boolean().optional(),
+  "platformAdminMode": zod.union([zod.literal('private'),zod.literal('development'),zod.literal(null)]).nullish(),
   "memberships": zod.array(zod.object({
   "organizationId": zod.string(),
   "name": zod.string(),

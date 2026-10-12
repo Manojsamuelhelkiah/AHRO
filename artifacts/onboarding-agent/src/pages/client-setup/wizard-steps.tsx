@@ -317,7 +317,7 @@ export function StepProcess({
   );
 }
 
-export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulating, isCommitting, isFileOperationPending, onFileOperationPendingChange, operationError, intentsLoading, capabilities, activationNotice, basis, onOpenWorkspace, canActivateSystemSetup }: {
+export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulating, isCommitting, isFileOperationPending, onFileOperationPendingChange, operationError, intentsLoading, capabilities, activationNotice, basis, onOpenWorkspace, canActivateSystemSetup, workspaceName, isSuperAdmin, isEnteringWorkspace }: {
   onSimulate: () => void, 
   onCommit: () => void, 
   rollup: Rollup | null | undefined, 
@@ -333,6 +333,9 @@ export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulatin
   basis?: ScenarioFlowBasis,
   onOpenWorkspace?: () => void,
   canActivateSystemSetup?: boolean,
+  workspaceName?: string,
+  isSuperAdmin?: boolean,
+  isEnteringWorkspace?: boolean,
 }) {
   const { watch, register, setValue } = useFormContext<ClientSetupDraft>();
   const draft = watch();
@@ -367,10 +370,11 @@ export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulatin
           <div className="mx-auto mt-6 max-w-xl text-left"><FlowBasisSummary basis={draft.flowBasis} mode={draft.processMode} attachmentCount={draft.processFiles.length} saved /></div>
           {draft.flowBasis && basis && draft.flowBasis.fingerprint !== basis.fingerprint && <p role="status" className="mx-auto mt-3 max-w-xl text-sm">Current definitions differ from the saved planning fingerprint. The saved configuration has not been replaced; review the source changes before using a new estimate.</p>}
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Button type="button" disabled={isFileOperationPending} onClick={onOpenWorkspace}>{canActivateSystemSetup ? 'Open Workspace' : 'Continue to Workspace'}</Button>
+            <Button type="button" disabled={isFileOperationPending || isEnteringWorkspace} onClick={onOpenWorkspace}>{isEnteringWorkspace ? 'Opening client…' : isSuperAdmin ? 'Go to client workspace' : canActivateSystemSetup ? 'Open Workspace' : 'Continue to Workspace'}</Button>
             <Button type="button" variant="outline" disabled={isFileOperationPending} onClick={() => setShowCustomizations(true)}>Upload Customizations Later</Button>
           </div>
           {!canActivateSystemSetup && <p className="mt-3 text-xs text-[var(--text-muted)]">Your existing workspace permissions apply. Only an owner or admin can activate connector choices.</p>}
+          {isSuperAdmin && <p className="mt-3 text-xs text-[var(--text-muted)]">This implementation plan is saved in {workspaceName}. Go to client workspace opens the named client, or lets you create it. Plans, policies and approvals are not transferred between workspaces.</p>}
           <p className="mt-3 text-xs text-[var(--text-muted)]">Return to this saved scenario to attach documents at any time.</p>
          <div className="mx-auto mt-6 max-w-xl text-left">
             {/* Keep mounted so late file-list responses and active mutations remain authoritative. */}

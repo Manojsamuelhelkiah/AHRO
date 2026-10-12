@@ -1,3 +1,14 @@
+/** Name is only a selection hint; callers must still verify the target ID. */
+export function findNamedClientWorkspace(
+  memberships: ReadonlyArray<{ organizationId: string; name: string }>,
+  clientName: string,
+): string | null {
+  const name = clientName.trim().toLowerCase();
+  if (!name) throw new Error("Enter a client name before opening its workspace.");
+  const matches = memberships.filter(member => member.name.trim().toLowerCase() === name);
+  if (matches.length > 1) throw new Error("More than one workspace has this client name. Select the intended client from Active workspace above.");
+  return matches[0]?.organizationId ?? null;
+}
 export type OrganizationMembership = {
   organizationId: string;
 };

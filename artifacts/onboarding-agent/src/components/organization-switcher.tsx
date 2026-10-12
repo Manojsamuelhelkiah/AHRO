@@ -15,6 +15,8 @@ type Membership = OrganizationMembership & {
 type CurrentOrganizationResponse = OrganizationBootstrapResponse & {
   memberships: Membership[];
   developmentSuperAdmin?: boolean;
+  platformSuperAdmin?: boolean;
+  platformAdminMode?: "private" | "development" | null;
 };
 
 function storedOrganizationId(): string | null {
@@ -76,6 +78,7 @@ export function OrganizationSwitcher() {
   );
   const [error, setError] = useState<string | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [adminMode, setAdminMode] = useState<"private" | "development" | null>(null);
   const [creating, setCreating] = useState(false);
   const pendingOrganizationRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
@@ -97,7 +100,8 @@ export function OrganizationSwitcher() {
       .then((response) => {
         if (!active) return;
         setMemberships(response.memberships);
-        setIsSuperAdmin(response.developmentSuperAdmin === true);
+        setIsSuperAdmin(response.platformSuperAdmin === true || response.developmentSuperAdmin === true);
+        setAdminMode(response.platformAdminMode ?? (response.developmentSuperAdmin ? "development" : null));
         const decision = resolveOrganizationBootstrap(response, stored);
         setSelectedId(decision.kind === "ready" ? decision.organizationId : null);
       })
@@ -232,7 +236,7 @@ export function OrganizationSwitcher() {
         </span>
       ) : null}
     </label>
-    <span className="text-[10px] font-semibold text-[var(--text-secondary)]">{isSuperAdmin ? "Super Admin · Development" : memberships.find(membership => membership.organizationId === selectedId)?.role}</span>
+    <span className="text-[10px] font-semibold text-[var(--text-secondary)]">{isSuperAdmin ? `Super Admin · ${adminMode === "private" ? "Private MFA session" : "Development"}` : memberships.find(membership => membership.organizationId === selectedId)?.role}</span>
     {isSuperAdmin && <button type="button" onClick={() => setCreating(true)} className="rounded border border-[var(--border)] px-2 py-1 text-xs" data-testid="button-create-client">New client</button>}
     {creating && <CreateClientDialog onClose={() => setCreating(false)} />}
     </div>

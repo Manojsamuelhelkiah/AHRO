@@ -2,8 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   resolveOrganizationBootstrap,
+  findNamedClientWorkspace,
   resolveOrganizationSwitch,
 } from './organization-bootstrap';
+
+test('plan workspace selection uses a unique authorized membership, never Demo fallback', () => {
+  const memberships = [
+    { organizationId: 'demo', name: 'Demo Organization' },
+    { organizationId: 'org_client', name: 'Client One' },
+  ];
+  assert.equal(findNamedClientWorkspace(memberships, ' client one '), 'org_client');
+  assert.equal(findNamedClientWorkspace(memberships, 'New Client'), null);
+  assert.throws(() => findNamedClientWorkspace(memberships, ' '), /Enter a client name/);
+  assert.throws(() => findNamedClientWorkspace([
+    ...memberships, { organizationId: 'org_duplicate', name: 'CLIENT ONE' },
+  ], 'Client One'), /More than one workspace/);
+});
 
 test('organization bootstrap sends users without memberships to setup', () => {
   assert.deepEqual(

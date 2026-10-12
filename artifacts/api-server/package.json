@@ -16,6 +16,7 @@
     "db:reconcile": "node ./test-db-setup.mjs",
     "db:migrate:reviewed": "node ./run-reviewed-migration.mjs",
     "authority:governance:approve": "node ./approve-authority-governance.mjs",
+    "admin:private": "node ./run-private-admin.mjs",
     "db:verify:tenant-safeguards": "node ./verify-tenant-safeguards.mjs",
     "seed:volunteers": "node ./run-seed.mjs",
     "seed:demo-full-coverage": "SEED_SCRIPT=src/scripts/seed-demo-full-coverage.ts node ./run-seed.mjs",

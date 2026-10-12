@@ -109,11 +109,22 @@ export function useAuth() {
 export function useClerk() {
   const { setProfile } = useAuthContext();
   return {
+    openUserProfile: () => { throw new Error("Provider profile/MFA enrollment is not simulated by the browser-regression adapter."); },
     signOut: async () => {
       await fetch("/api/test/auth/logout", { method: "POST", credentials: "include" });
       setProfile(null);
     },
   };
+}
+
+export function useReverification<T extends (...args: any[]) => Promise<any>>(fetcher: T): T {
+  // This harness cannot attest MFA. It must never convert a step-up request
+  // into successful verification.
+  return (async (...args: Parameters<T>) => {
+    const result = await fetcher(...args);
+    if (result?.clerk_error) throw new Error("Real provider MFA verification is required; this harness cannot satisfy it.");
+    return result;
+  }) as T;
 }
 
 type SignInApi = {

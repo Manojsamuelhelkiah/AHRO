@@ -271,6 +271,8 @@ import type {
   PricingSheet,
   PricingSheetInput,
   PricingSheetUpdate,
+  PrivateAdminEligibility,
+  PrivateAdminSession,
   ReconcileGovernanceDispatchBody,
   ReconcileOnboardingBgvNotificationsRequest,
   ReconcileOnboardingBgvNotificationsResult,
@@ -5262,6 +5264,207 @@ export const useReconcileGovernanceDispatch = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getReconcileGovernanceDispatchMutationOptions(options));
+    }
+
+export const getGetPrivateAdminEligibilityUrl = () => {
+
+
+
+
+  return `/api/platform-admin/session`
+}
+
+export const getPrivateAdminEligibility = async ( options?: RequestInit): Promise<PrivateAdminEligibility> => {
+
+  return customFetch<PrivateAdminEligibility>(getGetPrivateAdminEligibilityUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPrivateAdminEligibilityQueryKey = () => {
+    return [
+    `/api/platform-admin/session`
+    ] as const;
+    }
+
+
+export const getGetPrivateAdminEligibilityQueryOptions = <TData = Awaited<ReturnType<typeof getPrivateAdminEligibility>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPrivateAdminEligibility>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPrivateAdminEligibilityQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPrivateAdminEligibility>>> = ({ signal }) => getPrivateAdminEligibility({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPrivateAdminEligibility>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPrivateAdminEligibilityQueryResult = NonNullable<Awaited<ReturnType<typeof getPrivateAdminEligibility>>>
+export type GetPrivateAdminEligibilityQueryError = ErrorType<void>
+
+
+
+export function useGetPrivateAdminEligibility<TData = Awaited<ReturnType<typeof getPrivateAdminEligibility>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPrivateAdminEligibility>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPrivateAdminEligibilityQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getActivatePrivateAdminSessionUrl = () => {
+
+
+
+
+  return `/api/platform-admin/session`
+}
+
+export const activatePrivateAdminSession = async ( options?: RequestInit): Promise<PrivateAdminSession> => {
+
+  return customFetch<PrivateAdminSession>(getActivatePrivateAdminSessionUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getActivatePrivateAdminSessionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activatePrivateAdminSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof activatePrivateAdminSession>>, TError,void, TContext> => {
+
+const mutationKey = ['activatePrivateAdminSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof activatePrivateAdminSession>>, void> = () => {
+
+
+          return  activatePrivateAdminSession(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActivatePrivateAdminSessionMutationResult = NonNullable<Awaited<ReturnType<typeof activatePrivateAdminSession>>>
+
+    export type ActivatePrivateAdminSessionMutationError = ErrorType<void>
+
+    export const useActivatePrivateAdminSession = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activatePrivateAdminSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof activatePrivateAdminSession>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getActivatePrivateAdminSessionMutationOptions(options));
+    }
+
+export const getRevokePrivateAdminSessionUrl = () => {
+
+
+
+
+  return `/api/platform-admin/session`
+}
+
+export const revokePrivateAdminSession = async ( options?: RequestInit): Promise<PrivateAdminSession> => {
+
+  return customFetch<PrivateAdminSession>(getRevokePrivateAdminSessionUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokePrivateAdminSessionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokePrivateAdminSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokePrivateAdminSession>>, TError,void, TContext> => {
+
+const mutationKey = ['revokePrivateAdminSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokePrivateAdminSession>>, void> = () => {
+
+
+          return  revokePrivateAdminSession(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokePrivateAdminSessionMutationResult = NonNullable<Awaited<ReturnType<typeof revokePrivateAdminSession>>>
+
+    export type RevokePrivateAdminSessionMutationError = ErrorType<void>
+
+    export const useRevokePrivateAdminSession = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokePrivateAdminSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokePrivateAdminSession>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRevokePrivateAdminSessionMutationOptions(options));
     }
 
 export const getGetCurrentOrganizationUrl = () => {

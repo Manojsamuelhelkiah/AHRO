@@ -1325,13 +1325,44 @@ export const OrganizationCurrentResponseDemoProfile = {
   administrator: 'administrator',
 } as const;
 
+/**
+ * @nullable
+ */
+export type OrganizationCurrentResponsePlatformAdminMode = typeof OrganizationCurrentResponsePlatformAdminMode[keyof typeof OrganizationCurrentResponsePlatformAdminMode] | null;
+
+
+export const OrganizationCurrentResponsePlatformAdminMode = {
+  private: 'private',
+  development: 'development',
+} as const;
+
 export interface OrganizationCurrentResponse {
   needsSetup: boolean;
   /** @nullable */
   activeOrganizationId: string | null;
   /** @nullable */
   demoProfile: OrganizationCurrentResponseDemoProfile;
+  developmentSuperAdmin?: boolean;
+  platformSuperAdmin?: boolean;
+  /** @nullable */
+  platformAdminMode?: OrganizationCurrentResponsePlatformAdminMode;
   memberships: OrganizationMembership[];
+}
+
+export interface PrivateAdminEligibility {
+  eligible: boolean;
+  userId: string;
+  /** @nullable */
+  primaryEmailId: string | null;
+  primaryEmailVerified: boolean;
+  mfaEnrolled: boolean;
+  mfaRequired: boolean;
+  lifetimeMinutes: number;
+}
+
+export interface PrivateAdminSession {
+  active: boolean;
+  expiresAt?: string;
 }
 
 export interface ExternalAuditArchiveConfig {

@@ -46,11 +46,17 @@ async function assertUsableCaseControls(page: Page, label: string) {
 async function signInDemo(page: Page, email: string) {
   await page.goto("/");
   await expect(page.locator("#login-email")).toBeVisible();
-  await page.getByRole("button", { name: /Demo (Administrator|Reviewer)/ }).filter({
-    hasText: email === ADMIN_EMAIL ? "Demo Administrator" : "Demo Reviewer",
-  }).click();
+  await page.getByRole("button", { name: email === ADMIN_EMAIL ? /Super Admin/ : /Demo Reviewer/ }).click();
+  if (email === ADMIN_EMAIL) {
+    // The isolated test server supplies only a restricted Demo identity.
+    // This non-secret input satisfies form validation, not real Super Admin
+    // authentication, provider MFA, or a private platform grant.
+    await page.locator("#login-password").fill(`browser-harness-only-${Date.now()}`);
+  }
   await page.getByRole("button", { name: "Sign In" }).click();
-  await expect(page.getByText("Agentic HRO Suite").first()).toBeVisible();
+  // The desktop brand is intentionally hidden on phones. A visible, resolved
+  // tenant identity proves signed-in workspace entry at every viewport.
+  await expect(page.getByTestId("active-client-name")).toHaveText("Demo Organization");
   await expect(page.locator("#login-email")).toHaveCount(0);
 }
 

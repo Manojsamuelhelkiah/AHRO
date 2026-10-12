@@ -54,7 +54,7 @@ export type AccessGovernanceKey =
   | (typeof ACCESS_GOVERNANCE_CATALOG.flows)[number]
   | (typeof ACCESS_GOVERNANCE_CATALOG.tools)[number];
 
-import { isDevelopmentSuperAdmin } from "./development-super-admin";
+import { isPlatformSuperAdmin } from "./private-platform-admin";
 
 const FIELD_KEYS = new Set<string>(ACCESS_GOVERNANCE_CATALOG.fields);
 const FLOW_KEYS = new Set<string>(ACCESS_GOVERNANCE_CATALOG.flows);
@@ -519,8 +519,8 @@ export async function resolveEffectiveAccessInTransaction(
     }
   }
 
-  if (input.principalType === "human" && isDevelopmentSuperAdmin(input.principalId, input.organizationId)) {
-    for (const key of keys) reasons[key].push("Password-protected development Super Admin; current request tenant verified. Independent evidence and execution safeguards still apply.");
+  if (input.principalType === "human" && isPlatformSuperAdmin(input.principalId, input.organizationId)) {
+    for (const key of keys) reasons[key].push("Session-authenticated platform administrator; current request tenant verified. Independent specialist, evidence, privacy and execution safeguards still apply.");
     return { allows: [...keys], reasons };
   }
 

@@ -3,6 +3,7 @@ import { db, onbCases } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { resolveEffectiveAccessInTransaction } from "../lib/access-governance";
 import healthRouter from "./health";
+import platformAdminRouter from "./platform-admin";
 import corpusRouter from "./corpus";
 import scenariosRouter from "./scenarios";
 import flowOverridesRouter from "./flow-overrides";
@@ -53,6 +54,7 @@ import employeeVaultEmployerRouter from "./employee-vault-employer";
 
 const router: IRouter = Router();
 router.use(healthRouter);
+router.use(platformAdminRouter);
 router.use(organizationsRouter);
 router.use(candidatePublicRouter);
 // Independent employees authenticate here, before HRO membership resolution.

@@ -181,6 +181,10 @@ export function LoginPage() {
             <div className="space-y-1">
               <h1 className="text-[28px] font-bold text-[var(--text-primary)]">Welcome back</h1>
               <p className="text-[var(--text-sm)] text-[var(--text-secondary)]">Sign in to your control tower</p>
+              <a href={`${basePath}/sign-in`} className="block text-sm font-semibold text-[var(--primary)] underline">
+                Private account sign-in · MFA supported
+              </a>
+              <p className="text-xs text-[var(--text-secondary)]">Platform administration requires separate private approval after signing in.</p>
             </div>
              <div className="space-y-2" aria-label="Demo access profiles">
                <p className="text-[var(--text-xs)] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
