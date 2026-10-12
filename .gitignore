@@ -48,6 +48,7 @@ Thumbs.db
 .cache/
 .local/
 dist-test/
+dist-test-admin/
 dist-workforce-check/
 test-results/
 playwright-report/
