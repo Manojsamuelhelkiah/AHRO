@@ -43,6 +43,38 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /uat-auth/challenge:
+    post:
+      operationId: startUatSignIn
+      tags: [onboardingUat]
+      responses:
+        "200":
+          description: Same-browser challenge requiring a new non-ticket Clerk sign-in
+          content: { application/json: { schema: { $ref: "#/components/schemas/UatSignInChallenge" } } }
+        "403": { description: Same-origin browser request required }
+  /uat-auth/admission:
+    post:
+      operationId: admitUatSession
+      tags: [onboardingUat]
+      responses:
+        "200":
+          description: Fresh sign-in admitted to one verified workspace
+          content: { application/json: { schema: { $ref: "#/components/schemas/UatAdmission" } } }
+        "401": { description: Fresh non-ticket sign-in and challenge required }
+        "403": { description: Active membership required }
+    get:
+      operationId: getUatAdmission
+      tags: [onboardingUat]
+      responses:
+        "200":
+          description: Live session and workspace admission
+          content: { application/json: { schema: { $ref: "#/components/schemas/UatAdmission" } } }
+        "401": { description: "Admission missing, expired or revoked" }
+    delete:
+      operationId: exitUatSession
+      tags: [onboardingUat]
+      responses:
+        "204": { description: Admission revoked; saved runs and other apps remain available }
   /scenario-flow-basis:
     post:
       operationId: resolveScenarioFlowBasis
@@ -6849,6 +6881,19 @@ components:
         type: integer
         minimum: 1
   schemas:
+    UatSignInChallenge:
+      type: object
+      required: [expiresAt]
+      properties:
+        expiresAt: { type: string, format: date-time }
+    UatAdmission:
+      type: object
+      required: [organizationId, userId, sessionId, expiresAt]
+      properties:
+        organizationId: { type: string }
+        userId: { type: string }
+        sessionId: { type: string }
+        expiresAt: { type: string, format: date-time }
     HroBatchColumn:
       type: object
       required: [key, label, required, description, kind]

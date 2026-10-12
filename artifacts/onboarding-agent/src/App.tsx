@@ -41,8 +41,6 @@ import { HrPolicyLibraryIndexPage } from './pages/hr-policy-library';
 import { HrPolicyLibraryDetailPage } from './pages/hr-policy-library/detail';
 import { AuditPage } from './pages/audit';
 import { PolicyReviewPage } from './pages/policy-review';
-import { UatTestCenterPage } from './pages/uat-test-center';
-import { FairnessProgrammePage } from './pages/fairness-programme';
 import { LearningGuidePage } from './pages/learning-guide';
 
 const queryClient = new QueryClient();
@@ -396,11 +394,8 @@ function Router() {
       <Route path="/demo-controller/:id">
         <Protected><DemoControllerDetailPage /></Protected>
       </Route>
-      <Route path="/uat-test-center/fairness">
-        <Protected><FairnessProgrammePage /></Protected>
-      </Route>
-      <Route path="/uat-test-center">
-        <Protected><UatTestCenterPage /></Protected>
+      <Route path="/uat-test-center/*?">
+        <UatRelocation />
       </Route>
       <Route path="/learning-guide">
         <Protected><LearningGuidePage /></Protected>
@@ -416,6 +411,19 @@ function Router() {
   );
 }
 
+function UatRelocation() {
+  const fairness = window.location.pathname.endsWith('/fairness');
+  const run = new URLSearchParams(window.location.search).get('run');
+  const destination = fairness ? '/uat/fairness' : `/uat/${run ? `?run=${encodeURIComponent(run)}` : ''}`;
+  return <main className="min-h-[100dvh] flex items-center justify-center bg-slate-50 px-4">
+    <section className="max-w-lg rounded-xl border bg-white p-8">
+      <h1 className="text-2xl font-bold">UAT has moved</h1>
+      <p className="mt-3">Acceptance testing and evaluation now have a separate app. Sign in explicitly to UAT using your existing account. Your workspace permissions and saved runs are unchanged.</p>
+      <a className="mt-6 inline-block rounded-md bg-indigo-600 px-4 py-3 font-semibold text-white" href={destination}>Open UAT sign-in</a>
+      <a className="ml-4 inline-block underline" href="/">Control Tower</a>
+    </section>
+  </main>;
+}
 function RoutedErrorBoundary({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/uat/"
+title = "UAT Test Center"
+description = "Separately authenticated acceptance testing, policy-quality evaluation and synthetic fairness evidence for existing HRO workspaces."
+version = "1.0.0"
+id = "artifacts/uat-test-center"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/uat/" ]
+localPort = 21383
+
+[services.development]
+run = "pnpm --filter @workspace/uat-test-center run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/uat-test-center", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/uat-test-center/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21383"
+BASE_PATH = "/uat/"

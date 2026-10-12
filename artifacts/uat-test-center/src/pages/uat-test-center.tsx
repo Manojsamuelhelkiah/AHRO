@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   downloadOnboardingUatEvidenceReport,
@@ -20,8 +20,7 @@ import {
 import { AlertTriangle, ChevronLeft, Clock3, Download, ExternalLink, FileSpreadsheet, FileText, FlaskConical, History, Link2, Pause, Play, RefreshCw, RotateCcw, Send, ShieldCheck, TimerReset } from "lucide-react";
 import { Link, useLocation, useSearch } from "wouter";
 import { Badge, Button, Card, Input, Label, PageHeader } from "@/components/ui-shared";
-import { normalizeLearningCatalog, type CanonicalLearningCatalog } from "./learning-guide";
-import { PolicyQualityPanel } from "../components/policy-quality-panel";
+import { normalizeLearningCatalog, type CanonicalLearningCatalog } from "@/lib/learning-catalog";
 
 type CandidatePortalDescriptor = {
   state?: string;
@@ -303,8 +302,7 @@ export function UatTestCenterPage() {
   if (isError || !catalog) return <ErrorState message="The UAT catalog could not be loaded. No run has been created." onRetry={() => void refetch()} />;
   return <div className="mx-auto max-w-7xl space-y-6 pb-16">
     <PageHeader title="UAT Test Center" subtitle="Guided, tenant-scoped acceptance runs with explicit expected/observed evidence. Simulated evidence is non-authoritative and never changes live readiness." />
-    <PolicyQualityPanel />
-    <Card className="p-4"><Link href="/uat-test-center/fairness" className="font-medium underline">Synthetic fairness evaluation</Link><p className="text-sm text-[var(--text-muted)]">Review policy-recommendation scope and fictional paired scenarios before defining expected behavior. Observations are not statistical or legal certification.</p></Card>
+    <Card className="p-4"><Link href="/fairness" className="font-medium underline">Synthetic fairness evaluation</Link><p className="text-sm text-[var(--text-muted)]">Review policy-recommendation scope and fictional paired scenarios before defining expected behavior. Observations are not statistical or legal certification.</p></Card>
     <div className="rounded-[var(--radius-md)] border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-4 text-sm text-[var(--text-secondary)]" role="note" data-testid="text-uat-safety-boundary">
       <strong className="text-[var(--text-primary)]">Safety boundary:</strong> the default run simulates exchanges only. A manual observation records what a person saw; it does not fabricate workflow execution. Provider sandbox and real-email verification remain explicitly blocked until their separately governed conditions are available.
     </div>
@@ -355,6 +353,8 @@ function ExistingRuns({ runs, onOpen }: { runs: Array<{ runId: string; scenarioI
 }
 
 function UatRunPanel({ runId, onBack }: { runId: string; onBack: () => void }) {
+  const [downloads] = useState(() => new AbortController());
+  useEffect(() => () => downloads.abort(), [downloads]);
   const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch, isFetching } = useGetOnboardingUatRun(runId, { query: { queryKey: getGetOnboardingUatRunQueryKey(runId), staleTime: 5_000, refetchInterval: 15_000, refetchOnWindowFocus: true } });
   const mutate = useApplyOnboardingUatRunAction();
@@ -373,6 +373,7 @@ function UatRunPanel({ runId, onBack }: { runId: string; onBack: () => void }) {
   const manualEvidence = useMemo(() => (run?.evidence ?? []).slice().sort((a, b) => b.at.localeCompare(a.at)), [run]);
 
   const saveRun = async (updated: OnboardingUatRun) => {
+    if (downloads.signal.aborted) return;
     await queryClient.cancelQueries({ queryKey: getGetOnboardingUatRunQueryKey(runId) });
     queryClient.setQueryData(getGetOnboardingUatRunQueryKey(runId), updated);
     queryClient.invalidateQueries({ queryKey: getGetOnboardingUatCatalogQueryKey() });
@@ -382,6 +383,7 @@ function UatRunPanel({ runId, onBack }: { runId: string; onBack: () => void }) {
     setError(null);
     try {
       const updated = await mutate.mutateAsync({ runId, data: { ...input, expectedVersion: run.version, requestId: crypto.randomUUID() } as OnboardingUatRunAction });
+      if (downloads.signal.aborted) return undefined;
       if (persistResponse) await saveRun(updated);
       return updated as UatRunWithRuntimeDetails;
     } catch (caught) {
@@ -391,11 +393,17 @@ function UatRunPanel({ runId, onBack }: { runId: string; onBack: () => void }) {
   };
   const fixtures = async () => {
     setError(null);
-    try { downloadFile(`uat-${runId}-fixture-manifest.txt`, await downloadOnboardingUatFixturePack(runId), "text/plain;charset=utf-8"); } catch (caught) { setError(problemMessage(caught, "Fixture manifest download failed. No fixture was created.")); }
+    try {
+      const manifest = await downloadOnboardingUatFixturePack(runId, { signal: downloads.signal });
+      if (!downloads.signal.aborted) downloadFile(`uat-${runId}-fixture-manifest.txt`, manifest, "text/plain;charset=utf-8");
+    } catch (caught) { if (!downloads.signal.aborted) setError(problemMessage(caught, "Fixture manifest download failed. No fixture was created.")); }
   };
   const report = async () => {
     setError(null);
-    try { downloadFile(`uat-${runId}-evidence.json`, JSON.stringify(await downloadOnboardingUatEvidenceReport(runId), null, 2), "application/json;charset=utf-8"); } catch (caught) { setError(problemMessage(caught, "Evidence export failed. No report was downloaded.")); }
+    try {
+      const evidence = await downloadOnboardingUatEvidenceReport(runId, { signal: downloads.signal });
+      if (!downloads.signal.aborted) downloadFile(`uat-${runId}-evidence.json`, JSON.stringify(evidence, null, 2), "application/json;charset=utf-8");
+    } catch (caught) { if (!downloads.signal.aborted) setError(problemMessage(caught, "Evidence export failed. No report was downloaded.")); }
   };
   const issuePortal = async () => {
     const updated = await action({ kind: "issue-candidate-portal" }, false);
@@ -459,7 +467,7 @@ function UatRunPanel({ runId, onBack }: { runId: string; onBack: () => void }) {
       <div className="flex items-center gap-2"><Link2 className="h-5 w-5 text-[var(--primary)]" /><h3 className="font-semibold">Synthetic case and candidate portal</h3></div>
       <p className="mt-1 text-xs text-[var(--text-muted)]">Portal addresses are never stored locally, rendered in a report or shown in activity history. A fresh address is issued only by an explicit server action.</p>
       <div className="mt-3 flex flex-col gap-3 rounded-md bg-[var(--surface-alt)] p-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-sm font-medium">{portal?.state ?? portal?.status ?? (run.linkedCaseIds.length ? "Synthetic case available" : "No linked synthetic case")}</p><p className="mt-1 text-xs text-[var(--text-secondary)]">{portal?.message ?? portal?.reason ?? (run.linkedCaseIds.length ? "Issue a short-lived candidate portal through the isolated run when you are ready to test the candidate journey." : "This scenario has not created a synthetic candidate case yet.")}</p>{portal?.expiresAt && <p className="mt-1 text-xs text-[var(--text-muted)]">Issued access expires {formatDate(portal.expiresAt)}.</p>}</div><Button type="button" variant="outline" size="sm" disabled={!canIssuePortal || mutate.isPending} onClick={() => void issuePortal()} data-testid="button-issue-uat-candidate-portal"><ExternalLink className="mr-1 h-3.5 w-3.5" />Issue & open portal</Button></div>
-      {run.linkedCaseIds.length > 0 && <div className="mt-3 flex flex-wrap gap-2 text-xs">{run.linkedCaseIds.map((caseId) => <Link key={caseId} href={`/cases/${caseId}`}><Button type="button" variant="outline" size="sm">View synthetic case {caseId}</Button></Link>)}</div>}
+      {run.linkedCaseIds.length > 0 && <div className="mt-3 flex flex-wrap gap-2 text-xs">{run.linkedCaseIds.map((caseId) => <a key={caseId} href={`/cases/${caseId}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-medium hover:bg-[var(--surface-alt)]" data-testid={`link-control-tower-case-${caseId}`}>View synthetic case {caseId} in Control Tower<ExternalLink className="h-3 w-3" /></a>)}</div>}
     </Card>
     <Card className="space-y-4 p-5" data-testid="card-uat-workflow-evaluator">
       <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-[var(--primary)]" /><h3 className="font-semibold">Synthetic workflow evaluator</h3></div>

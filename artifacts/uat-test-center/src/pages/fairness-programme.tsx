@@ -84,7 +84,7 @@ function Programme({ organizationId, userId }: { organizationId?: string | null;
   const unresolved = state!.runs.flatMap(r => r.observations).filter(o => o.status !== "observed-match" && o.investigation?.disposition !== "explained").length;
   return <div className="space-y-6">
     <PageHeader title="Synthetic fairness evaluation" subtitle="Governed paired observations for the Policy Assistant — first roadmap increment, not certification."><div className="flex gap-2"><Button variant="outline" onClick={() => query.refetch()}>Refresh</Button><Button variant="outline" disabled={downloading} onClick={download}>Download evidence</Button></div></PageHeader>
-    <Link href="/uat-test-center" className="text-sm underline">Back to UAT Test Center</Link>
+    <Link href="/" className="text-sm underline">Back to UAT Test Center</Link>
     {(error || query.error) && <p role="alert" className="rounded border p-3 text-[var(--status-red)]">{error ?? errorText(query.error)}</p>}
     {notice && <p role="status">{notice}</p>}
     <Card className="p-5 space-y-3">

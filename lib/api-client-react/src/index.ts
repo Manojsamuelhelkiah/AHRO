@@ -7,6 +7,7 @@ export {
   pinOrganizationIdForPage,
   setBaseUrl,
   setAuthTokenGetter,
+  setApiResponseObserver,
 } from "./custom-fetch";
 export type {
   AuthTokenGetter,

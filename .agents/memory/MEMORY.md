@@ -75,3 +75,4 @@
 - [Vault expiry notice boundaries](vault-expiry-notice-boundaries.md) — independent opt-in in-app notices; never infer email identity or treat notification as renewal.
 - [Synthetic fairness boundaries](synthetic-fairness-boundaries.md) — scope and variations require review before criteria; equal answers may be wrong; paired observations are not certification.
 - [Reviewer notification boundaries](reviewer-notification-boundaries.md) — private in-app drift alerts first; external delivery needs separate verified binding and never grants model spending.
+- [Separate UAT admission](uat-admission-boundary.md) — reuse existing accounts but require fresh UAT authentication; neither demo tickets nor login grant domain authority.

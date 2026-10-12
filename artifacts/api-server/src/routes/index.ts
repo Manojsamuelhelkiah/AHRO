@@ -51,9 +51,12 @@ import { hroRequestContext } from "../middlewares/hro-context";
 import hroContextRouter from "./hro-context";
 import employeeVaultRouter, { employeeVaultSourceRouter } from "./employee-vault";
 import employeeVaultEmployerRouter from "./employee-vault-employer";
+import uatAuthRouter from "./uat-auth";
+import { requireUatAdmission } from "../middlewares/uat-admission";
 
 const router: IRouter = Router();
 router.use(healthRouter);
+router.use(uatAuthRouter);
 router.use(platformAdminRouter);
 router.use(organizationsRouter);
 router.use(candidatePublicRouter);
@@ -101,6 +104,7 @@ router.use("/onboarding/cases/:caseId", async (req, res, next) => {
   next();
 });
 router.use(hroContextRouter);
+router.use(requireUatAdmission);
 router.use(employeeVaultEmployerRouter);
 router.use(corpusRouter);
 router.use(scenariosRouter);

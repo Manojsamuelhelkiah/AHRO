@@ -84,7 +84,6 @@ export function PolicyAssistantPage() {
         </p>
         <p className="mt-2 text-sm text-[var(--text-muted)]">
           Exact quotations do not guarantee that a policy answers every question.
-          {" "}<Link href="/uat-test-center" className="underline">Review synthetic answer-quality evidence in the UAT Test Center</Link>.
           {" "}Benchmark results are not a current accuracy guarantee.
         </p>
       </div>

@@ -61,6 +61,12 @@ export function getPinnedOrganizationIdForPage(): string | null {
   return pageOrganizationScope.getOrganizationId();
 }
 
+let responseObserver: ((response: Response) => void) | null = null;
+/** Per-page observer; never changes API authorization or another app's state. */
+export function setApiResponseObserver(observer: ((response: Response) => void) | null) {
+  responseObserver = observer;
+}
+
 /**
  * Set a base URL that is prepended to every relative request URL
  * (i.e. paths that start with `/`).
@@ -414,6 +420,7 @@ export async function customFetch<T = unknown>(
   const requestInfo = { method, url: resolveUrl(input) };
 
   const response = await fetch(input, { ...init, method, headers });
+  responseObserver?.(response);
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

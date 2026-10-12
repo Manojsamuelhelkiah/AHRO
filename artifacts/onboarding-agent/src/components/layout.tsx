@@ -5,7 +5,6 @@ import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@wor
 import { useOrganizationRole } from '../hooks/use-organization-role';
 import { cn } from './ui-shared';
 import { OrganizationSwitcher } from './organization-switcher';
-import { DriftNotificationBanner } from './drift-notifications';
 import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass, Presentation, Bot, FlaskConical, BookOpen, Waypoints, ClipboardCheck } from 'lucide-react';
 
 const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }[] }[] = [
@@ -33,7 +32,6 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
     items: [
       { path: '/systems', label: 'Systems', icon: Server },
       { path: '/demo-controller', label: 'Demo Center', icon: Presentation },
-      { path: '/uat-test-center', label: 'UAT Test Center', icon: ClipboardCheck },
       { path: '/learning-guide', label: 'Learning Guide', icon: BookOpen },
       { path: '/audit', label: 'Audit Trail', icon: Shield },
       { path: '/hr-policy-library', label: 'HR Policy Library', icon: BookOpen },
@@ -140,7 +138,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <main className="flex-1 flex flex-col min-w-0 transition-colors duration-300">
         <MonitorAlertBanner />
-        <DriftNotificationBanner />
         
         <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 px-3 py-2 md:px-6 shrink-0 transition-colors duration-300" style={{ minHeight: '56px', backgroundColor: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
           <div className="hidden lg:flex items-center gap-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>

@@ -10,6 +10,7 @@ const chromiumExecutable =
 
 export default defineConfig({
   testDir: "./browser-regression",
+  testIgnore: "uat-isolation.spec.ts",
   timeout: 120_000,
   fullyParallel: false,
   workers: 1,

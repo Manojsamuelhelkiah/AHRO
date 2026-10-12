@@ -1,0 +1,164 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@layer theme, base, clerk, components, utilities;
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@plugin "@tailwindcss/typography";
+
+/* Long evidence/source identifiers must not widen the phone layout. */
+[data-uat-shell] main { min-width: 0; overflow-wrap: anywhere; }
+[data-uat-shell] main .grid > * { min-width: 0; }
+[data-uat-shell] header { overflow-wrap: anywhere; }
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--surface-alt);
+  --color-foreground: var(--text-primary);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--primary);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text-primary);
+  --color-primary: var(--primary);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--surface-alt);
+  --color-secondary-foreground: var(--text-secondary);
+  --color-muted: var(--surface-soft);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent: var(--primary-light);
+  --color-accent-foreground: var(--primary);
+  --color-destructive: var(--status-red);
+  --color-destructive-foreground: #ffffff;
+
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius: var(--radius-md);
+
+  --text-xs: 11px;
+  --text-xs--line-height: 1.4;
+  --text-sm: 13px;
+  --text-sm--line-height: 1.5;
+  --text-base: 14px;
+  --text-base--line-height: 1.6;
+  --text-lg: 16px;
+  --text-lg--line-height: 1.6;
+  --text-xl: 18px;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 22px;
+  --text-2xl--line-height: 1.3;
+  --text-3xl: 30px;
+  --text-3xl--line-height: 1.2;
+  --text-4xl: 36px;
+  --text-4xl--line-height: 1.15;
+}
+
+:root {
+  --primary:        #4C42EE;
+  --primary-dark:   #3730C9;
+  --primary-light:  #F3F4F8;
+  --primary-light-bg: #E8E7FD;
+  --violet:         #655BF3;
+  --violet-light-bg: #F3E8FF;
+  --violet-fg:      #7E22CE;
+  --lavender:       #B9B4FF;
+  --lavender-soft:  #8F89FF;
+
+  --surface:        #FFFFFF;
+  --surface-alt:    #F8F9FC;
+  --surface-soft:   #F3F4F8;
+  --surface-selected: #F1F0FE;
+
+  /* Dark brand surfaces (login / brand moments only) */
+  --midnight:       #080626;
+  --deep-navy:      #100D3E;
+  --control-tower:  #15134F;
+  --dark-raised:    rgba(255, 255, 255, 0.055);
+  --dark-border:    rgba(180, 175, 255, 0.18);
+  --dark-text:      #F7F7FF;
+  --dark-text-2:    #D5D2ED;
+  --dark-text-muted: #AAA7C7;
+  
+  --border:         #E4E7EF;
+  --border-strong:  #D5D2ED;
+  
+  --text-primary:   #0B1230;
+  --text-secondary: #30364F;
+  --text-muted:     #68708D;
+  
+  --status-green:   #20E58A;
+  --status-amber:   #D97706;
+  --status-red:     #D92D20;
+  --status-blue:    #8F89FF;
+  --status-gray:    #68708D;
+
+  /* Soft semantic backgrounds for badges / status chips */
+  --status-green-bg: #E7FBF1;
+  --status-green-fg: #067647;
+  --status-amber-bg: #FEF4E6;
+  --status-amber-fg: #B45309;
+  --status-red-bg:   #FEECEB;
+  --status-red-fg:   #B42318;
+  --status-info-bg:  #EEF0FE;
+  --status-info-fg:  #4C42EE;
+  --status-gray-bg:  #F3F4F8;
+  --status-gray-fg:  #52596F;
+
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 14px;
+  --text-lg:   16px;
+  --text-xl:   18px;
+  --text-2xl:  22px;
+  --text-3xl:  30px;
+  --text-4xl:  36px;
+
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  12px;
+  --space-lg:  16px;
+  --space-xl:  24px;
+  --space-2xl: 32px;
+  --space-3xl: 40px;
+  --space-4xl: 48px;
+  --space-5xl: 64px;
+
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-xl:  20px;
+
+  --shadow-sm:  0 2px 8px rgba(11, 18, 48, 0.04), 0 1px 2px rgba(11, 18, 48, 0.02);
+  --shadow-md:  0 4px 16px rgba(11, 18, 48, 0.06), 0 2px 4px rgba(11, 18, 48, 0.04);
+  --shadow-lg:  0 8px 24px rgba(11, 18, 48, 0.08), 0 4px 8px rgba(11, 18, 48, 0.04);
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { 
+    @apply font-sans antialiased bg-background text-foreground; 
+    background-color: var(--surface-alt);
+    color: var(--text-primary);
+  }
+  
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: var(--radius-sm);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+  }
+
+  button, a, input, select, textarea, div {
+    transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+}

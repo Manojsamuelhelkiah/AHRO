@@ -59,6 +59,7 @@ app.use(
 );
 
 app.use("/api", router);
+app.use("/uat/api", router);
 app.use(errorHandler);
 
 export default app;

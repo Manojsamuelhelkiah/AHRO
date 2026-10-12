@@ -320,12 +320,6 @@ export function CaseDetailPage() {
               <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
                 This sample is evaluated through the UAT Test Center. Per-case response simulation is intentionally unavailable for UAT-isolated cases.
               </p>
-              <Link
-                href="/uat-test-center"
-                className="mt-3 inline-flex rounded-md border border-[var(--primary)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--primary-dark)] transition-colors hover:bg-[var(--primary-light)]"
-              >
-                Open UAT Test Center
-              </Link>
             </div>
           ) : (
             permissions.access.flowRead
