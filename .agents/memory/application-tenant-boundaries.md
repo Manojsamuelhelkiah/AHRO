@@ -15,11 +15,11 @@ The active client/workspace name must remain visually identifiable even when the
 
 The product is SaaS, and the user requires one platform-wide administrator for client setup and administration, rather than relying only on separate client owners.
 
-The initial cross-client administration is intended for two operators. The user wants the privileged administrator login tied to a private verified email, not unrestricted public demo access.
+The initial cross-client administration is intended for two operators. The user wants to reuse the Demo Administrator identity as Super Admin during development and defer tying it to a verified personal email until later. Do not insist on two separate administrator identities as a product requirement.
 
-**Why:** The user explicitly requested one administrator with universal rights and said finer restrictions can be introduced later.
+**Why:** The user explicitly requested one administrator with universal rights and said finer restrictions can be introduced later, then clarified that the same account should serve both demo and super-admin purposes while the product is in development.
 
-**How to apply:** Treat platform administration as an explicit cross-client privilege. Bind it to a verified private identity, never a public shared demo identity. Preserve active-client context and attribution of the actual actor; administrative access does not manufacture professional qualifications, source verification or employee consent.
+**How to apply:** Treat platform administration as an explicit cross-client privilege. Email verification may be deferred for the temporary development administrator, but unrestricted public demo tickets must not grant universal access: protect the privileged sign-in and fence old public sessions before elevation. Before real-client rollout, bind it to a verified private identity. Preserve active-client context and attribution of the actual actor; administrative access does not manufacture professional qualifications, source verification or employee consent.
 
 **How to apply:** Preserve shared storage with explicit server-enforced organization boundaries; dedicated databases or cross-client learning require a separate decision.
 
