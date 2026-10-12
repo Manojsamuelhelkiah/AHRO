@@ -16,6 +16,8 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { BatchIntakeForm } from './batch-intake';
 import { StandardIntakeForm } from './standard-intake';
 import { listJobProfiles, parseWorkforceTriState } from '@/lib/workforce-policy-api';
+import { listWorkforceTransferPrograms } from '@/lib/workforce-transfers-api';
+import { PROGRAM_FILTER, matchesTransferProgram, TransferProgramRow, TransferProgramCard } from './transfer-presentation';
 import {
   CASE_TYPES,
   caseTitleOf as presentedCaseTitleOf,
@@ -171,6 +173,7 @@ function CompactGates({ gateways }: { gateways?: { a?: any; b?: any; c?: any } }
 /* --------------------------------- filters -------------------------------- */
 
 type AdvancedFilters = {
+  programStatus: string;
   status: '' | HroStatus;
   agent: '' | 'AI Agent' | 'Human Reviewer';
   priority: '' | 'normal' | 'standard' | 'high' | 'elevated' | 'critical';
@@ -182,7 +185,7 @@ type AdvancedFilters = {
   safetyCritical: '' | 'yes' | 'no';
 };
 
-const EMPTY_FILTERS: AdvancedFilters = { status: '', agent: '', priority: '', geography: '', dateFrom: '', dateTo: '', workforce: '', siteExposure: '', safetyCritical: '' };
+const EMPTY_FILTERS: AdvancedFilters = { programStatus: '', status: '', agent: '', priority: '', geography: '', dateFrom: '', dateTo: '', workforce: '', siteExposure: '', safetyCritical: '' };
 
 function workforceLabel(c: OnbCase) {
   return c.workforceClassification?.label ?? 'unclassified';
@@ -215,9 +218,23 @@ function intakeClassification(context: { workEnvironment?: string; siteExposure?
 export function CasesPage() {
   const search = useSearch();
   const checklistProfileId = new URLSearchParams(search).get('checklistProfileId');
+  const organizationId = getPinnedOrganizationIdForPage();
+  const transferQuery = useQuery({
+    queryKey: ['workforce-transfers', 'programs', organizationId],
+    queryFn: ({ signal }) => listWorkforceTransferPrograms({
+      signal,
+      headers: organizationId ? { 'x-organization-id': organizationId } : {},
+    }),
+    enabled: Boolean(organizationId),
+    retry: false,
+    refetchInterval: 30_000,
+  });
+  // Never show cached metadata after a denied or failed refresh.
+  const programs = transferQuery.isError ? undefined : transferQuery.data;
   const { data: cases, isLoading, isError, refetch } = useListOnboardingCases({
+    request: { headers: organizationId ? { 'x-organization-id': organizationId } : {} },
     query: {
-      queryKey: getListOnboardingCasesQueryKey(),
+      queryKey: [...getListOnboardingCasesQueryKey(), organizationId],
       refetchInterval: (query: any) => {
         const active = query?.state?.data?.some((c: any) => c.orchestrationStatus !== 'completed' && c.orchestrationStatus !== 'done');
         return active ? 5000 : false;
@@ -228,7 +245,7 @@ export function CasesPage() {
   const [showBatch, setShowBatch] = useState(false);
   const [showStandardIntake, setShowStandardIntake] = useState(false);
   const [, setLocation] = useLocation();
-  const [typeFilter, setTypeFilter] = useState<CaseTypeFilter>('All Cases');
+  const [typeFilter, setTypeFilter] = useState<CaseTypeFilter | typeof PROGRAM_FILTER>('All Cases');
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
@@ -254,12 +271,13 @@ export function CasesPage() {
   }, [showFilters]);
 
   const geographies = useMemo(
-    () => Array.from(new Set((cases ?? []).map((c) => c.geography).filter(Boolean))).sort(),
-    [cases],
+    () => Array.from(new Set([...(cases ?? []).map((c) => c.geography).filter(Boolean), ...(programs ?? []).flatMap((p) => p.countries)])).sort(),
+    [cases, programs],
   );
 
   const filtered = useMemo(() => {
     let rows = cases ?? [];
+    if (typeFilter === PROGRAM_FILTER || filters.programStatus) return [];
     if (checklistProfileId) rows = rows.filter((c) => c.checklistProfileId === checklistProfileId);
     if (typeFilter !== 'All Cases') rows = rows.filter((c) => caseTypeOf(c) === typeFilter);
     if (filters.status) rows = rows.filter((c) => statusOf(c) === filters.status);
@@ -278,8 +296,19 @@ export function CasesPage() {
           .some((v) => (v || '').toLowerCase().includes(q)),
       );
     }
-    return rows;
+    return [...rows].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '') || b.id - a.id);
   }, [cases, checklistProfileId, typeFilter, filters, query]);
+  const filteredPrograms = useMemo(() => (programs ?? []).filter((p) => matchesTransferProgram(p, {
+    type: typeFilter, query, geography: filters.geography, programStatus: filters.programStatus,
+    caseOnly: Boolean(checklistProfileId || filters.status || filters.agent || filters.priority ||
+      filters.workforce || filters.siteExposure || filters.safetyCritical),
+    dateFrom: filters.dateFrom, dateTo: filters.dateTo,
+  })).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)),
+  [programs, typeFilter, query, checklistProfileId, filters]);
+  const workTypes = [...CASE_TYPES, PROGRAM_FILTER];
+  const programStatuses = Array.from(new Set((programs ?? []).map((p) => p.status).filter(Boolean))).sort();
+  const programCountLabel = transferQuery.isError || !organizationId ? 'program results unavailable'
+    : transferQuery.isPending ? 'programs loading' : `${programs?.length ?? 0} programs`;
 
   const counts = useMemo(() => {
     const rows = cases ?? [];
@@ -303,7 +332,11 @@ export function CasesPage() {
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
   const anyFilterActive = activeFilterCount > 0 || query.trim() !== '' || typeFilter !== 'All Cases' || Boolean(checklistProfileId);
-  const context = PAGE_CONTEXT[typeFilter];
+  const context = typeFilter === PROGRAM_FILTER
+    ? { title: PROGRAM_FILTER, subtitle: 'Authorized bulk programs, separate from individual case workflows and metrics.' }
+    : PAGE_CONTEXT[typeFilter];
+  const typeCountLabel = (type: typeof typeFilter) => type === PROGRAM_FILTER ? programCountLabel
+    : type === 'All Cases' ? `${counts.all} individual cases · ${programCountLabel}` : `${caseTypeCounts[type]} cases`;
 
   const clearAll = () => {
     setFilters(EMPTY_FILTERS);
@@ -392,7 +425,7 @@ export function CasesPage() {
         <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[220px] max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4" style={{ color: 'var(--text-muted)' }} />
-            <Input className="pl-9" placeholder="Search by case, worker, email, or ID..." value={query} onChange={(e) => setQuery(e.target.value)} />
+            <Input aria-label="Search cases and programs" className="pl-9" placeholder="Search cases, workers, programs, entities, or ID..." value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           <div className="relative" ref={filtersRef}>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowFilters((v) => !v)} aria-expanded={showFilters} aria-haspopup="dialog" aria-controls="cases-filters-panel">
@@ -403,26 +436,34 @@ export function CasesPage() {
               )}
             </Button>
             {showFilters && (
-              <div id="cases-filters-panel" role="dialog" aria-label="Case filters" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', width: '300px', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md, 0 8px 24px rgba(16,24,40,0.12))', padding: 'var(--space-lg)', zIndex: 30 }} className="space-y-3">
+              <div id="cases-filters-panel" role="dialog" aria-label="Case filters" style={{ position: 'absolute', top: 'calc(100% + 6px)', width: '300px', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md, 0 8px 24px rgba(16,24,40,0.12))', padding: 'var(--space-lg)', zIndex: 30 }} className="space-y-3 left-0 sm:left-auto sm:right-0 max-h-[70vh] overflow-y-auto">
                 <div className="flex items-center justify-between">
                   <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Filters</span>
                   <button onClick={() => setShowFilters(false)} style={{ color: 'var(--text-muted)' }} aria-label="Close filters"><X className="h-4 w-4" /></button>
                 </div>
+                <div className="text-xs text-[var(--text-muted)]">Case status, agent, priority, classification, and checklist filters apply to individual cases only and exclude programs.</div>
                 <div className="space-y-1">
                   <Label>Case Type</Label>
-                  <select className={selectStyle} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as CaseTypeFilter)}>
-                    {CASE_TYPES.map((t) => <option key={t} value={t}>{t} ({caseTypeCounts[t]})</option>)}
+                   <select aria-label="Work item type" className={selectStyle} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}>
+                     {workTypes.map((t) => <option key={t} value={t}>{t} ({typeCountLabel(t)})</option>)}
                   </select>
                 </div>
                  <div className="space-y-1"><Label>Workforce classification</Label><select className={selectStyle} value={filters.workforce} onChange={(e) => setFilters({ ...filters, workforce: e.target.value as AdvancedFilters['workforce'] })}><option value="">Any classification</option><option value="white-collar">White-collar</option><option value="blue-collar-frontline">Frontline / site</option><option value="mixed">Mixed</option><option value="needs-review">Needs review</option><option value="unclassified">Unclassified</option></select></div>
                  <div className="grid grid-cols-2 gap-2"><div className="space-y-1"><Label>Site exposure</Label><select className={selectStyle} value={filters.siteExposure} onChange={(e) => setFilters({ ...filters, siteExposure: e.target.value as AdvancedFilters['siteExposure'] })}><option value="">Any</option><option value="yes">Yes</option><option value="no">No</option></select></div><div className="space-y-1"><Label>Safety-critical</Label><select className={selectStyle} value={filters.safetyCritical} onChange={(e) => setFilters({ ...filters, safetyCritical: e.target.value as AdvancedFilters['safetyCritical'] })}><option value="">Any</option><option value="yes">Yes</option><option value="no">No</option></select></div></div>
                 <div className="space-y-1">
-                  <Label>Status</Label>
+                   <Label>Individual case status</Label>
                   <select className={selectStyle} value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value as AdvancedFilters['status'] })}>
                     <option value="">Any status</option>
                     {(['New', 'In Progress', 'Waiting', 'Human Review', 'Blocked', 'Completed'] as HroStatus[]).map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
+                 <div className="space-y-1">
+                   <Label>Recorded program status (programs only)</Label>
+                   <select aria-label="Recorded program status" className={selectStyle} value={filters.programStatus} onChange={(e) => setFilters({ ...filters, programStatus: e.target.value })}>
+                     <option value="">Any program status</option>
+                     {programStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
+                   </select>
+                 </div>
                 <div className="space-y-1">
                   <Label>Assigned Agent</Label>
                   <select className={selectStyle} value={filters.agent} onChange={(e) => setFilters({ ...filters, agent: e.target.value as AdvancedFilters['agent'] })}>
@@ -451,11 +492,11 @@ export function CasesPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label>From</Label>
+                     <Label>Effective / planned date from</Label>
                     <Input type="date" value={filters.dateFrom} onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })} />
                   </div>
                   <div className="space-y-1">
-                    <Label>To</Label>
+                     <Label>Effective / planned date to</Label>
                     <Input type="date" value={filters.dateTo} onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })} />
                   </div>
                 </div>
@@ -477,11 +518,12 @@ export function CasesPage() {
 
         {/* case-type tabs */}
         <div style={{ padding: '8px var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="flex items-center gap-1 overflow-x-auto">
-          {CASE_TYPES.map((t) => {
+          {workTypes.map((t) => {
             const active = typeFilter === t;
             return (
               <button
                 key={t}
+                aria-pressed={active}
                 onClick={() => setTypeFilter(t)}
                 className="shrink-0 transition-colors"
                 style={{
@@ -495,17 +537,35 @@ export function CasesPage() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {t} <span aria-label={`${caseTypeCounts[t]} cases`} style={{ marginLeft: '4px', fontWeight: 700 }}>{caseTypeCounts[t]}</span>
+                {t} <span style={{ marginLeft: '4px', fontWeight: 700 }}>{typeCountLabel(t)}</span>
               </button>
             );
           })}
         </div>
 
+        <div role="status" className="px-4 py-2 text-xs border-b border-[var(--border)]">
+          Showing {filtered.length} individual cases · {transferQuery.isError || !organizationId ? 'program results unavailable' : transferQuery.isPending ? 'programs loading' : `${filteredPrograms.length} programs`}.
+          {' '}Status counts and completion metrics cover individual cases only.
+        </div>
+        {(transferQuery.isError || !organizationId) ? (
+          <div role="alert" className="px-4 py-3 text-sm border-b border-[var(--border)]">
+            Transfer program results are unavailable. Your access or the service may need attention; individual cases remain available.
+            <Button variant="outline" size="sm" className="ml-2" disabled={transferQuery.isFetching || !organizationId} onClick={() => transferQuery.refetch()}>Retry programs</Button>
+          </div>
+        ) : transferQuery.isPending ? (
+          <div role="status" className="px-4 py-3 text-sm">Loading transfer programs… Individual cases load independently.</div>
+        ) : programs?.length === 0 ? (
+          <div className="px-4 py-2 text-xs">No authorized transfer programs returned.</div>
+        ) : null}
+        {typeFilter === PROGRAM_FILTER && (checklistProfileId || filters.status || filters.agent || filters.priority || filters.workforce || filters.siteExposure || filters.safetyCritical) && (
+          <div className="px-4 py-2 text-xs">Individual-case filters exclude programs. Clear those filters to see programs.</div>
+        )}
+
         {/* compact summary counts */}
         {!isLoading && !isError && (cases?.length ?? 0) > 0 && (
           <div style={{ padding: '8px var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }} className="flex items-center gap-4 flex-wrap">
             {([
-              ['All Cases', counts.all, '' as const],
+              ['Individual cases', counts.all, '' as const],
               ['In Progress', counts.inProgress, 'In Progress' as const],
               ['Human Review', counts.humanReview, 'Human Review' as const],
               ['Waiting', counts.waiting, 'Waiting' as const],
@@ -535,7 +595,7 @@ export function CasesPage() {
           <table className="w-full text-left" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
-                {['Case', 'Worker', 'Case Type', 'Effective Date', 'Gates', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
+                {['Case / Program', 'Worker / Population', 'Work Item Type', 'Effective Date', 'Gates', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
                   <th
                     key={h}
                     className={cn((h === 'Effective Date' || h === 'Owner / Agent' || h === 'Gates') && 'hidden lg:table-cell')}
@@ -565,12 +625,12 @@ export function CasesPage() {
                     <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>Retry</Button>
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : filtered.length === 0 && filteredPrograms.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ padding: '40px 16px', textAlign: 'center' }}>
-                    {(cases?.length ?? 0) === 0 ? (
+                    {!anyFilterActive && (cases?.length ?? 0) === 0 ? (
                       <>
-                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>No HR operations cases yet</div>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>No individual HR operations cases yet</div>
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>
                           {isDevelopmentDemo
                             ? 'Add the offline Demo set to view one safe sample for every employee-lifecycle family.'
@@ -579,8 +639,8 @@ export function CasesPage() {
                       </>
                     ) : (
                       <>
-                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>No cases found</div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>No cases match the selected filters.</div>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>No matching work items returned</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>No loaded cases or programs match the selected filters.</div>
                         {anyFilterActive && <Button size="sm" variant="outline" className="mt-3" onClick={clearAll}>Clear filters</Button>}
                       </>
                     )}
@@ -644,6 +704,7 @@ export function CasesPage() {
                   );
                 })
               )}
+              {filteredPrograms.map((p) => <TransferProgramRow key={`program:${p.id}`} p={p} />)}
             </tbody>
           </table>
         </div>
@@ -657,9 +718,10 @@ export function CasesPage() {
               <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Cases couldn't be loaded</div>
               <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>Retry</Button>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : filtered.length === 0 && filteredPrograms.length === 0 ? (
             <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              {(cases?.length ?? 0) === 0 ? 'No HR operations cases yet.' : 'No cases match the selected filters.'}
+              {!anyFilterActive && (cases?.length ?? 0) === 0 ? 'No individual HR operations cases yet.' : 'No loaded work items match the selected filters.'}
+              {anyFilterActive && <Button size="sm" variant="outline" className="mt-3" onClick={clearAll}>Clear filters</Button>}
             </div>
           ) : (
             filtered.map((c) => {
@@ -688,6 +750,7 @@ export function CasesPage() {
               );
             })
           )}
+          {filteredPrograms.map((p) => <TransferProgramCard key={`program:${p.id}`} p={p} />)}
         </div>
       </div>
     </div>

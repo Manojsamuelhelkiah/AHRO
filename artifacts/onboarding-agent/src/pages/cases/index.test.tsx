@@ -9,12 +9,13 @@ import {
   testWindow,
 } from "./test-support/cases-dom";
 
-const [{ createRoot }, { QueryClient, QueryClientProvider }, { NewCaseForm }] =
+const [{ createRoot }, { QueryClient, QueryClientProvider }, { NewCaseForm, CasesPage }] =
   await Promise.all([
     import("react-dom/client"),
     import("@tanstack/react-query"),
     import("./index"),
   ]);
+const { pinOrganizationIdForPage } = await import("@workspace/api-client-react");
 
 after(async () => {
   await disposeCasesDom();
@@ -91,6 +92,102 @@ function setValue(element: HTMLInputElement | HTMLSelectElement, value: string) 
     new testWindow.Event("change", { bubbles: true }) as unknown as Event,
   );
 }
+
+const programFixture = {
+  id: "program/358", name: "Example acquisition", version: 1, status: "go",
+  sourceLegalEntity: "Source Ltd", destinationLegalEntity: "Destination Ltd",
+  countries: ["US"], proposedBasis: "cross-border", legalDay1: "2031-01-01T00:00:00.000Z",
+  createdAt: "2026-01-01T00:00:00.000Z", hrIntegrationOwner: "Recorded HR Owner",
+  partialCountryScope: true, populationSummary: { importedHeadcount: 3, expectedHeadcount: null },
+};
+const caseFixture = {
+  id: 358, workerName: "Individual Worker", workerEmail: "worker@example.test",
+  joiningDate: "2031-01-01", geography: "CA", lifecycleStage: "completed",
+  orchestrationStatus: "completed", createdAt: "2026-01-01T00:00:00.000Z",
+};
+
+async function mountCases(client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = async () => act(async () => root.render(<QueryClientProvider client={client}><CasesPage /></QueryClientProvider>));
+  await render();
+  return { container, render, cleanup: async () => {
+    await act(async () => root.unmount());
+    container.remove();
+    client.clear();
+    pinOrganizationIdForPage(null);
+  } };
+}
+
+test("CasesPage renders program rows/cards without counting program go as case completion; search and case-only tabs stay distinct", async (t) => {
+  pinOrganizationIdForPage("cases-test");
+  installFetch(({ url, init }) => {
+    assert.equal(new Headers(init?.headers).get("x-organization-id"), "cases-test");
+    return jsonResponse(url.includes("workforce-transfers") ? [programFixture] : [caseFixture]);
+  });
+  const mounted = await mountCases();
+  t.after(mounted.cleanup);
+  await eventually(() => assert.equal(mounted.container.querySelectorAll("[data-program-id]").length, 2), "table and mobile program presentations");
+  assert.match(mounted.container.textContent ?? "", /Showing 1 individual cases · 1 programs/);
+  assert.match(mounted.container.textContent ?? "", /3 imported/);
+  assert.match(mounted.container.textContent ?? "", /Unknown expected/);
+  assert.match(mounted.container.textContent ?? "", /Partial country scope/);
+  assert.match(mounted.container.textContent ?? "", /Recorded HR Owner/);
+  assert.match(mounted.container.textContent ?? "", /Planned cutover \(legal Day 1\): 2031-01-01/);
+  assert.equal(mounted.container.querySelectorAll('a[href="/workforce-transfers/program%2F358"]').length, 2);
+  const completed = Array.from(mounted.container.querySelectorAll("button")).find((b) => b.textContent === "Completed1");
+  assert.ok(completed);
+  await act(async () => completed.click());
+  assert.equal(mounted.container.querySelectorAll("[data-program-id]").length, 0);
+  await act(async () => (Array.from(mounted.container.querySelectorAll("button")).find((b) => b.textContent?.includes("Individual cases"))!).click());
+  const input = mounted.container.querySelector('input[aria-label="Search cases and programs"]') as HTMLInputElement;
+  for (const query of ["acquisition", "Source Ltd", "Destination Ltd", "program/358"]) {
+    await act(async () => setValue(input, query));
+    assert.equal(mounted.container.querySelectorAll("[data-program-id]").length, 2);
+    assert.match(mounted.container.textContent ?? "", /Showing 0 individual cases · 1 programs/);
+  }
+  await act(async () => setValue(input, ""));
+  const family = Array.from(mounted.container.querySelectorAll("button")).find((b) => b.textContent?.startsWith("Onboarding "));
+  await act(async () => family!.click());
+  assert.equal(mounted.container.querySelectorAll("[data-program-id]").length, 0);
+  const programTab = Array.from(mounted.container.querySelectorAll("button")).find((b) => b.textContent?.startsWith("Workforce Transfer Programs "));
+  await act(async () => programTab!.click());
+  assert.match(mounted.container.textContent ?? "", /Showing 0 individual cases · 1 programs/);
+});
+
+test("program denial hides no individual cases, discloses no server error and can retry to a truly empty list", async (t) => {
+  pinOrganizationIdForPage("cases-test");
+  let denied = true;
+  installFetch(({ url }) => jsonResponse(url.includes("workforce-transfers") ? denied ? { message: "secret program details" } : [] : [caseFixture], url.includes("workforce-transfers") && denied ? 403 : 200));
+  const mounted = await mountCases();
+  t.after(mounted.cleanup);
+  await eventually(() => assert.match(mounted.container.textContent ?? "", /Transfer program results are unavailable/), "notice for denied programs");
+  assert.match(mounted.container.textContent ?? "", /Individual Worker/);
+  assert.doesNotMatch(mounted.container.textContent ?? "", /secret program details|No authorized transfer programs returned/);
+  denied = false;
+  await act(async () => (Array.from(mounted.container.querySelectorAll("button")).find((b) => b.textContent === "Retry programs")!).click());
+  await eventually(() => assert.match(mounted.container.textContent ?? "", /No authorized transfer programs returned/), "successful empty retry");
+});
+
+test("program-only organizations load independently and delayed old organization results cannot repopulate rows", async (t) => {
+  pinOrganizationIdForPage("old-org");
+  let finishOld!: (response: Response) => void;
+  installFetch(({ url, init }) => {
+    if (!url.includes("workforce-transfers")) return jsonResponse([]);
+    if (new Headers(init?.headers).get("x-organization-id") === "old-org") return new Promise<Response>((resolve) => { finishOld = resolve; });
+    return jsonResponse([{ ...programFixture, id: "new-program", name: "New organization program" }]);
+  });
+  const mounted = await mountCases();
+  t.after(mounted.cleanup);
+  assert.match(mounted.container.textContent ?? "", /Loading transfer programs/);
+  pinOrganizationIdForPage("new-org");
+  await mounted.render();
+  await eventually(() => assert.match(mounted.container.textContent ?? "", /New organization program/), "new organization programs");
+  await act(async () => { finishOld(jsonResponse([programFixture])); await Promise.resolve(); });
+  assert.doesNotMatch(mounted.container.textContent ?? "", /Example acquisition/);
+  assert.match(mounted.container.textContent ?? "", /Showing 0 individual cases · 1 programs/);
+});
 
 function fillOrdinaryFields(form: HTMLFormElement): void {
   const values: Record<string, string> = {

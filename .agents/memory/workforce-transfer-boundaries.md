@@ -9,6 +9,12 @@ Workforce transfers are governed programs, not new-hire or internal-transfer cas
 
 **How to apply:** Keep Legal-reviewed applicability independent of new-hire defaults. Require current country-specific authority and lawful sharing approval before retaining source rows. Derive outcome metrics from dated facts under an approved definition revision, not caller-supplied success flags.
 
+Consolidated work lists may show programs beside individual cases, but must keep their counts, native statuses, and metrics separate. Population summaries describe only readable countries; missing expected headcounts remain unknown.
+
+**Why:** The consolidated Cases view is a navigation convenience, not a change to transfer authority or a source of individual-case completion evidence. The recorded legal Day 1 is a plan, not evidence that cutover happened.
+
+**How to apply:** Preserve separate program navigation and country-scoped summaries in any future unified work-list or reporting change. Do not infer program-to-case links from worker identity or names.
+
 Cutover sign-offs bind the readiness evidence generation; collecting another sign-off must not itself invalidate other sign-offs.
 
 **Why:** A single general edit version either permits stale evidence approvals or makes multi-owner approval impossible.

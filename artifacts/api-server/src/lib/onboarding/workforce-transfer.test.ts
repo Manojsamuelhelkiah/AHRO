@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { previewTransferRows } from "./workforce-transfer";
+import { previewTransferRows, summarizeTransferPopulations } from "./workforce-transfer";
 import {
   TRANSFER_RETENTION_RECORD_KIND,
   TRANSFER_RETENTION_TABLES,
@@ -21,6 +21,17 @@ const mapping = {
 };
 
 describe("workforce transfer import preview", () => {
+  test("population totals include only readable countries and never infer unknown expectations", () => {
+    const populations = [
+      { country: "US", expectedHeadcount: 12, importedHeadcount: 3 },
+      { country: "DE", expectedHeadcount: 99, importedHeadcount: 80 },
+    ];
+    assert.deepEqual(summarizeTransferPopulations(["US"], populations), { expectedHeadcount: 12, importedHeadcount: 3 });
+    assert.deepEqual(summarizeTransferPopulations(["US", "CA"], populations), { expectedHeadcount: null, importedHeadcount: 3 });
+    assert.deepEqual(summarizeTransferPopulations(["CA"], populations), { expectedHeadcount: null, importedHeadcount: 0 });
+    assert.deepEqual(summarizeTransferPopulations(["US"], [{ country: "US", expectedHeadcount: null, importedHeadcount: 3 }]), { expectedHeadcount: null, importedHeadcount: 3 });
+    assert.deepEqual(summarizeTransferPopulations(["US"], [{ country: "US", expectedHeadcount: 0, importedHeadcount: 0 }]), { expectedHeadcount: 0, importedHeadcount: 0 });
+  });
   test("retention custody inventories every durable transfer representation", () => {
     assert.equal(TRANSFER_RETENTION_TABLES.length, 17);
     assert.equal(new Set(TRANSFER_RETENTION_TABLES).size, 17);

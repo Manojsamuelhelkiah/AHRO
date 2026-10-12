@@ -44,6 +44,7 @@ const orgB = `transfer-b-${suffix}`;
 const hrUser = `transfer-hr-${suffix}`;
 const legalUser = `transfer-legal-${suffix}`;
 const scopedLegalUser = `transfer-scoped-legal-${suffix}`;
+const countryLegalUser = `transfer-country-legal-${suffix}`;
 const revokableLegalUser = `transfer-revokable-legal-${suffix}`;
 const payrollUser = `transfer-payroll-${suffix}`;
 const itUser = `transfer-it-${suffix}`;
@@ -459,6 +460,7 @@ before(async () => {
     hrUser,
     legalUser,
     scopedLegalUser,
+    countryLegalUser,
     revokableLegalUser,
     payrollUser,
     itUser,
@@ -502,6 +504,7 @@ before(async () => {
   await db.insert(onbAuthorityAssignments).values([
     assignment(`transfer-hr-authority-${suffix}`, hrUser, "hr-compliance", "hr-compliance-approve"),
     assignment(`transfer-legal-authority-${suffix}`, legalUser, "legal", "legal-approve"),
+    assignment(`transfer-country-legal-authority-${suffix}`, countryLegalUser, "legal", "legal-approve", { jurisdictionScope: "US" }),
     // This assignment is deliberately scoped to an entity rather than a
     // country. A DE pathway must not be accepted by it.
     assignment(`transfer-scoped-legal-authority-${suffix}`, scopedLegalUser, "legal", "legal-approve", {
@@ -1727,6 +1730,38 @@ test("revoked Legal authority invalidates recorded approvals and stale cutover e
   assert.equal(revokedCommit.status, 409);
   assert.match((await json(revokedCommit)).message as string, /current.*Legal|authority/i);
   assert.equal(governance.version, Number(pathway.version) + 1);
+});
+
+test("program listing exposes only authorized population aggregates and the HR owner", async () => {
+  const program = await createProgram(hrUser, "cross-border", ["US", "DE"]);
+  const programId = String(program.id);
+  await approvePathway(programId, legalUser, 1, "US");
+  await approveGovernance(programId, 2, "US");
+  await createImportedPopulation(programId, 3, ["summary-worker"], 7);
+  await expectStatus(await call(`/onboarding/workforce-transfers/programs/${programId}/populations`, hrUser, { country: "DE", expectedHeadcount: 90 }), 201);
+  const hrResponse = await call("/onboarding/workforce-transfers/programs", hrUser);
+  await expectStatus(hrResponse, 200);
+  const hrPrograms = await hrResponse.json() as Json[];
+  const full = hrPrograms.find((p: Json) => p.id === programId);
+  assert.ok(full);
+  assert.equal(full.hrIntegrationOwner, hrUser);
+  assert.deepEqual(full.populationSummary, { importedHeadcount: 1, expectedHeadcount: 97 });
+  assert.equal(full.partialCountryScope, false);
+  const scopedResponse = await call("/onboarding/workforce-transfers/programs", countryLegalUser);
+  await expectStatus(scopedResponse, 200);
+  const scoped = (await scopedResponse.json() as Json[]).find((p: Json) => p.id === programId);
+  assert.ok(scoped);
+  assert.deepEqual(scoped.countries, ["US"]);
+  assert.equal(scoped.partialCountryScope, true);
+  assert.deepEqual(scoped.populationSummary, { importedHeadcount: 1, expectedHeadcount: 7 });
+  assert.equal(scoped.legalDay1, futureDay);
+  for (const forbidden of ["owners", "populations", "workers", "pathways", "cutoverPlans"]) assert.equal(forbidden in scoped, false);
+  const foreignResponse = await call("/onboarding/workforce-transfers/programs", otherTenantUser, undefined, { organizationId: orgB });
+  await expectStatus(foreignResponse, 200);
+  assert.equal((await foreignResponse.json() as Json[]).some((p: Json) => p.id === programId), false);
+  const deniedResponse = await call("/onboarding/workforce-transfers/programs", otherTenantUser);
+  await expectStatus(deniedResponse, 403);
+  assert.equal((await deniedResponse.text()).includes(programId), false);
 });
 
 test("specialist reads are scope-limited, omit restricted references, and require live authority", async () => {

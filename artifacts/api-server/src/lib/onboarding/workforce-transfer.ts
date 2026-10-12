@@ -983,20 +983,57 @@ export async function listTransferPrograms(organizationId: string, actorUserId: 
     id: onbTransferPrograms.id, name: onbTransferPrograms.name, sourceLegalEntity: onbTransferPrograms.sourceLegalEntity,
     destinationLegalEntity: onbTransferPrograms.destinationLegalEntity, countries: onbTransferPrograms.countries, proposedBasis: onbTransferPrograms.proposedBasis,
     legalDay1: onbTransferPrograms.legalDay1, status: onbTransferPrograms.status, version: onbTransferPrograms.version, createdAt: onbTransferPrograms.createdAt,
+    hrIntegrationOwner: sql<string | null>`${onbTransferPrograms.owners}->>'hrIntegration'`,
   }).from(onbTransferPrograms).where(eq(onbTransferPrograms.organizationId, organizationId)).orderBy(desc(onbTransferPrograms.createdAt));
   const visible = await Promise.all(rows.map(async (row) => {
     try {
       const access = await db.transaction((tx) => readProgramAccess(tx, organizationId, actorUserId, row));
       const countries = access.hr ? row.countries : row.countries.filter((country) =>
         access.legalCountries.has(country) || access.payrollCountries.has(country) || access.itCountries.has(country));
-      return { ...row, countries, legalDay1: row.legalDay1.toISOString(), createdAt: row.createdAt.toISOString() };
+      return { ...row, countries, partialCountryScope: countries.length !== row.countries.length, legalDay1: row.legalDay1.toISOString(), createdAt: row.createdAt.toISOString() };
     } catch (error) {
       if (error instanceof TransferValidationError) return null;
       throw error;
     }
   }));
   if (rows.length && !visible.some(Boolean)) throw new TransferValidationError("A current authority assignment for a transfer program country is required.");
-  return visible.filter((row): row is NonNullable<typeof row> => row !== null);
+  const authorized = visible.filter((row): row is NonNullable<typeof row> => row !== null);
+  if (!authorized.length) return [];
+  // Aggregate only; never materialize worker records or fetch program details.
+  const populations = await db.select({
+    programId: onbTransferPopulations.programId,
+    country: onbTransferPopulations.country,
+    expectedHeadcount: onbTransferPopulations.expectedHeadcount,
+    importedHeadcount: sql<number>`count(${onbTransferWorkers.id})::integer`,
+  }).from(onbTransferPopulations).leftJoin(onbTransferWorkers, and(
+    eq(onbTransferWorkers.organizationId, onbTransferPopulations.organizationId),
+    eq(onbTransferWorkers.populationId, onbTransferPopulations.id),
+  )).where(and(
+    eq(onbTransferPopulations.organizationId, organizationId),
+    or(...authorized.map((row) => and(
+      eq(onbTransferPopulations.programId, row.id),
+      inArray(onbTransferPopulations.country, row.countries),
+    ))),
+  )).groupBy(onbTransferPopulations.organizationId, onbTransferPopulations.id,
+    onbTransferPopulations.programId, onbTransferPopulations.country, onbTransferPopulations.expectedHeadcount);
+  return authorized.map((row) => ({
+    ...row,
+    populationSummary: summarizeTransferPopulations(row.countries, populations.filter((p) => p.programId === row.id)),
+  }));
+}
+
+export function summarizeTransferPopulations(
+  readableCountries: string[],
+  populations: Array<{ country: string; expectedHeadcount: number | null; importedHeadcount: number }>,
+) {
+  const readable = populations.filter((p) => readableCountries.includes(p.country));
+  // A missing population or unknown expectation cannot establish a total.
+  const expectedKnown = readableCountries.every((country) => readable.some((p) => p.country === country)) &&
+    readable.length > 0 && readable.every((p) => p.expectedHeadcount !== null);
+  return {
+    importedHeadcount: readable.reduce((sum, p) => sum + p.importedHeadcount, 0),
+    expectedHeadcount: expectedKnown ? readable.reduce((sum, p) => sum + (p.expectedHeadcount ?? 0), 0) : null,
+  };
 }
 export async function getTransferProgram(organizationId: string, actorUserId: string, programId: string) {
   const [program] = await db.select().from(onbTransferPrograms).where(and(eq(onbTransferPrograms.organizationId, organizationId), eq(onbTransferPrograms.id, programId)));

@@ -64,8 +64,13 @@ const json = <T,>(url: string, method: 'GET' | 'POST', body?: unknown, options?:
   });
 const programUrl = (id: string) => `/api/onboarding/workforce-transfers/programs/${encodeURIComponent(id)}`;
 
+export type WorkforceTransferProgramSummary = Omit<WorkforceTransferProgram, 'owners' | 'populations' | 'pathways' | 'consultation' | 'integrationActions' | 'cutoverPlans'> & {
+  hrIntegrationOwner: string | null;
+  partialCountryScope: boolean;
+  populationSummary: { importedHeadcount: number; expectedHeadcount: number | null };
+};
 export const listWorkforceTransferPrograms = (options?: RequestInit) =>
-  json<Array<Omit<WorkforceTransferProgram, 'owners' | 'populations' | 'pathways' | 'consultation' | 'integrationActions' | 'cutoverPlans'>>>(
+  json<WorkforceTransferProgramSummary[]>(
     '/api/onboarding/workforce-transfers/programs', 'GET', undefined, options);
 export const getWorkforceTransferProgram = (id: string, options?: RequestInit) => json<WorkforceTransferProgram>(programUrl(id), 'GET', undefined, options);
 export const createWorkforceTransferProgram = (data: WorkforceTransferProgramInput, options?: RequestInit) => json<{ id: string; version: number }>(
