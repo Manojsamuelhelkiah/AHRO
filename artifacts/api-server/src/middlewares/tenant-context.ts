@@ -8,6 +8,7 @@ import {
 } from "@workspace/db";
 import { appendProtectedAudit } from "../lib/onboarding/protected-audit";
 import { registeredDemoProfile } from "../lib/demo-principal";
+import { bindDevelopmentSuperAdminTenant, isDevelopmentSuperAdmin } from "../lib/development-super-admin";
 
 export const ORGANIZATION_HEADER = "x-organization-id";
 
@@ -35,6 +36,11 @@ export const lookupMembership: MembershipLookup = async (
   clerkUserId,
   requestedOrganizationId,
 ) => {
+  if (isDevelopmentSuperAdmin(clerkUserId)) {
+    const [organization] = await db.select({ organizationId: organizationsTable.id, organizationName: organizationsTable.name })
+      .from(organizationsTable).where(eq(organizationsTable.id, requestedOrganizationId || DEMO_ORGANIZATION_ID)).limit(1);
+    return organization ? { ...organization, role: "owner" } : null;
+  }
   const demoProfile = await registeredDemoProfile(clerkUserId);
   if (demoProfile && requestedOrganizationId && requestedOrganizationId !== DEMO_ORGANIZATION_ID) {
     return null;
@@ -117,6 +123,7 @@ export function createTenantContextMiddleware(
       }
       req.organizationId = membership.organizationId;
       req.organizationRole = membership.role;
+      if (req.developmentSuperAdmin) bindDevelopmentSuperAdminTenant(membership.organizationId);
       next();
     } catch (error) {
       req.log?.error({ err: error }, "Failed to resolve organization membership");

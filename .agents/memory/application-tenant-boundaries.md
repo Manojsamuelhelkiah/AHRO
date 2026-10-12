@@ -21,6 +21,12 @@ The initial cross-client administration is intended for two operators. The user 
 
 **How to apply:** Treat platform administration as an explicit cross-client privilege. Email verification may be deferred for the temporary development administrator, but unrestricted public demo tickets must not grant universal access: protect the privileged sign-in and fence old public sessions before elevation. Before real-client rollout, bind it to a verified private identity. Preserve active-client context and attribution of the actual actor; administrative access does not manufacture professional qualifications, source verification or employee consent.
 
+When one shared identity serves both restricted demo and privileged development sessions, platform privilege belongs to the authenticated session/request, not to that identity's permanent memberships or demo registry.
+
+**Why:** Promoting the shared identity itself would silently elevate ordinary sessions using the same account and background work attributed to it. The user chose identity reuse, not public universal access.
+
+**How to apply:** Preserve restricted ordinary sessions and independent specialist/evidence gates. Bind private administration to a fresh active session and the verified current tenant; do not propagate it into background jobs or employee-owned private Vault records. State explicitly when development access does not apply to the published runtime.
+
 **How to apply:** Preserve shared storage with explicit server-enforced organization boundaries; dedicated databases or cross-client learning require a separate decision.
 
 Membership removal must revoke access without allowing a shared join code or later reinstatement to revive old specialist grants.

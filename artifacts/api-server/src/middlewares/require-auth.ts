@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { clerkClient, getAuth } from "@clerk/express";
+import { enterDevelopmentAdminContext } from "../lib/development-super-admin";
 
 export const INTERNAL_SMOKE_USER_HEADER = "x-internal-smoke-user-id";
 export const INTERNAL_SMOKE_TIMESTAMP_HEADER = "x-internal-smoke-timestamp";
@@ -120,7 +121,7 @@ export function createRequireAuth(options: InternalSmokeAuthOptions = {}) {
     // Allow a trusted upstream authentication middleware (including isolated
     // route tests) to provide the already-verified principal.
     if (req.authUserId) {
-      next();
+      void enterDevelopmentAdminContext(req, res, next);
       return;
     }
 
@@ -138,7 +139,7 @@ export function createRequireAuth(options: InternalSmokeAuthOptions = {}) {
       return;
     }
     req.authUserId = userId;
-    next();
+    void enterDevelopmentAdminContext(req, res, next);
   };
 }
 

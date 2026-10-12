@@ -54,6 +54,8 @@ export type AccessGovernanceKey =
   | (typeof ACCESS_GOVERNANCE_CATALOG.flows)[number]
   | (typeof ACCESS_GOVERNANCE_CATALOG.tools)[number];
 
+import { isDevelopmentSuperAdmin } from "./development-super-admin";
+
 const FIELD_KEYS = new Set<string>(ACCESS_GOVERNANCE_CATALOG.fields);
 const FLOW_KEYS = new Set<string>(ACCESS_GOVERNANCE_CATALOG.flows);
 const TOOL_KEYS = new Set<string>(ACCESS_GOVERNANCE_CATALOG.tools);
@@ -515,6 +517,11 @@ export async function resolveEffectiveAccessInTransaction(
       for (const key of keys) reasons[key].push("Case does not belong to the requested tenant.");
       return { allows: [], reasons };
     }
+  }
+
+  if (input.principalType === "human" && isDevelopmentSuperAdmin(input.principalId, input.organizationId)) {
+    for (const key of keys) reasons[key].push("Password-protected development Super Admin; current request tenant verified. Independent evidence and execution safeguards still apply.");
+    return { allows: [...keys], reasons };
   }
 
   let primary: PrincipalSubject;

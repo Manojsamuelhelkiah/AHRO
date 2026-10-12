@@ -7,7 +7,6 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 /** Demo account shared with reviewers — real Clerk credentials under the hood. */
 const DEMO_EMAIL = 'demo.reviewer@example.com';
 const DEMO_ADMIN_EMAIL = 'demo.admin@example.com';
-const DEMO_PASSWORD = 'OnboardOS-Demo-2026!';
 const DEMO_EMAILS = new Set([DEMO_EMAIL, DEMO_ADMIN_EMAIL]);
 
 const CAPABILITIES = [
@@ -37,7 +36,7 @@ const OPERATING_MODEL = [
 export function LoginPage() {
   const { signIn } = useSignIn();
   const [email, setEmail] = useState(DEMO_EMAIL);
-  const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [password, setPassword] = useState('');
   const [authing, setAuthing] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
@@ -57,9 +56,13 @@ export function LoginPage() {
         const resp = await fetch(`${basePath}/api/onboarding/demo-login`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email: email.trim().toLowerCase() }),
+          credentials: 'include',
+          body: JSON.stringify({ email: email.trim().toLowerCase(), ...(email.trim().toLowerCase() === DEMO_ADMIN_EMAIL ? { password } : {}) }),
         });
-        if (!resp.ok) throw new Error('demo-login unavailable');
+        if (!resp.ok) {
+          const failure = await resp.json().catch(() => null);
+          throw new Error(failure?.message || 'demo-login unavailable');
+        }
         const { ticket } = (await resp.json()) as { ticket: string };
         const { error: ticketError } = await signIn.ticket({ ticket });
         if (ticketError) throw new Error(ticketError.message);
@@ -69,6 +72,7 @@ export function LoginPage() {
       }
       if (signIn.status !== 'complete') throw new Error('additional verification required');
       localStorage.setItem('hro_authed', 'true');
+      setPassword('');
       // Keep the branded "Authenticating…" moment visible (~1.5s total).
       const remaining = 1500 - (Date.now() - startedAt);
       if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
@@ -78,7 +82,7 @@ export function LoginPage() {
       setLoginError(
         err instanceof Error && err.message === 'demo-login unavailable'
           ? 'Sign-in service is temporarily unavailable. Please try again in a moment.'
-          : 'Sign-in failed. Please check your credentials and try again.',
+          : err instanceof Error ? err.message : 'Sign-in failed. Please check your credentials and try again.',
       );
       setAuthing(false);
     }
@@ -187,7 +191,7 @@ export function LoginPage() {
                    type="button"
                    onClick={() => {
                      setEmail(DEMO_EMAIL);
-                     setPassword(DEMO_PASSWORD);
+                     setPassword('');
                    }}
                    className={`rounded-[var(--radius-md)] border p-3 text-left transition-colors ${
                      email.trim().toLowerCase() === DEMO_EMAIL
@@ -202,7 +206,7 @@ export function LoginPage() {
                    type="button"
                    onClick={() => {
                      setEmail(DEMO_ADMIN_EMAIL);
-                     setPassword(DEMO_PASSWORD);
+                     setPassword('');
                    }}
                    className={`rounded-[var(--radius-md)] border p-3 text-left transition-colors ${
                      email.trim().toLowerCase() === DEMO_ADMIN_EMAIL
@@ -210,13 +214,13 @@ export function LoginPage() {
                        : 'border-[var(--border)] hover:border-[var(--primary)]'
                    }`}
                  >
-                   <span className="block text-sm font-semibold text-[var(--text-primary)]">Demo Administrator</span>
-                   <span className="mt-1 block text-xs text-[var(--text-secondary)]">Full synthetic-case demo</span>
+                   <span className="block text-sm font-semibold text-[var(--text-primary)]">Super Admin</span>
+                   <span className="mt-1 block text-xs text-[var(--text-secondary)]">Password-protected development access</span>
                  </button>
                </div>
                {email.trim().toLowerCase() === DEMO_ADMIN_EMAIL && (
                  <p className="rounded border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] px-3 py-2 text-xs text-[var(--status-amber-fg)]">
-                   Full access applies only to server-marked synthetic cases in Demo Organization. Real outreach and real client records remain protected.
+                   Use your private development password. This account can administer clients in development; production access, verification and execution safeguards remain separate.
                  </p>
                )}
              </div>
@@ -240,7 +244,9 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
-                required
+                required={email.trim().toLowerCase() !== DEMO_EMAIL}
+                disabled={email.trim().toLowerCase() === DEMO_EMAIL}
+                placeholder={email.trim().toLowerCase() === DEMO_EMAIL ? 'Not required for restricted demo review' : 'Enter your password'}
                 className="w-full rounded-[var(--radius-md)] border px-3 py-2.5 text-[var(--text-sm)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-all bg-[var(--surface)] border-[var(--border)]"
               />
             </div>

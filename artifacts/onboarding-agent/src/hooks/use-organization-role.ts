@@ -5,6 +5,7 @@ type OrganizationMembershipResponse = {
   activeOrganizationId: string | null;
   memberships: Array<{ organizationId: string; role: string }>;
   demoProfile?: "reviewer" | "administrator" | null;
+  developmentSuperAdmin?: boolean;
 };
 
 export function useOrganizationRole() {
@@ -12,6 +13,7 @@ export function useOrganizationRole() {
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [demoProfile, setDemoProfile] = useState<"reviewer" | "administrator" | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -31,6 +33,7 @@ export function useOrganizationRole() {
         return response.json() as Promise<OrganizationMembershipResponse>;
       })
       .then((data) => {
+        setIsSuperAdmin(data.developmentSuperAdmin === true);
         const orgId = pinnedOrgId || data.activeOrganizationId;
         // A different workspace's membership must never grant this page actions.
         const membership = data.memberships.find((m) => m.organizationId === orgId);
@@ -52,6 +55,7 @@ export function useOrganizationRole() {
     organizationId,
     demoProfile,
     isHR: role === 'owner' || role === 'admin',
+    isSuperAdmin,
     loading 
   };
 }

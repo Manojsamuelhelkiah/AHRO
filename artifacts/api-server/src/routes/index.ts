@@ -67,7 +67,8 @@ router.use((req, res, next) => {
   if (
     req.path.startsWith("/onboarding/webhooks/") ||
     req.path.startsWith("/onboarding/ta-intake/") ||
-    req.path === "/onboarding/demo-login"
+    req.path === "/onboarding/demo-login" ||
+    req.path === "/onboarding/demo-login/logout"
   ) {
     next();
     return;

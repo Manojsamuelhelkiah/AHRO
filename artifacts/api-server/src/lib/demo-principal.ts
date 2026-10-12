@@ -7,6 +7,7 @@ import {
   organizationMembershipsTable,
 } from "@workspace/db/schema";
 import { SYNTHETIC_DEMO_AUTHORITY_SOURCE } from "./onboarding/synthetic-offline";
+import { isDevelopmentSuperAdmin } from "./development-super-admin";
 
 export type RegisteredDemoProfile = "reviewer" | "administrator";
 const DEMO_PRINCIPAL_PREFIX = "registered_demo_principal:";
@@ -64,6 +65,9 @@ export async function quarantineLegacyDemoPrincipalAuthority(
 export async function registeredDemoProfile(
   userId: string,
 ): Promise<RegisteredDemoProfile | null> {
+  // This is request/session scoped, never a permanent elevation of the
+  // publicly usable account. Background and ordinary demo sessions stay capped.
+  if (isDevelopmentSuperAdmin(userId)) return null;
   const [row] = await db.select({ value: onbSettings.value }).from(onbSettings).where(and(
     eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
     eq(onbSettings.key, demoPrincipalSettingKey(userId)),

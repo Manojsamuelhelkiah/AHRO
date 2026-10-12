@@ -70,7 +70,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     .map((p) => p[0]?.toUpperCase())
     .join('');
 
-  const { role } = useOrganizationRole();
+  const { role, isSuperAdmin } = useOrganizationRole();
 
   return (
     <div className="flex min-h-screen w-full transition-colors duration-300" style={{ backgroundColor: 'var(--surface-alt)', color: 'var(--text-primary)' }}>
@@ -142,8 +142,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <MonitorAlertBanner />
         <DriftNotificationBanner />
         
-        <header className="sticky top-0 z-30 flex items-center justify-between px-6 shrink-0 transition-colors duration-300" style={{ height: '48px', backgroundColor: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
-          <div className="flex items-center gap-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 px-3 py-2 md:px-6 shrink-0 transition-colors duration-300" style={{ minHeight: '56px', backgroundColor: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+          <div className="hidden lg:flex items-center gap-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             <span>Agentic HRO Suite</span>
             <span>/</span>
             <span style={{ color: 'var(--text-primary)' }}>{pageName}</span>
@@ -176,7 +176,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2 md:w-auto">
             <OrganizationSwitcher />
             <div className="relative cursor-pointer">
               <Bell className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} />
@@ -187,13 +187,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {initials || 'U'}
               </div>
               <span style={{ fontSize: 'var(--text-xs)', padding: '2px 6px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '999px', lineHeight: 1 }} className="font-semibold hidden md:block capitalize">
-                {role || 'Reviewer'}
+                {isSuperAdmin ? 'Super Admin' : role || 'Reviewer'}
               </span>
             </div>
             <button
               type="button"
               title="Sign out"
-              onClick={() => signOut({ redirectUrl: basePath || '/' })}
+               onClick={async () => {
+                 await fetch(`${basePath}/api/onboarding/demo-login/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+                 localStorage.removeItem('activeOrganizationId');
+                 localStorage.removeItem('hro_authed');
+                 await signOut({ redirectUrl: basePath || '/' });
+               }}
               className="shrink-0 flex items-center gap-1.5 transition-colors"
               style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', fontWeight: 500 }}
               onMouseEnter={(e) => e.currentTarget.style.color = 'var(--status-red)'}

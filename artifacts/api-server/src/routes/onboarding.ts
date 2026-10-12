@@ -536,8 +536,10 @@ router.use("/onboarding/cases/:caseId", async (req, res, next) => {
  * Clerk sign-in ticket for THAT ACCOUNT ONLY (equivalent access to the
  * already-public demo credentials — no other account can be minted).
  */
-// Publicly documented demo credential (also prefilled on the login page).
-const DEMO_LOGIN_PASSWORD = "OnboardOS-Demo-2026!";
+import {
+  developmentSuperAdminEnabled, prepareDevelopmentAdminLogin,
+  passwordMatches, allowDevelopmentAdminAttempt, clearDevelopmentAdminLogin,
+} from "../lib/development-super-admin";
 
 /**
  * Finds the demo reviewer account, creating it if it does not exist yet.
@@ -571,7 +573,7 @@ async function markDemoAccount(
   user: Awaited<ReturnType<typeof clerkClient.users.getUser>>,
   account: DemoAccount,
 ) {
-  return clerkClient.users.updateUser(user.id, {
+  return clerkClient.users.updateUserMetadata(user.id, {
     privateMetadata: {
       [account.metadataKey]: true,
     },
@@ -584,10 +586,9 @@ async function ensureDemoUser(account: DemoAccount) {
   try {
     return await clerkClient.users.createUser({
       emailAddress: [account.email],
-      password: DEMO_LOGIN_PASSWORD,
+      skipPasswordRequirement: true,
       firstName: account.firstName,
       lastName: account.lastName,
-      skipPasswordChecks: true,
       privateMetadata: {
         [account.metadataKey]: true,
       },
@@ -608,7 +609,20 @@ router.post("/onboarding/demo-login", async (req, res, next) => {
       res.status(403).json({ error: "Demo login is only available for approved demo accounts" });
       return;
     }
+    if (account.email === DEMO_ADMIN_LOGIN_EMAIL) {
+      // Check the private credential before creating/updating a provider user.
+      if (!developmentSuperAdminEnabled()) {
+        res.status(403).json({ message: "Temporary Super Admin sign-in is available only in development with its password configured." });
+        return;
+      }
+      if (!passwordMatches(req.body?.password, process.env.DEV_SUPER_ADMIN_PASSWORD)) {
+        if (!allowDevelopmentAdminAttempt("super-admin")) { res.status(429).json({ message: "Too many attempts. Try again in 15 minutes." }); return; }
+        res.status(401).json({ message: "Super Admin sign-in failed. Check the password." });
+        return;
+      }
+    }
     const demoUser = await ensureDemoUser(account);
+    if (account.email === DEMO_ADMIN_LOGIN_EMAIL && !(await prepareDevelopmentAdminLogin(req, res, demoUser.id))) return;
     await ensureDemoOrganization();
     const profile =
       account.email === DEMO_ADMIN_LOGIN_EMAIL ? "administrator" : "reviewer";
@@ -631,8 +645,15 @@ router.post("/onboarding/demo-login", async (req, res, next) => {
       res.status(403).json({ message: "A current HR/compliance authority assignment is required to retry a candidate communication.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
       return;
     }
-    next(err);
+    // The protected sign-in must never log the credential or provider payload.
+    res.status(503).json({ message: "Sign-in service is temporarily unavailable." });
   }
+});
+
+router.post("/onboarding/demo-login/logout", (req, res) => {
+  clearDevelopmentAdminLogin(req, res);
+  res.setHeader("Cache-Control", "no-store");
+  res.status(204).end();
 });
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);

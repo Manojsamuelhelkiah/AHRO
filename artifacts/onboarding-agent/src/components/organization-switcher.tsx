@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { CreateClientDialog } from "./create-client-dialog";
 import {
   resolveOrganizationBootstrap,
   resolveOrganizationSwitch,
@@ -13,6 +14,7 @@ type Membership = OrganizationMembership & {
 
 type CurrentOrganizationResponse = OrganizationBootstrapResponse & {
   memberships: Membership[];
+  developmentSuperAdmin?: boolean;
 };
 
 function storedOrganizationId(): string | null {
@@ -73,6 +75,8 @@ export function OrganizationSwitcher() {
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [creating, setCreating] = useState(false);
   const pendingOrganizationRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
 
@@ -93,11 +97,12 @@ export function OrganizationSwitcher() {
       .then((response) => {
         if (!active) return;
         setMemberships(response.memberships);
+        setIsSuperAdmin(response.developmentSuperAdmin === true);
         const decision = resolveOrganizationBootstrap(response, stored);
         setSelectedId(decision.kind === "ready" ? decision.organizationId : null);
       })
-      .catch(() => {
-        // Bootstrap already presents the actionable organization-load error.
+      .catch((failure) => {
+        if (active) setError(failure instanceof Error ? failure.message : "Could not load client identity");
       });
 
     return () => {
@@ -107,13 +112,16 @@ export function OrganizationSwitcher() {
     };
   }, []);
 
-  if (memberships.length < 2 || !selectedId) return null;
+  if (!selectedId || memberships.length === 0) return <span role={error ? "alert" : "status"} className="text-xs text-[var(--text-muted)]">{error || "Loading client…"}</span>;
 
   return (
-    <label className="min-w-0 max-w-[180px]">
-      <span className="sr-only">Active workspace</span>
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+    <label className="min-w-0 max-w-[240px] flex-1">
+      <span className="block text-[10px] font-semibold uppercase text-[var(--text-muted)]">Active client / workspace</span>
+      <span className="block break-words text-xs font-semibold" data-testid="active-client-name">{memberships.find(membership => membership.organizationId === selectedId)?.name}</span>
       <select
         aria-label="Active workspace"
+        title={memberships.find(membership => membership.organizationId === selectedId)?.name}
         value={selectedId}
         disabled={pendingOrganizationId !== null}
         aria-busy={pendingOrganizationId !== null}
@@ -205,7 +213,7 @@ export function OrganizationSwitcher() {
             }
           }
         }}
-        className="h-8 w-full truncate rounded-md border px-2 text-xs font-semibold outline-none"
+        className="h-8 w-full min-w-0 truncate rounded-md border px-2 text-xs font-semibold outline-none"
         style={{
           borderColor: "var(--border)",
           backgroundColor: "var(--surface-alt)",
@@ -224,5 +232,9 @@ export function OrganizationSwitcher() {
         </span>
       ) : null}
     </label>
+    <span className="text-[10px] font-semibold text-[var(--text-secondary)]">{isSuperAdmin ? "Super Admin · Development" : memberships.find(membership => membership.organizationId === selectedId)?.role}</span>
+    {isSuperAdmin && <button type="button" onClick={() => setCreating(true)} className="rounded border border-[var(--border)] px-2 py-1 text-xs" data-testid="button-create-client">New client</button>}
+    {creating && <CreateClientDialog onClose={() => setCreating(false)} />}
+    </div>
   );
 }

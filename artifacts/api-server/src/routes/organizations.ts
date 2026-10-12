@@ -123,7 +123,12 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
     const userId = req.authUserId!;
     const requested = req.header(ORGANIZATION_HEADER)?.trim() || undefined;
     const profile = await registeredDemoProfile(userId);
-    const allMemberships = await db
+    const allMemberships = req.developmentSuperAdmin
+      ? (await db.select({
+          organizationId: organizationsTable.id, name: organizationsTable.name,
+          slug: organizationsTable.slug, primaryCountry: organizationsTable.primaryCountry,
+        }).from(organizationsTable).orderBy(organizationsTable.createdAt)).map(row => ({ ...row, role: "owner" as const }))
+      : await db
       .select({
         organizationId: organizationMembershipsTable.organizationId,
         name: organizationsTable.name,
@@ -149,7 +154,9 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
     const activeOrganizationId = requested
       ? (memberships.find(({ organizationId }) => organizationId === requested)
           ?.organizationId ?? null)
-      : memberships.length === 1
+      : req.developmentSuperAdmin
+        ? DEMO_ORGANIZATION_ID
+        : memberships.length === 1
         ? memberships[0]!.organizationId
         : null;
 
@@ -160,6 +167,7 @@ router.get("/organizations/current", async (req, res, next): Promise<void> => {
       // This is a server-authenticated display capability only. All mutation
       // endpoints independently verify the profile and membership.
       demoProfile: profile,
+      developmentSuperAdmin: req.developmentSuperAdmin === true,
     });
   } catch (error) {
     next(error);

@@ -29,3 +29,9 @@ Development-mode server test bundles must leave Pino and its worker-backed trans
 **Why:** assertions can all pass while a bundled development logger later crashes on a missing worker module. Switching to production mode can silently skip development-only database tests, so it is not a valid workaround.
 
 **How to apply:** externalize the logger and transport dependencies for focused esbuild test bundles, preserve the intended test environment, and require a clean process exit as well as passing assertions.
+
+Standalone workspace test bundles must preserve transitive dependency resolution from the package that owns each imported library.
+
+**Why:** Externalizing every package can relocate a shared library's imports into the calling artifact, where its correctly installed dependencies are not visible. The resulting module-not-found error is not evidence that those dependencies are absent from the workspace.
+
+**How to apply:** Bundle workspace libraries and their ordinary dependencies from source when running standalone helpers, while keeping necessary native or worker-backed packages external. Use the ESM native-require banner when bundled CommonJS needs it; do not install duplicate dependencies or change the intended environment to hide resolution failures.
