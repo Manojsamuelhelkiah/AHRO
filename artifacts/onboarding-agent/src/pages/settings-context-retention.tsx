@@ -6,7 +6,20 @@ import {
   getPinnedOrganizationIdForPage,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button, Input } from '@/components/ui-shared';
+import { Button, Input, Card, CardContent } from '@/components/ui-shared';
+import { Link } from 'wouter';
+import { EXECUTION_HISTORY_PATH } from '@/lib/context-history-navigation';
+
+export function ContextMetadataRetentionCard() {
+  return <Card id="context-metadata-retention" data-testid="context-metadata-retention">
+    <CardContent className="p-5 sm:p-6 space-y-4 min-w-0 break-words">
+      <h2 className="text-base font-semibold">Context metadata retention</h2>
+      <p className="text-sm text-muted-foreground">Reviewed policy and pruning controls for execution metadata across HRO workflows. Storage retention is separate from the history viewer’s display limits.</p>
+      <Link href={EXECUTION_HISTORY_PATH} className="inline-block underline text-sm min-h-11 py-3">Open Execution History</Link>
+      <ContextRetentionSettings />
+    </CardContent>
+  </Card>;
+}
 
 export function ContextRetentionSettings() {
   const { userId } = useAuth();

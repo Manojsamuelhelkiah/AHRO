@@ -25,7 +25,8 @@ import { SyntheticResetCard } from './settings-synthetic-reset';
 import { ActionCenterIdentitiesSettings } from './action-center-settings';
 import { JobProfilesAndAuthorities } from './settings-job-profiles';
 import { OrganizationMembersSettings } from './settings-organization-members';
-import { ContextManagerSettingsCard } from './settings-context-manager';
+import { ContextMetadataRetentionCard } from './settings-context-retention';
+import { SettingsContextRelocation } from './settings-context-relocation';
 import { AccessGovernanceSettings } from './settings-access-governance';
 import { EmployeeVaultSettings } from '../components/employee-vault-settings';
 import { PrivacyAdministrationCard } from './settings-privacy-tab';
@@ -444,6 +445,10 @@ type AuthorityAssignment = {
   revision: number; governanceDecisionRef: string; revokeReason: string | null;
 };
 export function SettingsPage() {
+  return <SettingsContextRelocation><SettingsContent /></SettingsContextRelocation>;
+}
+
+function SettingsContent() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useGetOnboardingSettings({
     query: {
@@ -588,7 +593,7 @@ export function SettingsPage() {
         <PrivacyAdministrationCard />
       </div>
       <OrganizationMembersSettings />
-      <ContextManagerSettingsCard />
+      <ContextMetadataRetentionCard />
       <AccessGovernanceSettings />
       <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
         <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] p-[var(--space-lg)]">

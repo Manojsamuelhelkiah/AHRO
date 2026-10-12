@@ -23,6 +23,7 @@ import { SystemsPage } from './pages/systems';
 import { AgentsPage } from './pages/agents';
 import { AnalyticsPage } from './pages/analytics';
 import { SettingsPage } from './pages/settings';
+import { ExecutionHistoryPage } from './pages/settings-context-manager';
 import { RecommendationsPage } from './pages/recommendations';
 import { GuardrailsPage } from './pages/guardrails';
 import { LoginPage } from './pages/login';
@@ -370,6 +371,9 @@ function Router() {
       </Route>
       <Route path="/settings">
         <Protected><SettingsPage /></Protected>
+      </Route>
+      <Route path="/execution-history">
+        <Protected><ExecutionHistoryPage /></Protected>
       </Route>
       <Route path="/policy-review">
         <Protected><PolicyReviewPage /></Protected>

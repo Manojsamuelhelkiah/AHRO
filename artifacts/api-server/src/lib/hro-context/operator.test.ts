@@ -297,6 +297,9 @@ test("operator history is live, human-only, tenant-scoped metadata and never rep
     try {
       await connection.query("BEGIN");
       await connection.query("SET LOCAL enable_seqscan = off");
+      // This probe verifies index-supported ordering, not the cost planner's
+      // preference for sorting a tiny, newly inserted tenant fixture.
+      await connection.query("SET LOCAL enable_sort = off");
       for (const filter of ["", "AND workflow = 'documents'", "AND status = 'running'",
         "AND workflow = 'documents' AND status = 'running'", "AND correlation_id = $2"]) {
         const plan = await connection.query(`EXPLAIN SELECT id, started_at FROM hro_context_transactions

@@ -24,6 +24,12 @@ Mounted page tests that use Wouter or form libraries also need the happy-dom `lo
 
 **How to apply:** mirror the complete browser-global setup from existing mounted page suites whenever a test imports routing, forms, dialogs, or query-driven pages.
 
+Wouter instruments browser History methods at module initialization; statically importing it before creating a test Window misses that instrumentation.
+
+**Why:** Routed component assertions may render correctly while query-only navigation never notifies subscribers, so a partial test DOM can falsely suggest broken application navigation.
+
+**How to apply:** Initialize browser globals before importing Wouter, or mirror its History event instrumentation separately for each test-owned Window. Exercise query-only navigation and Back/Forward with the real query cache.
+
 Development-mode server test bundles must leave Pino and its worker-backed transport packages external, unless the harness explicitly builds their worker assets.
 
 **Why:** assertions can all pass while a bundled development logger later crashes on a missing worker module. Switching to production mode can silently skip development-only database tests, so it is not a valid workaround.

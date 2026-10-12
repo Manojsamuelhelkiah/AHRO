@@ -72,6 +72,7 @@
 - [Unified HRO context](unified-context-boundaries.md) — all-HRO scope; continuity metadata is not authority, evidence storage, or a second workflow engine.
 - [Context retention boundaries](context-retention-boundaries.md) — opaque subjects require conservative tenant holds; stale unfinished work must not be inferred abandoned for pruning.
 - [Browser regression runtime](browser-regression-runtime.md) — UI tester and workspace Playwright have independent browser/recorder installations; setup failures do not justify skipped validation.
+- [Query plan test boundaries](query-plan-test-boundaries.md) — structural ordering-index probes must not depend on planner preferences for tiny tenant fixtures.
 - [Independent employee Vault](independent-employee-vault.md) — personal ownership without membership; all-required BGV reuse; privacy withdrawal must not depend on new collection approval.
 - [Vault expiry notice boundaries](vault-expiry-notice-boundaries.md) — independent opt-in in-app notices; never infer email identity or treat notification as renewal.
 - [Synthetic fairness boundaries](synthetic-fairness-boundaries.md) — scope and variations require review before criteria; equal answers may be wrong; paired observations are not certification.

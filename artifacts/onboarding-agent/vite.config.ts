@@ -41,6 +41,10 @@ export default defineConfig(async ({ command }): Promise<UserConfig> => {
   );
   return {
   base: basePath,
+  // The isolated auth-adapter server may run beside the real Clerk preview.
+  // Never let their different dependency graphs overwrite the same optimizer cache.
+  cacheDir: path.resolve(import.meta.dirname, 'node_modules',
+    browserRegression ? '.vite-browser-regression' : '.vite'),
   plugins: [
     react(),
     tailwindcss({ optimize: false }),

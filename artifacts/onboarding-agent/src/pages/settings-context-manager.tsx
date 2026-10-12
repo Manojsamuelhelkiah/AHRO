@@ -1,31 +1,48 @@
 import { useState } from 'react';
+import { Link, useLocation, useSearch } from 'wouter';
 import { useAuth } from '@clerk/react';
 import {
   useListHroContextTransactions, getListHroContextTransactionsQueryKey,
   getPinnedOrganizationIdForPage,
   type ListHroContextTransactionsParams, HroContextWorkflow, type HroContextHistoryItem,
 } from '@workspace/api-client-react';
-import { Button, Card, CardContent } from '@/components/ui-shared';
-import { ContextRetentionSettings } from './settings-context-retention';
+import { Button, Card, CardContent, PageHeader } from '@/components/ui-shared';
+import { CONTEXT_RETENTION_PATH, EXECUTION_HISTORY_PATH, correlationHistoryDestination } from '@/lib/context-history-navigation';
 
-export function ContextManagerSettingsCard() {
-  const { userId } = useAuth();
-  const organizationId = getPinnedOrganizationIdForPage();
-  // Remount pagination state when the authenticated tenant/principal changes.
-  return <ContextManagerHistory key={`${userId}:${organizationId}`} userId={userId} organizationId={organizationId} />;
+export function ExecutionHistoryPage() {
+  return <div className="space-y-6 max-w-7xl mx-auto pb-12 min-w-0">
+    <PageHeader title="Execution History" subtitle="Read-only execution metadata across all supported HRO workflows." />
+    <ContextManagerHistoryViewer />
+  </div>;
 }
 
-function ContextManagerHistory({ userId, organizationId }: {
-  userId: string | null | undefined; organizationId: string | null;
+export function ContextManagerHistoryViewer() {
+  const { userId } = useAuth();
+  const organizationId = getPinnedOrganizationIdForPage();
+  const search = useSearch();
+  // Remount pagination state when the authenticated tenant/principal changes.
+  return <ContextManagerHistory key={JSON.stringify([userId, organizationId, search])}
+    userId={userId} organizationId={organizationId} search={search} />;
+}
+
+function ContextManagerHistory({ userId, organizationId, search }: {
+  userId: string | null | undefined; organizationId: string | null; search: string;
 }) {
+  const [, navigate] = useLocation();
   const [cursors, setCursors] = useState<string[]>([]);
   const cursor = cursors.at(-1);
-  const [view, setView] = useState<'personal' | 'operator'>(() =>
-    new URLSearchParams(window.location.search).get('contextView') === 'operator' ? 'operator' : 'personal');
-  const [workflow, setWorkflow] = useState<HroContextWorkflow | ''>('');
-  const [status, setStatus] = useState<'running' | 'completed' | 'failed' | ''>('');
-  const [correlationId, setCorrelationId] = useState(() =>
-    new URLSearchParams(window.location.search).get('contextCorrelation') || '');
+  const filters = new URLSearchParams(search);
+  const view = filters.get('contextView') === 'operator' ? 'operator' : 'personal';
+  const workflow = (filters.get('contextWorkflow') || '') as HroContextWorkflow | '';
+  const status = (filters.get('contextStatus') || '') as 'running' | 'completed' | 'failed' | '';
+  const correlationId = filters.get('contextCorrelation') || '';
+  const changeFilters = (changes: Record<string, string>) => {
+    const next = new URLSearchParams(search);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value); else next.delete(key);
+    }
+    navigate(`${EXECUTION_HISTORY_PATH}${next.size ? `?${next}` : ''}`);
+  };
   const params: ListHroContextTransactionsParams = {
     view, ...(workflow ? { workflow } : {}), ...(status ? { status } : {}),
     ...(correlationId ? { correlationId } : {}),
@@ -39,12 +56,13 @@ function ContextManagerHistory({ userId, organizationId }: {
       refetchInterval: cursor ? false : 30_000,
     },
   });
+  if (!userId) return null;
   return (
-    <Card id="unified-context-manager" data-testid="unified-context-manager">
+    <Card id="execution-history" data-testid="execution-history">
       <CardContent className="p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold">Unified context manager</h2>
+            <h2 className="text-base font-semibold">HRO execution attempts</h2>
             <p className="text-sm text-muted-foreground mt-1">
               {view === 'operator' ? 'Organization attempts, including background work, in pages of up to 30.' :
                 'Your latest 30 matching execution attempts in this organization.'} Context links requests,
@@ -58,38 +76,41 @@ function ContextManagerHistory({ userId, organizationId }: {
         </div>
         <p className="text-xs text-muted-foreground">
           Metadata only: no prompts, answers, documents or contact details. A completed attempt
-          does not mean a hire or business workflow is complete. Running means no final result
+          does not mean a business workflow is complete. Running means no final result
           has been recorded, including interrupted attempts. Each entry shows its latest 20 steps.
           Confirmed failure means the attempt recorded an error, not that all provider effects failed.
           This read-only view cannot retry business workflows or replay provider actions.
         </p>
-        <ContextRetentionSettings />
-        <div className="flex flex-wrap gap-3 items-end">
-          <label className="text-xs space-y-1">History view
-            <select aria-label="History view" className="block rounded border bg-background p-2 min-h-11"
-              value={view} onChange={event => { setCursors([]); setView(event.target.value as 'personal' | 'operator'); setCorrelationId(''); }}>
+        <Link href={CONTEXT_RETENTION_PATH} className="inline-block underline text-sm min-h-11 py-3">Context metadata retention settings</Link>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 items-end">
+          <label className="text-xs space-y-1 min-w-0">History view
+            <select aria-label="History view" className="block w-full min-w-0 rounded border bg-background p-2 min-h-11"
+              value={view} onChange={event => changeFilters({ contextView: event.target.value, contextCorrelation: '' })}>
               <option value="personal">My attempts</option>
               {(data?.operatorAvailable || view === 'operator') && <option value="operator">Operator — organization metadata</option>}
             </select>
           </label>
-          <label className="text-xs space-y-1">Workflow
-            <select aria-label="Workflow" className="block rounded border bg-background p-2 min-h-11"
-              value={workflow} onChange={event => { setCursors([]); setWorkflow(event.target.value as HroContextWorkflow | ''); }}>
+          <label className="text-xs space-y-1 min-w-0">Workflow
+            <select aria-label="Workflow" className="block w-full min-w-0 rounded border bg-background p-2 min-h-11"
+              value={workflow} onChange={event => changeFilters({ contextWorkflow: event.target.value })}>
               <option value="">All workflows</option>
               {Object.values(HroContextWorkflow).map(value => <option key={value} value={value}>{value.replaceAll('-', ' ')}</option>)}
             </select>
           </label>
-          <label className="text-xs space-y-1">Status
-            <select aria-label="Status" className="block rounded border bg-background p-2 min-h-11"
-              value={status} onChange={event => { setCursors([]); setStatus(event.target.value as typeof status); }}>
+          <label className="text-xs space-y-1 min-w-0">Status
+            <select aria-label="Status" className="block w-full min-w-0 rounded border bg-background p-2 min-h-11"
+              value={status} onChange={event => changeFilters({ contextStatus: event.target.value })}>
               <option value="">All statuses</option>
               <option value="running">Unfinished (no final result)</option>
               <option value="completed">Completed attempt</option>
               <option value="failed">Confirmed failed attempt</option>
             </select>
           </label>
-          {correlationId && <Button variant="outline" onClick={() => { setCursors([]); setCorrelationId(''); }}>Clear correlation filter</Button>}
         </div>
+        {correlationId && <div className="space-y-2 min-w-0">
+          <p className="text-xs break-all">Correlation filter: {correlationId}</p>
+          <Button variant="outline" className="min-h-11" onClick={() => changeFilters({ contextCorrelation: '' })}>Clear correlation filter</Button>
+        </div>}
         {view === 'operator' && <p className="text-xs text-muted-foreground">
           Requires a live data.context.metadata.read grant. Organization roles alone do not grant this
           access, and this permission does not unlock business evidence or specialist decisions.
@@ -143,9 +164,9 @@ export function ContextTransactionList({ transactions, view }: {
                   <div><dt className="font-medium">Transaction</dt><dd>{transaction.id}</dd></div>
                   <div><dt className="font-medium">Continuity anchor</dt><dd>{transaction.anchorId}</dd></div>
                   <div><dt className="font-medium">Correlation</dt><dd>
-                    <a className="underline" href={`?contextView=${view}&contextCorrelation=${encodeURIComponent(transaction.correlationId)}#unified-context-manager`}>
+                    <Link className="underline" href={correlationHistoryDestination(view, transaction.correlationId)}>
                       {transaction.correlationId} — view related attempts
-                    </a>
+                    </Link>
                   </dd></div>
                   {transaction.parentTransactionId && <div><dt className="font-medium">Parent attempt</dt><dd>{transaction.parentTransactionId}</dd></div>}
                   <div><dt className="font-medium">Executor / revision</dt><dd>{transaction.executorType} / {transaction.version}</dd></div>

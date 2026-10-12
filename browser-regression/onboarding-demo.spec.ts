@@ -60,6 +60,86 @@ async function signInDemo(page: Page, email: string) {
   await expect(page.locator("#login-email")).toHaveCount(0);
 }
 
+for (const viewport of VIEWPORTS) {
+  test(`Execution History and retention are separate, reachable and usable on ${viewport.label}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/execution-history');
+    await expect(page.locator('#login-email')).toBeVisible();
+    await signInDemo(page, REVIEWER_EMAIL);
+    const historyLink = page.getByRole('link', { name: 'Execution History', exact: true }).filter({ visible: true });
+    await historyLink.scrollIntoViewIfNeeded();
+    await historyLink.click();
+    await expect(page).toHaveURL(/\/execution-history$/);
+    await expect(page.getByRole('heading', { name: 'Execution History', exact: true })).toBeVisible();
+    await expect(page.getByText('Personal execution history is unavailable for shared demo logins.')).toBeVisible();
+    await expect(page.getByText('Review retention rule', { exact: true })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Context metadata retention settings', exact: true }).click();
+    await expect(page).toHaveURL(/\/settings#context-metadata-retention$/);
+    await expect(page.getByTestId('context-metadata-retention')).toBeVisible();
+    await expect(page.getByTestId('execution-history')).toHaveCount(0);
+    await expect(page.getByText('only to verified privacy or legal reviewers', { exact: false })).toBeVisible();
+    await page.getByRole('link', { name: 'Open Execution History', exact: true }).click();
+
+    // Synthetic browser-only responses exercise rendering without granting
+    // this shared Demo identity any production operator or review authority.
+    let mode: 'history' | 'empty' | 'denied' = 'history';
+    const correlation = '01234567-89ab-cdef-0123-456789abcdef';
+    const longId = 'opaque-'.repeat(45);
+    const observed: string[] = [];
+    await page.route('**/api/context-manager/transactions?**', async route => {
+      const url = new URL(route.request().url());
+      observed.push(url.search);
+      await route.fulfill({ status: mode === 'denied' ? 403 : 200, json: mode === 'denied' ? { message: 'Live metadata access revoked' } : {
+        available: true, operatorAvailable: true,
+        transactions: mode === 'empty' ? [] : [{
+          id: longId, anchorId: longId, correlationId: correlation, parentTransactionId: longId,
+          workflow: 'documents', status: 'running', version: 1, executorType: 'system', initiatorType: 'system',
+          startedAt: '2026-10-01T00:00:00Z', finishedAt: null, ageSeconds: 3600,
+          steps: [{ code: 'checkpoint-recorded', createdAt: '2026-10-01T00:00:00Z' }],
+        }], nextCursor: url.searchParams.has('cursor') ? null : 'synthetic-older-page',
+      } });
+    });
+    await page.goto(`/settings?contextView=operator&contextCorrelation=${correlation}#unified-context-manager`);
+    await expect(page).toHaveURL(new RegExp(`/execution-history\\?contextView=operator&contextCorrelation=${correlation}$`));
+    await expect(page.getByText('Correlation filter:', { exact: false })).toBeVisible();
+    await page.getByRole('button', { name: 'Clear correlation filter' }).click();
+    await page.getByLabel('Workflow', { exact: true }).selectOption('documents');
+    await page.getByLabel('Status', { exact: true }).selectOption('running');
+    await expect.poll(() => observed.at(-1)).toContain('status=running');
+    await page.getByRole('button', { name: 'Older attempts' }).click();
+    await expect(page.getByText('Page 2 · up to 30 attempts')).toBeVisible();
+    await page.getByRole('button', { name: 'Refresh latest' }).click();
+    await expect(page.getByText('Page 1 · up to 30 attempts')).toBeVisible();
+    await page.locator('summary').click();
+    const related = page.getByRole('link', { name: /view related attempts/ });
+    await expect(related).toHaveAttribute('href', `/execution-history?contextView=operator&contextCorrelation=${correlation}`);
+    await related.click();
+    await expect(page.getByLabel('Workflow', { exact: true })).toHaveValue('');
+    await page.goBack();
+    await expect(page.getByLabel('Workflow', { exact: true })).toHaveValue('documents');
+    await page.goForward();
+    await expect(page.getByText('Correlation filter:', { exact: false })).toBeVisible();
+    await page.locator('summary').click();
+    for (const control of [page.getByLabel('History view'), page.getByLabel('Workflow', { exact: true }), page.getByLabel('Status', { exact: true }),
+      page.getByRole('button', { name: 'Newer attempts' }), page.getByRole('button', { name: 'Older attempts' }), page.locator('details')]) {
+      const box = await control.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+    mode = 'denied';
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Execution history is unavailable' })).toBeVisible();
+    await expect(page.locator('details')).toHaveCount(0);
+    mode = 'empty';
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await expect(page.getByText('No execution attempts match this view and its filters.')).toBeVisible();
+    await page.goto('/settings');
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.getByTestId('execution-history')).toHaveCount(0);
+  });
+}
+
 test("Client Setup recovers scoped legacy drafts without guessing unsupported choices", async ({
   page,
 }) => {

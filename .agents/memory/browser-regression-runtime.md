@@ -14,3 +14,9 @@ The UI tester's browser-code runtime does not necessarily expose workspace envir
 **Why:** The browser-code sandbox and workspace shell have separate runtime boundaries; a configured credential is not automatically injected into both.
 
 **How to apply:** For a credential-backed development check that cannot run in the tester, use the workspace Playwright runner with a direct environment reference inside test code. Never copy the secret through chat, tool output, generated files, or test reports.
+
+The isolated browser-regression Vite server and the real Clerk preview must use separate dependency-optimizer caches.
+
+**Why:** Their auth aliases produce different dependency graphs. Concurrent servers sharing a cache can overwrite generated React chunks while the other server still serves its original graph, causing invalid-hook-call failures only in the real preview even when isolated browser tests pass.
+
+**How to apply:** Keep test-auth dependency caches separate from normal development caches. After a cache collision, rebuild the affected generated cache and verify the real signed-in preview, not only the isolated harness.

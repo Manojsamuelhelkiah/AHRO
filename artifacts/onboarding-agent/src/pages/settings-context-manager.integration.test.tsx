@@ -6,7 +6,10 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { pinOrganizationIdForPage, type HroContextHistory, type HroContextRetentionStatus } from '@workspace/api-client-react';
-import { ContextManagerSettingsCard } from './settings-context-manager';
+import { ContextManagerHistoryViewer } from './settings-context-manager';
+import { ContextRetentionSettings } from './settings-context-retention';
+import { Router } from 'wouter';
+import { SettingsContextRelocation } from './settings-context-relocation';
 
 // Only Clerk is stubbed by the test runner. Keep the real generated hook,
 // request headers, cache and component: retained query data on a 403 is the risk.
@@ -51,10 +54,11 @@ function assertHidden(marker: string) {
   assert.doesNotMatch(document.body.textContent ?? '', new RegExp(marker));
   assert.equal(document.querySelectorAll('details, a[href*="contextCorrelation"]').length, 0);
 }
-async function harness() {
-  const dom = new Window({ url: 'http://localhost/settings?contextView=operator' });
-  const names = ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'Event',
-    'MutationObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame'];
+async function harness(surface: 'history' | 'retention' | 'legacy' = 'history', path = '/execution-history?contextView=operator', base = '') {
+  const dom = new Window({ url: `http://localhost${base}${path}` });
+  const names = ['window', 'document', 'location', 'history', 'self', 'navigator', 'HTMLElement', 'Element', 'Node', 'Event',
+    'MutationObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame',
+    'addEventListener', 'removeEventListener', 'dispatchEvent'];
   const originals = new Map<string, PropertyDescriptor | undefined>();
   for (const name of [...names, 'fetch', 'IS_REACT_ACT_ENVIRONMENT']) {
     originals.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
@@ -67,6 +71,15 @@ async function harness() {
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true, writable: true, value: true,
   });
+  // Wouter is imported before the test Window exists; mirror its browser
+  // History instrumentation, which normally runs once at module initialization.
+  for (const method of ['pushState', 'replaceState'] as const) {
+    const original = dom.history[method].bind(dom.history);
+    dom.history[method] = (...args: Parameters<History[typeof method]>) => {
+      original(args[0], args[1], args[2] ?? undefined);
+      dom.dispatchEvent(new dom.Event(method));
+    };
+  }
   const client = new QueryClient(); // Same defaults as App.tsx.
   const root = createRoot(document.body);
   let userId: string | null = 'operator-a';
@@ -74,7 +87,7 @@ async function harness() {
   let retentionAllowed = false;
   let holdResponse = false;
   const releases: (() => void)[] = [];
-  const requests: { userId: string | null; organizationId: string | null; view: string | null }[] = [];
+  const requests: { userId: string | null; organizationId: string | null; view: string | null; search: string }[] = [];
   const retentionRequests: { userId: string | null; organizationId: string | null }[] = [];
   let lastBody = history('organization-a-operator-a');
   globalThis.fetch = async (input, init) => {
@@ -90,9 +103,10 @@ async function harness() {
       if (holdResponse) await new Promise<void>(resolve => { releases.push(resolve); });
       return permitted ? response(body) : response({ message: 'Verified reviewer required' }, 403);
     }
-    requests.push({ userId, organizationId, view: url.searchParams.get('view') });
+    requests.push({ userId, organizationId, view: url.searchParams.get('view'), search: url.search });
     const permitted = allowed;
     const body = history(`${organizationId}-${userId}`);
+    body.nextCursor = url.searchParams.has('cursor') ? null : 'older-page';
     lastBody = body;
     if (holdResponse) await new Promise<void>(resolve => { releases.push(resolve); });
     if (url.searchParams.get('view') === 'personal') {
@@ -105,13 +119,17 @@ async function harness() {
     pinOrganizationIdForPage(org);
     await act(async () => {
       root.render(<TestClerkProvider userId={userId}>
-        <QueryClientProvider client={client}><ContextManagerSettingsCard /></QueryClientProvider>
+        <QueryClientProvider client={client}><Router base={base}>
+          {surface === 'retention' ? <ContextRetentionSettings /> :
+            surface === 'legacy' ? <SettingsContextRelocation><p>Ordinary settings</p></SettingsContextRelocation> :
+              <ContextManagerHistoryViewer />}
+        </Router></QueryClientProvider>
       </TestClerkProvider>);
       await tick();
     });
   };
   return {
-    client, requests, retentionRequests, render,
+    client, requests, retentionRequests, render, dom,
     deny: () => { allowed = false; },
     allowRetention: () => { retentionAllowed = true; },
     denyRetention: () => { retentionAllowed = false; },
@@ -179,35 +197,29 @@ for (const trigger of ['Refresh', 'focus'] as const) {
 test('operator query cache cannot cross user, organization or signed-out boundaries', async () => {
   const h = await harness();
   try {
-    h.allowRetention();
     await h.render();
     await waitFor(() => document.body.textContent!.includes('organization-a-operator-a-anchor'), 'first identity');
-    await waitFor(() => document.body.textContent!.includes('organization-a-operator-a-retention-private'), 'first reviewer metadata');
     h.hold();
     await h.render('operator-b');
     assertHidden('organization-a-operator-a');
     await waitFor(() => h.requests.length === 2, 'new user request');
     await h.release();
     await waitFor(() => document.body.textContent!.includes('organization-a-operator-b-anchor'), 'second identity');
-    await waitFor(() => document.body.textContent!.includes('organization-a-operator-b-retention-private'), 'second reviewer metadata');
     h.hold();
     await h.render('operator-b', 'organization-b');
     assertHidden('organization-a-operator-b');
     await waitFor(() => h.requests.length === 3, 'new organization request');
     await h.release();
     await waitFor(() => document.body.textContent!.includes('organization-b-operator-b-anchor'), 'second organization');
-    await waitFor(() => document.body.textContent!.includes('organization-b-operator-b-retention-private'), 'second organization retention');
     await h.render(null, 'organization-b');
     assertHidden('organization-b-operator-b');
     assert.equal(h.requests.length, 3, 'signed-out viewer must not fetch');
-    assert.equal(h.retentionRequests.length, 3, 'signed-out viewer must not fetch reviewer metadata');
+    assert.equal(h.retentionRequests.length, 0, 'history must not fetch retention metadata');
     assert.deepEqual(h.requests.map(({ userId, organizationId }) => ({ userId, organizationId })), [
       { userId: 'operator-a', organizationId: 'organization-a' },
       { userId: 'operator-b', organizationId: 'organization-a' },
       { userId: 'operator-b', organizationId: 'organization-b' },
     ]);
-    assert.deepEqual(h.retentionRequests, h.requests.map(({ userId, organizationId }) => ({ userId, organizationId })),
-      'retention status uses the same identity and dispatched tenant boundary as history');
     assert.equal(h.client.getQueryCache().getAll().some(query =>
       query.queryKey.includes('operator-a') ||
       (query.queryKey.includes('operator-b') && query.queryKey.includes('organization-a'))), false,
@@ -215,8 +227,119 @@ test('operator query cache cannot cross user, organization or signed-out boundar
   } finally { await h.cleanup(); }
 });
 
-test('a denied reviewer cannot inherit another user’s retention policy or review draft', async () => {
+test('filters, correlation navigation and Back/Forward reset operator pagination with the real cache', async () => {
   const h = await harness();
+  const click = async (text: string) => {
+    await act(async () => {
+      Array.from(document.querySelectorAll('button')).find(button => button.textContent === text)!.click();
+      await tick();
+    });
+  };
+  try {
+    await h.render();
+    await waitFor(() => Boolean(document.querySelector('details')), 'history');
+    await click('Older attempts');
+    await waitFor(() => h.requests.at(-1)!.search.includes('cursor=older-page'), 'older page');
+    await waitFor(() => document.body.textContent!.includes('Page 2'), 'page 2');
+    await waitFor(() => !Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'Refresh latest')!.disabled, 'older request settled');
+    await click('Refresh latest');
+    await waitFor(() => document.body.textContent!.includes('Page 1'), 'latest page');
+    await act(async () => {
+      const workflow = document.querySelector<HTMLSelectElement>('[aria-label="Workflow"]')!;
+      workflow.value = 'documents';
+      workflow.dispatchEvent(new Event('change', { bubbles: true }));
+      await tick();
+    });
+    await waitFor(() => h.requests.at(-1)!.search.includes('workflow=documents'), 'workflow filter');
+    await act(async () => {
+      const status = document.querySelector<HTMLSelectElement>('[aria-label="Status"]')!;
+      status.value = 'failed';
+      status.dispatchEvent(new Event('change', { bubbles: true }));
+      await tick();
+    });
+    await waitFor(() => h.requests.at(-1)!.search.includes('status=failed'), 'status filter');
+    await act(async () => {
+      document.querySelector<HTMLAnchorElement>('a[href*="contextCorrelation"]')!.click();
+      await tick();
+    });
+    await waitFor(() => h.requests.at(-1)!.search.includes('correlationId='), 'related attempts');
+    assert.equal(h.dom.location.pathname, '/execution-history');
+    assert.equal(document.querySelector<HTMLSelectElement>('[aria-label="Workflow"]')!.value, '');
+    await act(async () => { h.dom.history.back(); await tick(); });
+    await waitFor(() => document.querySelector<HTMLSelectElement>('[aria-label="Status"]')!.value === 'failed', 'Back restores filters');
+    await act(async () => { h.dom.history.forward(); await tick(); });
+    await waitFor(() => document.body.textContent!.includes('Correlation filter:'), 'Forward restores correlation');
+    assert.equal(h.retentionRequests.length, 0);
+  } finally { await h.cleanup(); }
+});
+
+for (const surface of ['history', 'retention'] as const) {
+  test(`${surface} ignores delayed responses after principal and tenant switches`, async () => {
+    const h = await harness(surface);
+    try {
+      h.allowRetention();
+      h.hold();
+      await h.render();
+      await waitFor(() => (surface === 'history' ? h.requests : h.retentionRequests).length === 1, 'pending first principal');
+      await h.render('operator-b', 'organization-b');
+      await waitFor(() => (surface === 'history' ? h.requests : h.retentionRequests).length === 2, 'pending second principal');
+      await h.release();
+      await waitFor(() => document.body.textContent!.includes('organization-b-operator-b'), 'new principal only');
+      assert.doesNotMatch(document.body.innerHTML, /organization-a-operator-a/);
+      assert.equal(h.client.getQueryCache().getAll().some(query => query.queryKey.includes('operator-a')), false);
+    } finally { await h.cleanup(); }
+  });
+}
+
+test('retention revocation hides cached policy and discards an open review draft', async () => {
+  const h = await harness('retention', '/settings#context-metadata-retention');
+  try {
+    h.allowRetention();
+    await h.render();
+    await waitFor(() => document.body.textContent!.includes('organization-a-operator-a-retention-private'), 'reviewed policy');
+    await act(async () => {
+      Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'Review retention rule')!.click();
+      await tick();
+    });
+    assert(document.querySelector('form'));
+    h.denyRetention();
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+      await tick();
+    });
+    await waitFor(() => document.body.textContent!.includes('only to verified privacy or legal reviewers'), 'revoked reviewer');
+    assert.equal(document.querySelector('form'), null);
+    assert.doesNotMatch(document.body.innerHTML, /organization-a-operator-a/);
+    assert.equal(h.retentionRequests.length, 2);
+    assert.equal(h.requests.length, 0, 'Settings never requests history');
+  } finally { await h.cleanup(); }
+});
+
+test('legacy Settings navigation respects a non-root app base and ordinary Settings stays put', async () => {
+  const h = await harness('legacy', '/settings?contextView=operator&contextCorrelation=opaque-id#unified-context-manager', '/suite');
+  try {
+    await h.render();
+    await waitFor(() => h.dom.location.pathname === '/suite/execution-history', 'base-aware redirect');
+    assert.equal(h.dom.location.search, '?contextView=operator&contextCorrelation=opaque-id');
+    assert.equal(h.requests.length + h.retentionRequests.length, 0);
+    await act(async () => {
+      h.dom.history.pushState(null, '', '/suite/settings#context-metadata-retention');
+      h.dom.dispatchEvent(new h.dom.PopStateEvent('popstate'));
+      await tick();
+    });
+    await waitFor(() => document.body.textContent === 'Ordinary settings', 'retention destination');
+    assert.equal(h.dom.location.pathname, '/suite/settings');
+    await act(async () => {
+      h.dom.history.pushState(null, '', '/suite/settings#unified-context-manager');
+      await tick();
+    });
+    await waitFor(() => h.dom.location.pathname === '/suite/execution-history', 'fragment-only in-app redirect');
+  } finally { await h.cleanup(); }
+});
+
+test('a denied reviewer cannot inherit another user’s retention policy or review draft', async () => {
+  const h = await harness('retention', '/settings#context-metadata-retention');
   try {
     h.allowRetention();
     await h.render();
