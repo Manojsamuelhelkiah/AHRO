@@ -35,6 +35,14 @@ function WorkforceContextTags({ c }: { c: OnbActionCenter['documentFollowups'][0
   </span>;
 }
 
+function ActionCaseLink({ caseId, href }: { caseId: number; href?: string }) {
+  return (
+    <Link href={href ?? `/cases/${caseId}`} className="inline-flex shrink-0 items-center rounded bg-[var(--primary-light-bg)] px-2 py-1 text-xs font-semibold text-[var(--primary)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+      Case #{caseId}
+    </Link>
+  );
+}
+
 export function NeedsAttentionTab() {
   const [workforce, setWorkforce] = useState<'white-collar' | 'blue-collar-frontline' | 'mixed' | 'needs-review' | 'unclassified' | ''>('');
   const [safetyOnly, setSafetyOnly] = useState(false);
@@ -186,8 +194,9 @@ function EarlyTenureReminderRow({ reminder }: { reminder: EarlyTenureInboxRemind
 function NotificationCard({ notification }: { notification: OnbActionCenter['notifications'][0] }) {
   return (
     <Card className="p-4 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-[var(--surface)] hover:border-[var(--primary)] transition-colors">
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-1">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 mb-1">
+          <ActionCaseLink caseId={notification.caseId} href={notification.caseHref} />
           <Badge variant="outline" className="uppercase text-[10px] bg-[var(--status-red-bg)] text-[var(--status-red)] border-[var(--status-red)]">
             {notification.kind}
           </Badge>
@@ -248,8 +257,9 @@ function DocumentFollowupCard({ doc }: { doc: OnbActionCenter['documentFollowups
 
   return (
     <Card className="p-4 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-[var(--surface)] hover:border-[var(--primary)] transition-colors">
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-1">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 mb-1">
+          <ActionCaseLink caseId={doc.caseId} href={doc.caseHref} />
           <Badge variant="outline" className="uppercase text-[10px]">Document</Badge>
           <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] bg-[var(--surface-alt)] px-1.5 py-0.5 rounded">
             {doc.case.workerName} • {doc.case.role}
@@ -517,8 +527,9 @@ function OpportunityCard({ opp }: { opp: OnbActionCenter['opportunities'][0] }) 
   const canAct = !roleLoading && (isAuthorized || isDemo) && (opp.capabilities?.canAct ?? false);
   return (
     <Card className="p-4 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-[var(--surface)] hover:border-[var(--primary)] transition-colors">
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-1">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 mb-1">
+          <ActionCaseLink caseId={opp.caseId} href={opp.caseHref} />
           <Badge variant="outline" className="uppercase text-[10px] bg-[var(--primary-light)] text-[var(--primary)] border-[var(--primary)]">Opportunity</Badge>
           <span className={cn(
             "text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
