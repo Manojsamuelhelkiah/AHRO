@@ -120,6 +120,124 @@ test("name conflicts retain all four group drafts and navigate to the existing t
   }
 });
 
+test("agent registration preserves drafts, prevents repeat submissions and targets only the current tenant's conflict", async () => {
+  const dom = new Window({ url: "http://localhost/settings" });
+  const names = ["window", "document", "navigator", "location", "localStorage", "self",
+    "HTMLElement", "HTMLInputElement", "Event", "Node", "Text", "MutationObserver", "IS_REACT_ACT_ENVIRONMENT"];
+  const originals = new Map(names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+  for (const name of names) Object.defineProperty(globalThis, name, {
+    configurable: true, writable: true,
+    value: name === "IS_REACT_ACT_ENVIRONMENT" ? true : (dom as unknown as Record<string, unknown>)[name],
+  });
+  const { createRoot } = await import("react-dom/client");
+  const { AccessGovernanceSettings } = await import("./settings-access-governance");
+  let tenant = "agent-org-a";
+  let outcome: "conflict" | "failure" | "success" = "conflict";
+  const requests: Array<{ tenant: string; body: Record<string, unknown> }> = [];
+  let release: (() => void) | undefined;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url) === "/api/organizations/current") return Response.json({
+      activeOrganizationId: tenant, memberships: [{ organizationId: tenant, role: "owner" }],
+    });
+    const requestTenant = new Headers(init?.headers).get("x-organization-id");
+    assert.equal(requestTenant, tenant);
+    const agent = { id: `${requestTenant}-agent`, name: "Existing agent",
+      status: requestTenant === "agent-org-a" ? "active" : "retired", version: 1, ownerUserId: "owner-1" };
+    if (init?.method === "POST") {
+      requests.push({ tenant: requestTenant!, body: JSON.parse(String(init.body)) });
+      await new Promise<void>((resolve) => { release = resolve; });
+      if (outcome === "success") return Response.json({ agent }, { status: 201 });
+      if (outcome === "failure") return Response.json({ message: "Registration temporarily unavailable" }, { status: 503 });
+      return Response.json({ code: "ACCESS_AGENT_NAME_CONFLICT",
+        message: `An agent already exists in this organization${agent.status === "retired" ? " and is retired" : ""}. Choose a different name.`,
+        existingAgent: { id: agent.id, name: agent.name, status: agent.status } }, { status: 409 });
+    }
+    return Response.json({ catalog: [], members: [
+      { clerkUserId: "owner-1", role: "owner" }, { clerkUserId: "member-2", role: "member" },
+    ], agents: [agent], userGroups: [], securityGroups: [], userGroupStarters: [], grants: [], history: [] });
+  }) as typeof fetch;
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const root = createRoot(document.body);
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
+  const input = () => dom.document.querySelector<HTMLInputElement>('[aria-label="Agent name"]')!;
+  const owner = () => dom.document.querySelector<HTMLSelectElement>('[aria-label="Agent owner"]')!;
+  const submit = async (twice = false) => {
+    await act(async () => {
+      const form = input().closest("form")!;
+      form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
+      if (twice) form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
+      await settle();
+    });
+  };
+  const finish = async () => {
+    await act(async () => { release!(); await settle(); });
+    await act(async () => { await settle(); });
+  };
+  try {
+    for (tenant of ["agent-org-a", "agent-org-b"]) {
+      outcome = "conflict";
+      pinOrganizationIdForPage(tenant);
+      await act(async () => {
+        root.render(<QueryClientProvider client={client}><AccessGovernanceSettings key={tenant} /></QueryClientProvider>);
+        await settle();
+      });
+      await act(async () => { await settle(); });
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, "value")!.set!.call(input(), " Existing agent ");
+        input().dispatchEvent(new dom.Event("input", { bubbles: true }));
+        owner().value = "member-2";
+        owner().dispatchEvent(new dom.Event("change", { bubbles: true }));
+      });
+      const before = requests.length;
+      await submit(true);
+      assert.equal(requests.length, before + 1);
+      assert.equal(input().value, " Existing agent ");
+      await finish();
+      assert.equal(input().value, " Existing agent ");
+      assert.equal(owner().value, "member-2");
+      const notice = dom.document.querySelector("[data-testid=status-access-governance]")!;
+      assert.equal(notice.getAttribute("role"), "alert");
+      assert.match(notice.textContent!, /already exists/);
+      if (tenant === "agent-org-b") assert.match(notice.textContent!, /is retired/);
+      await act(async () => {
+        [...notice.querySelectorAll("button")].find((button) => button.textContent === "View existing agent")!.click();
+        await settle();
+      });
+      assert.equal(dom.document.activeElement?.id, `access-agent-${tenant}-agent`);
+      assert.equal(dom.document.querySelector(`#access-agent-${tenant === "agent-org-a" ? "agent-org-b" : "agent-org-a"}-agent`), null);
+      outcome = "failure";
+      await submit();
+      await finish();
+      assert.equal(input().value, " Existing agent ");
+      assert.equal(owner().value, "member-2");
+      assert.match(dom.document.querySelector("[role=alert]")!.textContent!, /temporarily unavailable/);
+      outcome = "success";
+      await submit();
+      await finish();
+      assert.equal(input().value, "");
+      assert.equal(owner().value, "member-2");
+      assert.match(dom.document.querySelector("[data-testid=status-access-governance]")!.textContent!, /Registered agent created/);
+    }
+    assert.deepEqual(requests.map((request) => request.body), Array.from({ length: 6 }, () => ({
+      name: "Existing agent", ownerUserId: "member-2",
+    })));
+    assert.deepEqual(requests.map((request) => request.tenant), [
+      "agent-org-a", "agent-org-a", "agent-org-a", "agent-org-b", "agent-org-b", "agent-org-b",
+    ]);
+  } finally {
+    await act(async () => { root.unmount(); });
+    client.clear();
+    globalThis.fetch = originalFetch;
+    pinOrganizationIdForPage(null);
+    dom.close();
+    for (const [name, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else delete (globalThis as Record<string, unknown>)[name];
+    }
+  }
+});
+
 test("starter picker refreshes persisted selectors, handles failure/retry and remains owner-only", async () => {
   const dom = new Window({ url: "http://localhost/settings" });
   const names = ["window", "document", "navigator", "location", "localStorage", "self",

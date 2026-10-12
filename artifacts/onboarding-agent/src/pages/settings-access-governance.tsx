@@ -20,7 +20,13 @@ type SecurityGroup = {
   allows: string[]; approvalStatus: string;
 };
 type ExistingGroup = { id: string; name: string; status: string; type: "user-group" | "security-group" };
-type Notice = { ok: boolean; message: string; existingGroup?: ExistingGroup };
+type ExistingAgent = Pick<Agent, "id" | "name" | "status">;
+type Notice = { ok: boolean; message: string; existingGroup?: ExistingGroup; existingAgent?: ExistingAgent };
+class AgentNameConflict extends Error {
+  constructor(message: string, readonly existingAgent?: ExistingAgent) {
+    super(message);
+  }
+}
 class GroupNameConflict extends Error {
   constructor(message: string, readonly existingGroup?: ExistingGroup) {
     super(message);
@@ -28,7 +34,8 @@ class GroupNameConflict extends Error {
 }
 function failureNotice(error: unknown): Notice {
   return { ok: false, message: errorText(error),
-    ...(error instanceof GroupNameConflict ? { existingGroup: error.existingGroup } : {}) };
+    ...(error instanceof GroupNameConflict ? { existingGroup: error.existingGroup } : {}),
+    ...(error instanceof AgentNameConflict ? { existingAgent: error.existingAgent } : {}) };
 }
 type Member = {
   clerkUserId: string; role: string;
@@ -173,6 +180,9 @@ async function accessRequest<T>(path: string, init: RequestInit = {}): Promise<T
     if (response.status === 409 && payload.code === "ACCESS_GROUP_NAME_CONFLICT") {
       throw new GroupNameConflict(payload.message, payload.existingGroup);
     }
+    if (response.status === 409 && payload.code === "ACCESS_AGENT_NAME_CONFLICT") {
+      throw new AgentNameConflict(payload.message, payload.existingAgent);
+    }
     throw new Error(payload.message || payload.error || `Request failed (${response.status}).`);
   }
   if (response.status === 204) return undefined as T;
@@ -208,6 +218,7 @@ export function AccessGovernanceSettings() {
   const [busy, setBusy] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [agentOwner, setAgentOwner] = useState("");
+  const registeringAgent = useRef(false);
   const [userGroupName, setUserGroupName] = useState("");
   const [userGroupChoice, setUserGroupChoice] = useState("");
   const creatingUserGroup = useRef(false);
@@ -511,7 +522,17 @@ export function AccessGovernanceSettings() {
         row?.focus({ preventScroll: true });
       } catch (error) { setNotice(failureNotice(error)); }
     }}
-  >View existing group</Button>}</>;
+  >View existing group</Button>}{value.existingAgent && <Button
+    size="sm" variant="outline" disabled={busy} className="ml-2"
+    onClick={async () => {
+      try {
+        await refresh();
+        const row = document.getElementById(`access-agent-${value.existingAgent!.id}`);
+        row?.scrollIntoView({ behavior: "smooth", block: "center" });
+        row?.focus({ preventScroll: true });
+      } catch (error) { setNotice(failureNotice(error)); }
+    }}
+  >View existing agent</Button>}</>;
   return (
     <Card className="overflow-hidden p-0">
       <CardContent className="p-0">
@@ -606,9 +627,11 @@ export function AccessGovernanceSettings() {
                   <SectionTitle title="Registered agents" detail="Register an existing named agent and assign its accountable owner. Retiring a registration revokes its active participation without deleting the record." />
                   {canManage && <form className="mb-3 flex flex-wrap gap-2" onSubmit={(event) => {
                     event.preventDefault();
-                    if (!agentName.trim() || !agentOwner) return;
-                    void perform(() => accessRequest("/agents", { method: "POST", body: JSON.stringify({ name: agentName.trim(), ownerUserId: agentOwner }) }), "Registered agent created.");
-                    setAgentName("");
+                    if (registeringAgent.current || !agentName.trim() || !agentOwner) return;
+                    registeringAgent.current = true;
+                    void perform(() => accessRequest("/agents", { method: "POST", body: JSON.stringify({ name: agentName.trim(), ownerUserId: agentOwner }) }), "Registered agent created.")
+                      .then((ok) => { if (ok) setAgentName(""); })
+                      .finally(() => { registeringAgent.current = false; });
                   }}>
                     <input aria-label="Agent name" data-testid="input-access-agent-name" className={inputClass} placeholder="Named agent" value={agentName} onChange={(event) => setAgentName(event.target.value)} />
                     <select aria-label="Agent owner" data-testid="select-access-agent-owner" className={inputClass} value={agentOwner} onChange={(event) => setAgentOwner(event.target.value)}>
@@ -617,7 +640,7 @@ export function AccessGovernanceSettings() {
                     <Button type="submit" size="sm" disabled={busy || !agentName.trim() || !agentOwner}><Plus className="mr-1 h-3.5 w-3.5" />Register agent</Button>
                   </form>}
                   <div className="space-y-2">
-                    {data.agents.length ? data.agents.map((agent) => <div key={agent.id} data-testid={`row-access-agent-${agent.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--border)] p-3 text-xs">
+                    {data.agents.length ? data.agents.map((agent) => <div key={agent.id} id={`access-agent-${agent.id}`} tabIndex={-1} data-testid={`row-access-agent-${agent.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--border)] p-3 text-xs">
                       <div><span className="font-medium text-[var(--text-primary)]">{agent.name}</span><span className="ml-2 text-[var(--text-muted)]">{agent.id} · owner {principalLabel("user", agent.ownerUserId, data.members, data.agents)}</span></div>
                       <div className="flex items-center gap-2"><Badge className={agent.status === "active" ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]"}>{agent.status}</Badge>
                         {canManage && agent.status === "active" && <Button variant="outline" size="sm" disabled={busy} onClick={() => void perform(() => accessRequest(`/agents/${encodeURIComponent(agent.id)}`, { method: "PATCH", body: JSON.stringify({ status: "retired", expectedVersion: agent.version }) }), "Agent retired.")}>Retire</Button>}

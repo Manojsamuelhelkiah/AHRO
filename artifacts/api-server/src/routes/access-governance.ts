@@ -65,10 +65,10 @@ function fail(res: Response, status: number, message: string, code: string): voi
 // transaction. Match only the name constraint, never starter IDs or other keys.
 async function respondToGroupNameConflict(
   res: Response, error: unknown, organizationId: string,
-  type: "user-group" | "security-group", name: unknown,
+  type: "user-group" | "security-group" | "agent", name: unknown,
 ): Promise<boolean> {
   if (typeof name !== "string") return false;
-  const constraint = type === "user-group"
+  const constraint = type === "agent" ? "access_agents_org_name_unique" : type === "user-group"
     ? "access_user_groups_org_name_unique" : "access_security_groups_org_name_unique";
   let cause = error;
   const seen = new Set<unknown>();
@@ -83,16 +83,17 @@ async function respondToGroupNameConflict(
     cause = pgError.cause;
   }
   if (!matched) return false;
-  const table = type === "user-group" ? accessUserGroups : accessSecurityGroups;
+  const table = type === "agent" ? accessAgents : type === "user-group" ? accessUserGroups : accessSecurityGroups;
   const [group] = await db.select({ id: table.id, name: table.name, status: table.status })
     .from(table).where(and(eq(table.organizationId, organizationId), eq(table.name, name.trim()))).limit(1);
-  const label = type === "user-group" ? "user group" : "security group";
+  const label = type === "agent" ? "agent" : type === "user-group" ? "user group" : "security group";
+  const noun = type === "agent" ? "agent" : "group";
   res.status(409).json({
-    code: "ACCESS_GROUP_NAME_CONFLICT",
+    code: type === "agent" ? "ACCESS_AGENT_NAME_CONFLICT" : "ACCESS_GROUP_NAME_CONFLICT",
     message: group
-      ? `A ${label} named “${group.name}” already exists in this organization${group.status === "retired" ? " and is retired" : ""}. View the existing group or choose a different name.`
-      : `This ${label} name is already in use in this organization. Refresh the group list and choose a different name.`,
-    ...(group ? { existingGroup: { ...group, type } } : {}),
+      ? `A ${label} named “${group.name}” already exists in this organization${group.status === "retired" ? " and is retired" : ""}. View the existing ${noun} or choose a different name.`
+      : `This ${label} name is already in use in this organization. Refresh the ${noun} list and choose a different name.`,
+    ...(group ? type === "agent" ? { existingAgent: group } : { existingGroup: { ...group, type } } : {}),
   });
   return true;
 }
@@ -883,6 +884,7 @@ router.post("/agents", async (req, res, next) => {
     });
     res.status(201).json({ agent: { id: agentId, name: body.name, ownerUserId: body.ownerUserId, status: "active", version: 1 } });
   } catch (error) {
+    if (await respondToGroupNameConflict(res, error, getOrganizationId(req), "agent", req.body?.name)) return;
     if (error instanceof Error && "status" in error) {
       const coded = error as Error & { status: number; code: string };
       fail(res, coded.status, error.message, coded.code);

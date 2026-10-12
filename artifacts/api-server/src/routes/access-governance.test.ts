@@ -6,6 +6,7 @@ import type { Server } from "node:http";
 import { after, before, test } from "node:test";
 import { and, eq } from "drizzle-orm";
 import {
+  accessAgents,
   accessNamedGrants,
   accessPrincipalSecurityGroupAttachments,
   accessSecurityGroupPolicies,
@@ -331,6 +332,64 @@ after(async () => {
   }
   if (caseId) await db.delete(onbCases).where(eq(onbCases.id, caseId));
   await deleteGovernanceFixture(organizationId);
+});
+
+test("agent name conflicts are actionable, atomic, concurrent-safe and tenant-scoped", { skip: !hasDb }, async () => {
+  const otherOrganizationId = `${suffix}-agents-other`;
+  await db.insert(organizationsTable).values({
+    id: otherOrganizationId, name: "Agent isolation", slug: otherOrganizationId,
+    joinCodeHash: `${otherOrganizationId}-join`, createdByUserId: managerUserId,
+  });
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: otherOrganizationId, clerkUserId: managerUserId, role: "owner",
+  });
+  try {
+    const name = "Agent exact conflict";
+    const body = { name: ` ${name} `, ownerUserId: managerUserId };
+    const parallel = await Promise.all(Array.from({ length: 3 }, () =>
+      mutate("/agents", "POST", managerUserId, body)));
+    assert.deepEqual(parallel.map((result) => result.response.status).sort(), [201, 409, 409]);
+    const agent = parallel.find((result) => result.response.status === 201)!.body.agent;
+    const expectConflict = (result: ApiResult, id = agent.id, status = "active") => {
+      expectStatus(result, 409);
+      assert.equal(result.body.code, "ACCESS_AGENT_NAME_CONFLICT");
+      assert.deepEqual(result.body.existingAgent, { id, name, status });
+      assert.match(result.body.message, /in this organization/);
+      assert.match(result.body.message, /View the existing agent or choose a different name/);
+      assert.deepEqual(Object.keys(result.body).sort(), ["code", "existingAgent", "message"]);
+    };
+    parallel.filter((result) => result.response.status === 409).forEach((result) => expectConflict(result));
+    const foreign = await mutate("/agents", "POST", managerUserId, body, otherOrganizationId);
+    expectStatus(foreign, 201);
+    assert.notEqual(foreign.body.agent.id, agent.id);
+    expectConflict(await mutate("/agents", "POST", managerUserId, body, otherOrganizationId), foreign.body.agent.id);
+    const denied = await mutate("/agents", "POST", humanMemberUserId, body);
+    expectStatus(denied, 403);
+    assert.equal(denied.body.existingAgent, undefined);
+    const invalidOwner = await mutate("/agents", "POST", managerUserId, { ...body, ownerUserId: "foreign-human" });
+    expectStatus(invalidOwner, 400);
+    assert.equal(invalidOwner.body.code, "ACCESS_INVALID_AGENT_OWNER");
+    assert.equal(invalidOwner.body.existingAgent, undefined);
+    expectStatus(await mutate(`/agents/${agent.id}`, "PATCH", managerUserId, { status: "retired", expectedVersion: 1 }), 200);
+    const retired = await mutate("/agents", "POST", managerUserId, body);
+    expectConflict(retired, agent.id, "retired");
+    assert.match(retired.body.message, /is retired/);
+    const rows = await db.select().from(accessAgents).where(and(
+      eq(accessAgents.organizationId, organizationId), eq(accessAgents.name, name)));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].ownerUserId, managerUserId);
+    assert.equal(rows[0].status, "retired");
+    assert.equal(rows[0].version, 2);
+    assert.ok(rows[0].revokedAt);
+    const history = await db.select().from(accessGovernanceHistory).where(and(
+      eq(accessGovernanceHistory.organizationId, organizationId),
+      eq(accessGovernanceHistory.entityId, agent.id),
+      eq(accessGovernanceHistory.eventType, "agent.created")));
+    assert.equal(history.length, 1);
+    expectStatus(await mutate("/agents", "POST", managerUserId, { ...body, name: "Agent different name" }), 201);
+  } finally {
+    await deleteGovernanceFixture(otherOrganizationId);
+  }
 });
 
 test("custom group name conflicts are actionable, atomic, concurrent-safe and tenant-scoped", { skip: !hasDb }, async () => {
