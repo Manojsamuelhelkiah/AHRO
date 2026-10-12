@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { customFetch } from "@workspace/api-client-react";
 import { hroBatchErrorMessage } from "../lib/hro-batch-intake-api";
 import { enterClientWorkspace } from "../lib/enter-client-workspace";
@@ -9,9 +10,15 @@ export function CreateClientDialog({ onClose, initialName = "" }: { onClose: () 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState(false);
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onKeyDown={event => { if (event.key === "Escape" && !busy) onClose(); }}>
-    <form role="dialog" aria-modal="true" aria-labelledby="create-client-title"
-      className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 text-[var(--text-primary)] shadow-xl"
+  const [returnFocus] = useState(() => document.activeElement as HTMLElement | null);
+  return <Dialog.Root open onOpenChange={open => { if (!open && !busy) onClose(); }}>
+    <Dialog.Portal>
+    <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
+    <Dialog.Content onEscapeKeyDown={event => { if (busy) event.preventDefault(); }}
+      onCloseAutoFocus={event => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); }}
+      onInteractOutside={event => event.preventDefault()}
+      className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md max-h-[90dvh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 text-[var(--text-primary)] shadow-xl">
+    <form
       onSubmit={async event => {
         event.preventDefault();
         if (busy) return;
@@ -31,9 +38,9 @@ export function CreateClientDialog({ onClose, initialName = "" }: { onClose: () 
           setBusy(false);
         }
       }}>
-      <h2 id="create-client-title" className="text-lg font-semibold">Create client workspace</h2>
-      <p className="mt-2 text-sm text-[var(--text-secondary)]">Creates a separate client organization and enters it. This is different from saving a Client Setup implementation plan. Use fictional client data during development. Policies and operational approvals are not automatically granted.</p>
-      <label className="mt-4 block text-sm">Client name
+      <Dialog.Title className="text-lg font-semibold">Create client workspace</Dialog.Title>
+      <Dialog.Description className="mt-2 text-sm text-[var(--text-secondary)]">Creates a client workspace with separate client data and enters it. This is different from saving a Client Setup implementation plan. Use fictional client data during development. Policies and operational approvals are not automatically granted.</Dialog.Description>
+      <label className="mt-4 block text-sm">Client workspace name
         <input autoFocus required minLength={2} maxLength={100} disabled={busy} value={name} onChange={event => setName(event.target.value)}
           className="mt-1 block w-full rounded border border-[var(--border)] bg-[var(--surface-alt)] p-2" data-testid="input-new-client-name" />
       </label>
@@ -46,11 +53,13 @@ export function CreateClientDialog({ onClose, initialName = "" }: { onClose: () 
       {error && <p role="alert" className="mt-3 text-sm text-[var(--status-red)]">{error}</p>}
       <div className="mt-5 flex flex-wrap justify-end gap-3">
         <button type="button" disabled={busy} onClick={onClose} className="rounded border border-[var(--border)] px-3 py-2">Cancel</button>
-        {created && !busy && <button type="button" onClick={() => window.location.reload()} className="rounded border px-3 py-2">Reload client list</button>}
+        {created && !busy && <button type="button" onClick={() => window.location.reload()} className="rounded border px-3 py-2">Reload client workspaces</button>}
         <button type="submit" disabled={created || busy || name.trim().length < 2} className="rounded bg-[var(--primary)] px-3 py-2 text-white disabled:opacity-50" data-testid="button-create-client-confirm">
-          {busy ? "Creating…" : "Create and enter client"}
+          {busy ? "Creating…" : "Create and enter client workspace"}
         </button>
       </div>
     </form>
-  </div>;
+    </Dialog.Content>
+    </Dialog.Portal>
+  </Dialog.Root>;
 }

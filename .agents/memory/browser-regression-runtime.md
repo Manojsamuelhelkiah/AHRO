@@ -20,3 +20,9 @@ The isolated browser-regression Vite server and the real Clerk preview must use 
 **Why:** Their auth aliases produce different dependency graphs. Concurrent servers sharing a cache can overwrite generated React chunks while the other server still serves its original graph, causing invalid-hook-call failures only in the real preview even when isolated browser tests pass.
 
 **How to apply:** Keep test-auth dependency caches separate from normal development caches. After a cache collision, rebuild the affected generated cache and verify the real signed-in preview, not only the isolated harness.
+
+Same-site privileged browser tests must preserve the browser-facing host through their API proxy, and mocked responses must retain session-lifetime metadata from a real current-session response.
+
+**Why:** Rewriting the upstream Host to a different loopback port makes genuine same-origin browser writes fail the existing cross-site guard. Dropping admin lifetime headers from a mocked rejection can instead make the protected session boundary remount the page, hiding the intended error or dialog.
+
+**How to apply:** Keep Origin and the host seen by the guard consistent without bypassing the guard. Copy actual lifetime headers when mocking an ordinary authorization rejection; omit them only when deliberately testing session expiry. Use fixtures with the permissions required by incidental page requests, or stay on the changed setup flow rather than an unrelated planning wizard.

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 import { CreateClientDialog } from "./create-client-dialog";
 import {
   resolveOrganizationBootstrap,
@@ -121,10 +122,10 @@ export function OrganizationSwitcher() {
   return (
     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
     <label className="min-w-0 max-w-[240px] flex-1">
-      <span className="block text-[10px] font-semibold uppercase text-[var(--text-muted)]">Active client / workspace</span>
+      <span className="block text-[10px] font-semibold uppercase text-[var(--text-muted)]">Client workspaces</span>
       <span className="block break-words text-xs font-semibold" data-testid="active-client-name">{memberships.find(membership => membership.organizationId === selectedId)?.name}</span>
       <select
-        aria-label="Active workspace"
+        aria-label="Active client workspace"
         title={memberships.find(membership => membership.organizationId === selectedId)?.name}
         value={selectedId}
         disabled={pendingOrganizationId !== null}
@@ -217,7 +218,7 @@ export function OrganizationSwitcher() {
             }
           }
         }}
-        className="h-8 w-full min-w-0 truncate rounded-md border px-2 text-xs font-semibold outline-none"
+        className="h-9 w-full min-w-0 truncate rounded-md border px-2 text-xs font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
         style={{
           borderColor: "var(--border)",
           backgroundColor: "var(--surface-alt)",
@@ -237,7 +238,18 @@ export function OrganizationSwitcher() {
       ) : null}
     </label>
     <span className="text-[10px] font-semibold text-[var(--text-secondary)]">{isSuperAdmin ? `Super Admin · ${adminMode === "private" ? "Private MFA session" : "Development"}` : memberships.find(membership => membership.organizationId === selectedId)?.role}</span>
-    {isSuperAdmin && <button type="button" onClick={() => setCreating(true)} className="rounded border border-[var(--border)] px-2 py-1 text-xs" data-testid="button-create-client">New client</button>}
+    <nav aria-label="Client workspace actions" className="flex flex-wrap items-center gap-2">
+      {isSuperAdmin ? (
+        <button type="button" onClick={() => setCreating(true)} disabled={pendingOrganizationId !== null}
+          title="New client" className="min-h-9 rounded border border-[var(--border)] px-2 py-1 text-xs font-semibold focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+          data-testid="button-create-client">Create client workspace</button>
+      ) : (
+        <Link href="/client-setup?organizationAction=create" data-testid="link-create-client-workspace"
+          className="inline-flex min-h-9 items-center rounded border border-[var(--border)] px-2 py-1 text-xs font-semibold focus-visible:ring-2 focus-visible:ring-[var(--primary)]">Create client workspace</Link>
+      )}
+      <Link href="/client-setup?organizationAction=join" data-testid="link-join-client-workspace"
+        className="inline-flex min-h-9 items-center rounded border border-[var(--border)] px-2 py-1 text-xs font-semibold focus-visible:ring-2 focus-visible:ring-[var(--primary)]">Join client workspace</Link>
+    </nav>
     {creating && <CreateClientDialog onClose={() => setCreating(false)} />}
     </div>
   );

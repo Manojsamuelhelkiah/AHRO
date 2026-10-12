@@ -14,6 +14,7 @@ const entryPoints = [
 ].filter((file) => !requestedTestFile || file === requestedTestFile)
   .map((f) => path.join(dir, f));
 const integratedEntryPoints = [
+  "src/components/client-workspace-navigation.integration.test.tsx",
   "src/pages/settings-access-governance.integration.test.tsx",
   "src/pages/settings-context-retention.integration.test.tsx",
   "src/pages/settings-context-manager.integration.test.tsx",
@@ -109,6 +110,7 @@ if (integrationEntryPoints.length > 0) {
   await build({
     ...commonBuildOptions,
     entryPoints: integrationEntryPoints,
+    define: { "import.meta.env.BASE_URL": '"/"' },
     outdir: path.join(dir, "dist-test/integration"),
     external: [
       "node:*",
@@ -141,7 +143,7 @@ if (integrationEntryPoints.length > 0) {
                   "export function ClerkProvider({ children, user, userId }) {",
                   "  return React.createElement(UserContext.Provider, { value: { user, userId: userId === undefined ? user?.id : userId } }, children);",
                   "}",
-                  "export function useUser() { return useContext(UserContext); }",
+                  "export function useUser() { return { ...useContext(UserContext), isLoaded: true }; }",
                   "export function useAuth() { return { userId: useContext(UserContext).userId }; }",
                 ].join("\n"),
             }),

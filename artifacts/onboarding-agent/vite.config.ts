@@ -102,7 +102,9 @@ export default defineConfig(async ({ command }): Promise<UserConfig> => {
           proxy: {
             '/api': {
               target: e2eApiOrigin,
-              changeOrigin: true,
+              // Same-site admin writes must see the browser-facing host, not
+              // the loopback upstream port. This proxy is test-only.
+              changeOrigin: false,
             },
           },
         }

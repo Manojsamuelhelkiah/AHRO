@@ -66,7 +66,7 @@ test("verified administrative reads agree with real projections and never confer
     expect((await background.json()).identity).toBe(false);
     const vault = await page.request.post(`/api/onboarding/cases/${fixture.caseId}/employee-vault`, {
       headers: { "x-organization-id": fixture.organizationId,
-        origin: `${mode === "private" ? "https" : "http"}://127.0.0.1:4178` },
+        origin: `${mode === "private" ? "https" : "http"}://${new URL(page.url()).host}` },
       data: { purpose: "Admin must not request employee consent", expiresAt: new Date(Date.now() + 86400000).toISOString() },
     });
     expect(vault.status()).toBe(403);

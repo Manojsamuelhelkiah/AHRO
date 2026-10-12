@@ -462,7 +462,7 @@ export function ClientSetupPage() {
         }
       })
       .catch((caught) => {
-        if (active) setLoadError(caught instanceof Error ? caught.message : 'Could not load organization access');
+        if (active) setLoadError(caught instanceof Error ? caught.message : 'Could not load client workspace access');
       });
     return () => {
       active = false;
@@ -484,7 +484,7 @@ export function ClientSetupPage() {
     return <div role="alert" className="mx-auto mt-12 max-w-xl rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{loadError}</div>;
   }
   if (organization === undefined || !userLoaded) {
-    return <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">Loading organization…</div>;
+    return <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">Loading client workspace…</div>;
   }
   if (organization === null || organizationAction) {
     return (
@@ -620,7 +620,7 @@ function OrganizationSetup({
       } as OrganizationSummary;
       if (kind === 'create') {
         if (typeof result.joinCode !== 'string' || !result.joinCode) {
-          throw new Error('The organization was created, but its join code was not returned. Do not create another organization; contact support.');
+          throw new Error('The client workspace was created, but its join code was not returned. Do not create another workspace; contact support.');
         }
         try {
           sessionStorage.setItem(
@@ -637,7 +637,7 @@ function OrganizationSetup({
       }
       onReady(organization);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Organization setup failed');
+      setError(caught instanceof Error ? caught.message : 'Client workspace setup failed');
     } finally {
       setSaving(false);
     }
@@ -676,12 +676,12 @@ function OrganizationSetup({
             <Building2 className="h-6 w-6" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900">
-            {createdOrganization ? 'Save your workspace join code' : 'Set up your organization'}
+            {createdOrganization ? 'Save your client workspace join code' : mode === 'create' ? 'Create client workspace' : 'Join client workspace'}
           </h1>
           <p className="mt-2 text-sm text-slate-500">
             {createdOrganization
-              ? 'This code is shown only once. Save it now so teammates can join your workspace.'
-              : 'Client data belongs to an application workspace, separate from your Clerk sign-in.'}
+              ? 'This code is shown only once. Save it now so teammates can join your client workspace.'
+              : 'Each client workspace keeps its client data separate. Opening setup does not change your active workspace.'}
           </p>
         </div>
 
@@ -690,7 +690,7 @@ function OrganizationSetup({
             <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
               <p className="text-sm font-semibold text-slate-800">{createdOrganization.name}</p>
               <label htmlFor="created-organization-join-code" className="mt-3 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                One-time join code
+                One-time client workspace join code
               </label>
               <div className="mt-2 flex gap-2">
                 <input
@@ -706,7 +706,7 @@ function OrganizationSetup({
                 </button>
               </div>
               <p className="mt-3 text-xs leading-5 text-slate-600">
-                Send this code to teammates you want to invite. They can enter it under “Join workspace.”
+                Send this code to teammates you want to invite. They can enter it under “Join client workspace.”
               </p>
               <div className="mt-4 rounded-md border border-indigo-200 bg-white/70 p-3 text-xs leading-5 text-slate-600">
                 <p className="font-semibold text-slate-800">
@@ -727,18 +727,18 @@ function OrganizationSetup({
         ) : (
           <>
         <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
-          <button type="button" onClick={() => setMode('create')} className={`rounded-md px-3 py-2 text-sm font-semibold ${mode === 'create' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}`}>
-            Create workspace
+          <button type="button" aria-pressed={mode === 'create'} disabled={saving} onClick={() => setMode('create')} className={`rounded-md px-3 py-2 text-sm font-semibold focus-visible:ring-2 focus-visible:ring-indigo-500 ${mode === 'create' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}`}>
+            Create client workspace
           </button>
-          <button type="button" onClick={() => setMode('join')} className={`rounded-md px-3 py-2 text-sm font-semibold ${mode === 'join' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}`}>
-            Join workspace
+          <button type="button" aria-pressed={mode === 'join'} disabled={saving} onClick={() => setMode('join')} className={`rounded-md px-3 py-2 text-sm font-semibold focus-visible:ring-2 focus-visible:ring-indigo-500 ${mode === 'join' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}`}>
+            Join client workspace
           </button>
         </div>
 
         {mode === 'create' ? (
           <>
             <label className="block text-sm font-semibold text-slate-700">
-              Organization name
+              Client workspace name
               <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Acme People Operations" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-indigo-500" />
             </label>
             <label className="mt-4 block text-sm font-semibold text-slate-700">
@@ -799,8 +799,8 @@ function OrganizationSetup({
           </>
         ) : (
           <label className="block text-sm font-semibold text-slate-700">
-            Join code
-            <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Enter the code from your workspace owner" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-mono font-normal uppercase outline-none focus:border-indigo-500" />
+            Client workspace join code
+            <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Enter the code from your client workspace owner" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-mono font-normal uppercase outline-none focus:border-indigo-500" />
           </label>
         )}
 
@@ -808,14 +808,14 @@ function OrganizationSetup({
 
         <Button type="button" disabled={saving || (mode === 'create' ? name.trim().length < 2 || primaryCountry.length !== 2 : !joinCode.trim())} onClick={() => submit(mode)} className="mt-6 w-full justify-center bg-indigo-600 text-white">
           {mode === 'create' ? <Building2 className="mr-2 h-4 w-4" /> : <Users className="mr-2 h-4 w-4" />}
-          {saving ? 'Setting up…' : mode === 'create' ? 'Create organization' : 'Join organization'}
+          {saving ? 'Setting up…' : mode === 'create' ? 'Create client workspace' : 'Join client workspace'}
         </Button>
 
         <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-wider text-slate-400">
           <span className="h-px flex-1 bg-slate-200" />or<span className="h-px flex-1 bg-slate-200" />
         </div>
         <button type="button" disabled={saving} onClick={() => submit('demo')} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-          <FlaskConical className="h-4 w-4" /> Explore the Demo Organization
+          <FlaskConical className="h-4 w-4" /> Explore the Demo client workspace
         </button>
           </>
         )}
@@ -856,7 +856,7 @@ async function organizationRequest(path: string, init?: RequestInit) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(body.message || 'Organization setup failed');
+    throw new Error(body.message || 'Client workspace setup failed');
   }
   return body;
 }

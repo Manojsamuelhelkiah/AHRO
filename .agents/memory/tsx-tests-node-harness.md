@@ -24,6 +24,12 @@ Mounted page tests that use Wouter or form libraries also need the happy-dom `lo
 
 **How to apply:** mirror the complete browser-global setup from existing mounted page suites whenever a test imports routing, forms, dialogs, or query-driven pages.
 
+Browser-sensitive modules must initialize after the test DOM exists, not just render after it exists.
+
+**Why:** React DOM selects input-event support at import time, and Radix selects layout-effect support at import time. Importing them before installing browser globals can silently disable controlled input updates or portal mounting even when click-driven components pass.
+
+**How to apply:** Dynamically import mounted components and React DOM after installing the test Window. Include computed-style, custom-event and node-filter globals for real dialog focus/portal behavior, then test input changes and dialog opening rather than weakening those assertions.
+
 Wouter instruments browser History methods at module initialization; statically importing it before creating a test Window misses that instrumentation.
 
 **Why:** Routed component assertions may render correctly while query-only navigation never notifies subscribers, so a partial test DOM can falsely suggest broken application navigation.
