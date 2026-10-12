@@ -8,6 +8,27 @@
 import * as zod from 'zod';
 
 
+/**
+ * Requires an owner/admin or authenticated verified governance operator. Only active members of the pinned client are included. Names are display labels, never authority or identity proof.
+ * @summary List client-scoped members and authority roles for appointments
+ */
+export const GetGovernanceAuthorityOptionsResponse = zod.object({
+  "organizationId": zod.string(),
+  "canNominate": zod.boolean(),
+  "canVerify": zod.boolean(),
+  "members": zod.array(zod.object({
+  "clerkUserId": zod.string(),
+  "role": zod.enum(['owner', 'admin', 'member']),
+  "name": zod.string().nullable(),
+  "email": zod.string().nullable()
+})),
+  "roles": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string()
+}))
+})
+
+
 export const StartUatSignInResponse = zod.object({
   "expiresAt": zod.coerce.date()
 })

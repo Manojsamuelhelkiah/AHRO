@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
+  getPinnedOrganizationIdForPage,
+  type GetGovernanceAuthorityOptions200,
 } from "@workspace/api-client-react";
 
 export type DecisionStatus = "draft" | "provisional" | "approved" | "rejected" | "superseded";
@@ -179,8 +181,18 @@ export function useGetGovernanceAssignments(options?: { query?: { refetchInterva
 export function usePostGovernanceAssignments() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<GovernanceAssignment>) => post<{ assignment: GovernanceAssignment }>("/api/governance/assignments", data),
+    mutationFn: (data: { role: string; assigneeUserId: string; assignmentReason: string }) => post<{ assignment: GovernanceAssignment }>("/api/governance/assignments", data),
     onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
+  });
+}
+
+export function useGovernanceAuthorityOptions(enabled: boolean) {
+  const organizationId = getPinnedOrganizationIdForPage();
+  return useQuery({
+    queryKey: [...keys.all, "authority-options", organizationId],
+    queryFn: () => get<GetGovernanceAuthorityOptions200>("/api/governance/authority-options"),
+    enabled,
+    refetchInterval: 60000,
   });
 }
 

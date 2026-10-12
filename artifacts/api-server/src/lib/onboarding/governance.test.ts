@@ -21,6 +21,7 @@ import {
   dispatchDueGovernanceReminders,
   GovernanceConflictError,
   GovernancePermissionError,
+  GovernanceValidationError,
   listGovernanceAssignments,
   reviewGovernanceDecision,
   reconcileGovernanceDispatch,
@@ -31,6 +32,7 @@ import {
   verifyGovernanceAuthority,
   getSensitiveLifecycleAuthorityContext,
 } from "./governance";
+import { authorityRoleOptions, getGovernanceAuthorityOptions, GovernanceDirectoryUnavailableError } from "./governance-authority-options";
 import {
   GovernanceDispatchBlockedError,
   withGovernanceDispatch,
@@ -99,6 +101,38 @@ after(async () => {
 });
 
 describe("governance decision register", { concurrency: false }, () => {
+  test("authority picker uses canonical roles and only the pinned client's active member IDs", async () => {
+    const requestedIds: string[] = [];
+    const load = async (ids: string[]) => {
+      requestedIds.push(...ids);
+      return ids.map((id) => ({ id, name: "Same Display Name", email: null }));
+    };
+    const options = await getGovernanceAuthorityOptions(organizationId, admin, load);
+    assert.equal(options.organizationId, organizationId);
+    assert.equal(options.canNominate, true);
+    assert.equal(options.canVerify, false);
+    assert.deepEqual(new Set(requestedIds), new Set([adminId, operatorId, specialistId]));
+    assert.equal(options.members.length, 3);
+    assert.ok(options.members.every((member) => member.name === "Same Display Name"));
+    assert.ok(!options.members.some((member) => member.clerkUserId === contextMemberId));
+    const operatorOptions = await getGovernanceAuthorityOptions(organizationId, operator, load);
+    assert.equal(operatorOptions.canVerify, true);
+    assert.equal(operatorOptions.canNominate, false);
+    const deniedCalls: string[] = [];
+    await assert.rejects(getGovernanceAuthorityOptions(organizationId, specialist, async (ids) => {
+      deniedCalls.push(...ids); return [];
+    }), GovernancePermissionError);
+    assert.deepEqual(deniedCalls, []);
+    await assert.rejects(getGovernanceAuthorityOptions(organizationId, admin, async () => {
+      throw new Error("Directory unavailable");
+    }), GovernanceDirectoryUnavailableError);
+    const roles = authorityRoleOptions(["Custom Reviewer", "legal"]);
+    assert.ok(roles.some((role) => role.id === "hr-policy-maintain" && role.label === "HR Policy Maintainer"));
+    for (const id of ["hr-compliance", "legal", "occupational-health", "payroll", "hr-policy-historical-review", "hr-policy-handoff-resolve", "custom-reviewer"]) {
+      assert.ok(roles.some((role) => role.id === id));
+    }
+    assert.equal(roles.filter((role) => role.id === "legal").length, 1);
+  });
   test("projects missing, nominated, verified, revoked, and expired authority safely", async () => {
     let context = await getSensitiveLifecycleAuthorityContext(contextOrganizationId);
     assert.equal(context.authorityStatus, "missing");
@@ -313,5 +347,34 @@ describe("governance decision register", { concurrency: false }, () => {
       expectedRevision: 1, rationale: "No provider marker was created by the preflight denial.",
     });
     assert.equal(revised.revision, 2);
+  });
+
+  test("picker appointments preserve member IDs, references and actor-attributed history", async () => {
+    const grant = await assignGovernanceAuthority(organizationId, operator, {
+      role: "hr-policy-maintain", assigneeUserId: specialistId, verificationReference: "approved-maintainer-appointment",
+    });
+    assert.equal(grant.assigneeUserId, specialistId);
+    assert.equal(grant.role, "hr-policy-maintain");
+    assert.equal(grant.verificationReference, "approved-maintainer-appointment");
+    assert.equal(grant.verifiedByUserId, operatorId);
+    const [event] = await db.select().from(onbGovernanceHistory).where(eq(onbGovernanceHistory.entityKey, String(grant.id)));
+    assert.equal(event?.actorUserId, operatorId);
+    await assert.rejects(assignGovernanceAuthority(organizationId, operator, {
+      role: "hr-policy-maintain", assigneeUserId: contextMemberId, verificationReference: "wrong-client",
+    }), GovernanceValidationError);
+    await assert.rejects(assignGovernanceAuthority(organizationId, operator, {
+      role: "hr-policy-maintain", assigneeUserId: specialistId, verificationReference: " ",
+    }), GovernanceValidationError);
+    const nomineeId = `picker-nominee-${suffix}`;
+    await db.insert(organizationMembershipsTable).values({ organizationId, clerkUserId: nomineeId, role: "member" });
+    const nomination = await requestGovernanceAuthority(organizationId, admin, {
+      role: "hr-policy-maintain", assigneeUserId: nomineeId, assignmentReason: "Approved nominee to review",
+    });
+    await db.update(organizationMembershipsTable).set({ revokedAt: new Date() }).where(eq(organizationMembershipsTable.clerkUserId, nomineeId));
+    await assert.rejects(verifyGovernanceAuthority(organizationId, operator, nomination.id, "stale-nominee"), GovernanceValidationError);
+    const options = await getGovernanceAuthorityOptions(organizationId, admin, async () => []);
+    assert.ok(!options.members.some((member) => member.clerkUserId === nomineeId));
+    const revoked = await revokeGovernanceAuthority(organizationId, operator, grant.id);
+    assert.equal(revoked.revokedByUserId, operatorId);
   });
 });

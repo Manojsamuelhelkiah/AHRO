@@ -82,6 +82,7 @@ import type {
   FlowClass,
   FlowOverride,
   FlowOverrideInput,
+  GetGovernanceAuthorityOptions200,
   GetOnboardingActionCenterParams,
   GetOnboardingGuardrails200,
   GetOnboardingOutcomeKpisParams,
@@ -399,6 +400,84 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetGovernanceAuthorityOptionsUrl = () => {
+
+
+
+
+  return `/api/governance/authority-options`
+}
+
+/**
+ * Requires an owner/admin or authenticated verified governance operator. Only active members of the pinned client are included. Names are display labels, never authority or identity proof.
+ * @summary List client-scoped members and authority roles for appointments
+ */
+export const getGovernanceAuthorityOptions = async ( options?: RequestInit): Promise<GetGovernanceAuthorityOptions200> => {
+
+  return customFetch<GetGovernanceAuthorityOptions200>(getGetGovernanceAuthorityOptionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGovernanceAuthorityOptionsQueryKey = () => {
+    return [
+    `/api/governance/authority-options`
+    ] as const;
+    }
+
+
+export const getGetGovernanceAuthorityOptionsQueryOptions = <TData = Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGovernanceAuthorityOptionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>> = ({ signal }) => getGovernanceAuthorityOptions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGovernanceAuthorityOptionsQueryResult = NonNullable<Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>>
+export type GetGovernanceAuthorityOptionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List client-scoped members and authority roles for appointments
+ */
+
+export function useGetGovernanceAuthorityOptions<TData = Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGovernanceAuthorityOptionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getStartUatSignInUrl = () => {
 

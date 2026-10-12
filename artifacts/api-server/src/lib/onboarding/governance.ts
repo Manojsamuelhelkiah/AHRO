@@ -820,6 +820,16 @@ export async function verifyGovernanceAuthority(
   if (!Number.isInteger(id) || id < 1) throw new GovernanceValidationError("A valid assignment id is required.");
   const assignment = await db.transaction(async (tx) => {
   await assertGovernanceMutationAllowed(tx, organizationId);
+  const [nominee] = await tx.select({ userId: organizationMembershipsTable.clerkUserId })
+    .from(onbGovernanceAuthorityAssignments).innerJoin(organizationMembershipsTable, and(
+      eq(organizationMembershipsTable.organizationId, onbGovernanceAuthorityAssignments.organizationId),
+      eq(organizationMembershipsTable.clerkUserId, onbGovernanceAuthorityAssignments.assigneeUserId),
+      isNull(organizationMembershipsTable.revokedAt),
+    )).where(and(
+      eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
+      eq(onbGovernanceAuthorityAssignments.id, id),
+    )).limit(1);
+  if (!nominee) throw new GovernanceValidationError("Nominee must still be an active member of this organization.");
   const [assignment] = await tx.update(onbGovernanceAuthorityAssignments).set({
     verificationStatus: "verified",
     verifiedByUserId: actor.userId,
@@ -829,6 +839,7 @@ export async function verifyGovernanceAuthority(
     eq(onbGovernanceAuthorityAssignments.id, id),
     eq(onbGovernanceAuthorityAssignments.verificationStatus, "pending"),
     isNull(onbGovernanceAuthorityAssignments.revokedAt),
+    or(isNull(onbGovernanceAuthorityAssignments.expiresAt), gt(onbGovernanceAuthorityAssignments.expiresAt, new Date())),
   )).returning();
   if (!assignment) throw new GovernanceConflictError("Authority nomination is missing, revoked, or already verified.");
   await tx.insert(onbGovernanceHistory).values({

@@ -10113,6 +10113,37 @@ export interface StandardOperationsView {
   manualFulfillment: StandardOperationsViewManualFulfillmentItem[];
 }
 
+export type GetGovernanceAuthorityOptions200MembersItemRole = typeof GetGovernanceAuthorityOptions200MembersItemRole[keyof typeof GetGovernanceAuthorityOptions200MembersItemRole];
+
+
+export const GetGovernanceAuthorityOptions200MembersItemRole = {
+  owner: 'owner',
+  admin: 'admin',
+  member: 'member',
+} as const;
+
+export type GetGovernanceAuthorityOptions200MembersItem = {
+  clerkUserId: string;
+  role: GetGovernanceAuthorityOptions200MembersItemRole;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  email: string | null;
+};
+
+export type GetGovernanceAuthorityOptions200RolesItem = {
+  id: string;
+  label: string;
+};
+
+export type GetGovernanceAuthorityOptions200 = {
+  organizationId: string;
+  canNominate: boolean;
+  canVerify: boolean;
+  members: GetGovernanceAuthorityOptions200MembersItem[];
+  roles: GetGovernanceAuthorityOptions200RolesItem[];
+};
+
 export type DownloadHroBatchTemplateParams = {
 format: DownloadHroBatchTemplateFormat;
 };

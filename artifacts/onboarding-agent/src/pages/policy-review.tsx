@@ -16,6 +16,7 @@ import {
   usePostGovernanceAssignments,
   usePostGovernanceAssignmentsIdVerify,
   useGetGovernanceHistory,
+  useGovernanceAuthorityOptions,
   type GovernanceDecision,
   type GovernanceRequirement,
    type GovernanceAssignment,
@@ -40,8 +41,8 @@ function errorMessage(error: unknown, fallback: string) {
 
 function assignmentState(assignment: GovernanceAssignment, now = Date.now()) {
   if (assignment.revokedAt) return 'revoked' as const;
-  if (assignment.verificationStatus !== 'verified') return 'pending' as const;
   if (assignment.expiresAt && new Date(assignment.expiresAt).getTime() <= now) return 'expired' as const;
+  if (assignment.verificationStatus !== 'verified') return 'pending' as const;
   return 'active' as const;
 }
 
@@ -480,7 +481,9 @@ function RequirementCard({ req, assignments, userId }: {
 }
 
 function AuthorityManager() {
-  const { data: assignments, isLoading } = useGetGovernanceAssignments({ query: { refetchInterval: 60000, refetchIntervalInBackground: true } });
+  const { loading: roleLoading } = useOrganizationRole();
+  const options = useGovernanceAuthorityOptions(!roleLoading);
+  const { data: assignments, isLoading, error: assignmentsError } = useGetGovernanceAssignments({ query: { refetchInterval: 60000, refetchIntervalInBackground: true } });
   const revoke = usePostGovernanceAssignmentsIdRevoke();
   const verify = usePostGovernanceAssignmentsIdVerify();
   const nominate = usePostGovernanceAssignments();
@@ -488,6 +491,27 @@ function AuthorityManager() {
   const [bootstrapRef, setBootstrapRef] = useState('');
   const [bootstrapRole, setBootstrapRole] = useState('');
   const [bootstrapAssignee, setBootstrapAssignee] = useState('');
+  const [verificationRefs, setVerificationRefs] = useState<Record<number, string>>({});
+  const [actionError, setActionError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const canVerify = options.isSuccess && !options.isRefetchError && options.data.canVerify;
+  const canNominate = options.isSuccess && !options.isRefetchError && options.data.canNominate;
+  const busy = bootstrap.isPending || nominate.isPending || verify.isPending || revoke.isPending;
+  const chosenMember = options.data?.members.find((member) => member.clerkUserId === bootstrapAssignee);
+  const chosenRole = options.data?.roles.find((role) => role.id === bootstrapRole);
+  const canSubmit = !busy && !options.isError && !!chosenMember && !!chosenRole && !!bootstrapRef.trim();
+  const memberName = (id: string) => {
+    const member = options.data?.members.find((item) => item.clerkUserId === id);
+    return member?.name || member?.email || id;
+  };
+  const fail = (error: unknown) => {
+    setActionError(errorMessage(error, 'Action failed. Reload before retrying.'));
+    setSuccessMessage('');
+  };
+  const resetForm = () => {
+    setBootstrapRef(''); setBootstrapRole(''); setBootstrapAssignee('');
+    setActionError('');
+  };
 
   if (isLoading) return <LoadingBlock>Loading authorities...</LoadingBlock>;
 
@@ -502,31 +526,38 @@ function AuthorityManager() {
         </p>
       </div>
       <CardContent className="p-0">
+        {assignmentsError && <p role="alert" className="p-4 text-[var(--status-red)]">{errorMessage(assignmentsError, 'Could not load authorities.')}</p>}
         <div className="divide-y divide-[var(--border)]">
           {assignments?.map(a => (
             <div key={a.id} className="p-[var(--space-md)] flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-[var(--text-sm)] text-[var(--text-primary)]">{a.role}</span>
+                   <span className="font-semibold text-[var(--text-sm)] text-[var(--text-primary)]">{options.data?.roles.find((role) => role.id === a.role)?.label ?? a.role}</span>
                    <Badge className={cn("shadow-none text-[10px] uppercase", assignmentState(a) === 'active' ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : assignmentState(a) === 'pending' || assignmentState(a) === 'expired' ? 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]' : 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]')}>
                      {assignmentState(a) === 'active' ? 'Verified active' : assignmentState(a) === 'pending' ? 'Nominated — pending verification' : assignmentState(a)}
                    </Badge>
                 </div>
                 <div className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">
-                   Assignee: <span className="font-mono">{a.assigneeUserId}</span> &bull; {a.verificationStatus === 'verified' ? <>Verified by: <span className="font-mono">{a.verifiedByUserId}</span></> : 'Owner/admin nomination only — not approval authority'}
+                    Assignee: <span>{memberName(a.assigneeUserId)}</span> <span className="font-mono">({a.assigneeUserId})</span> &bull; {a.verificationStatus === 'verified' ? <>Verified by: <span>{memberName(a.verifiedByUserId)}</span> <span className="font-mono">({a.verifiedByUserId})</span></> : 'Owner/admin nomination only — not approval authority'}
                 </div>
+                 <p className="mt-1 text-[var(--text-xs)] text-[var(--text-muted)]">Appointment reference: {a.verificationReference}</p>
                  {a.expiresAt && <div className={cn("mt-1 text-[var(--text-xs)]", assignmentState(a) === 'expired' ? 'text-[var(--status-red-fg)]' : 'text-[var(--text-muted)]')}>Expires {format(new Date(a.expiresAt), 'MMM d, yyyy p')}{assignmentState(a) === 'expired' ? ' — no longer active' : ''}</div>}
-                {a.verificationStatus === 'pending' && !a.revokedAt && (
+                 {assignmentState(a) === 'pending' && canVerify && (
                    <div className="mt-2 flex items-center gap-2">
                      <input
                        type="text"
-                       placeholder="Verification Token"
+                        aria-label={`Verification reference for ${memberName(a.assigneeUserId)}`}
+                        placeholder="Appointment verification reference"
                        className="text-[var(--text-sm)] rounded-[var(--radius-md)] h-[24px] px-[8px] border border-input outline-none focus:border-[var(--primary)] bg-background max-w-[200px]"
-                       id={`verify-${a.id}`}
+                        value={verificationRefs[a.id] ?? ''}
+                        onChange={(event) => setVerificationRefs((refs) => ({ ...refs, [a.id]: event.target.value }))}
                      />
-                     <Button size="sm" variant="outline" className="h-[24px] px-2 text-[10px]" onClick={() => {
-                        const ref = (document.getElementById(`verify-${a.id}`) as HTMLInputElement)?.value;
-                        if (ref) verify.mutate({ id: a.id, verificationReference: ref });
+                      <Button size="sm" variant="outline" className="h-[24px] px-2 text-[10px]" disabled={busy || !verificationRefs[a.id]?.trim()} onClick={() => {
+                         setActionError(''); setSuccessMessage('');
+                         verify.mutate({ id: a.id, verificationReference: verificationRefs[a.id].trim() }, {
+                           onSuccess: () => { setVerificationRefs((refs) => ({ ...refs, [a.id]: '' })); setSuccessMessage('Nomination verified.'); },
+                           onError: fail,
+                         });
                      }}>
                         Submit for server verification
                      </Button>
@@ -536,14 +567,17 @@ function AuthorityManager() {
                   <Badge className="bg-[var(--status-red-bg)] text-[var(--status-red-fg)] shadow-none text-[10px] mt-2">Revoked {format(new Date(a.revokedAt), 'MMM d')}</Badge>
                 )}
               </div>
-              {!a.revokedAt && (
-                <Button variant="outline" size="sm" onClick={() => revoke.mutate(a.id)} className="text-[var(--status-red)] hover:text-[var(--status-red)] hover:bg-[var(--status-red-bg)]">
+               {!a.revokedAt && canVerify && (
+                 <Button variant="outline" size="sm" disabled={busy} onClick={() => {
+                   setActionError(''); setSuccessMessage('');
+                   revoke.mutate(a.id, { onSuccess: () => setSuccessMessage('Authority revoked.'), onError: fail });
+                 }} className="text-[var(--status-red)] hover:text-[var(--status-red)] hover:bg-[var(--status-red-bg)]">
                   Revoke
                 </Button>
               )}
             </div>
           ))}
-          {!assignments?.length && (
+           {!assignmentsError && !assignments?.length && (
             <div className="p-6 text-center text-[var(--text-muted)] text-[var(--text-sm)]">
                No authority nominations or verified assignments are recorded.
             </div>
@@ -553,46 +587,50 @@ function AuthorityManager() {
         <div className="p-[var(--space-md)] bg-[var(--surface-soft)] border-t border-[var(--border)]">
           <h4 className="text-[var(--text-sm)] font-semibold mb-2">Authority nomination and operator assignment</h4>
           <p className="text-[var(--text-xs)] text-[var(--text-muted)] mb-3">An authenticated Super Admin or server-verified governance operator can create, verify and revoke assignments for the selected client. Other owners and admins can nominate a member, but nomination alone grants no authority. Specialist appointments require a recorded verification reference.</p>
+          {options.isLoading && <p role="status">Loading client members and authority roles…</p>}
+          {options.isError && <p role="alert" className="text-[var(--status-red)]">{errorMessage(options.error, 'Could not load client members and roles.')} <Button size="sm" variant="outline" onClick={() => void options.refetch()}>Retry</Button></p>}
+          {options.data && <p className="mb-3 text-[var(--text-xs)] text-[var(--text-muted)]">Client scope: {options.data.organizationId}. Only active members of this client can be selected.</p>}
+          {options.data && !options.data.members.length && <p>No active client members are available for appointment.</p>}
+          {(canVerify || canNominate) && <>
           <div className="flex flex-col md:flex-row gap-2">
-            <input 
-              type="text" 
-              placeholder="Role (e.g. CISO, Legal)" 
+             <select
+               aria-label="Authority role"
               className="flex-1 text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] border border-input outline-none focus:border-[var(--primary)] bg-background max-w-[150px]"
               value={bootstrapRole}
               onChange={e => setBootstrapRole(e.target.value)}
-            />
-            <input 
-              type="text" 
-              placeholder="Assignee User ID" 
+             ><option value="">Choose authority role</option>{options.data?.roles.map((role) => <option key={role.id} value={role.id}>{role.label}</option>)}</select>
+             <select
+               aria-label="Client member"
               className="flex-1 text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] border border-input outline-none focus:border-[var(--primary)] bg-background max-w-[200px]"
               value={bootstrapAssignee}
               onChange={e => setBootstrapAssignee(e.target.value)}
-            />
+             ><option value="">Choose client member</option>{options.data?.members.map((member) => <option key={member.clerkUserId} value={member.clerkUserId}>{member.name || member.email || 'Unnamed member'}{member.name && member.email ? ` · ${member.email}` : ''} · {member.role} · {member.clerkUserId}</option>)}</select>
             <input 
               type="text" 
-              placeholder="Verification Reference Token (or Reason for Nomination)" 
+               aria-label={canVerify ? "Appointment verification reference" : "Nomination reason"}
+               placeholder={canVerify ? "Approved appointment verification reference" : "Reason for nomination"}
               className="flex-1 text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] border border-input outline-none focus:border-[var(--primary)] bg-background"
               value={bootstrapRef}
               onChange={e => setBootstrapRef(e.target.value)}
             />
             <div className="flex gap-2 shrink-0">
-              <Button size="sm" variant="outline" disabled={!bootstrapRef || !bootstrapRole || !bootstrapAssignee || nominate.isPending} onClick={() => {
-                nominate.mutate({ role: bootstrapRole, assigneeUserId: bootstrapAssignee, assignmentReason: bootstrapRef } as any, { onSuccess: () => { setBootstrapRef(''); setBootstrapRole(''); setBootstrapAssignee(''); } });
+               {!canVerify && canNominate && <Button size="sm" variant="outline" disabled={!canSubmit} onClick={() => {
+                 setActionError(''); setSuccessMessage('');
+                 nominate.mutate({ role: bootstrapRole, assigneeUserId: bootstrapAssignee, assignmentReason: bootstrapRef.trim() }, { onSuccess: () => { resetForm(); setSuccessMessage('Member nominated. Verification is still required; no authority has been granted.'); }, onError: fail });
               }}>
                 Nominate
-              </Button>
-              <Button size="sm" disabled={!bootstrapRef || !bootstrapRole || !bootstrapAssignee || bootstrap.isPending} onClick={() => {
-                bootstrap.mutate({ role: bootstrapRole, assigneeUserId: bootstrapAssignee, verificationReference: bootstrapRef }, { onSuccess: () => { setBootstrapRef(''); setBootstrapRole(''); setBootstrapAssignee(''); } });
+               </Button>}
+               {canVerify && <Button size="sm" disabled={!canSubmit} onClick={() => {
+                 setActionError(''); setSuccessMessage('');
+                 bootstrap.mutate({ role: bootstrapRole, assigneeUserId: bootstrapAssignee, verificationReference: bootstrapRef.trim() }, { onSuccess: () => { resetForm(); setSuccessMessage('Verified authority appointed.'); }, onError: fail });
               }}>
-                Request operator assignment
-              </Button>
+                 {bootstrap.isPending ? 'Appointing…' : 'Appoint verified authority'}
+               </Button>}
             </div>
           </div>
-          {(bootstrap.isError || nominate.isError || verify.isError) && (
-             <div className="text-[var(--status-red)] text-[10px] uppercase font-bold mt-2">
-                {errorMessage(bootstrap.error ?? nominate.error ?? verify.error, 'Action failed. Reload before retrying.')}
-             </div>
-          )}
+          </>}
+          {actionError && <p role="alert" className="text-[var(--status-red)] mt-2">{actionError}</p>}
+          {successMessage && <p role="status" className="mt-2">{successMessage}</p>}
         </div>
       </CardContent>
     </Card>

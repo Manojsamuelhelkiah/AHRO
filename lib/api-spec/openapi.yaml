@@ -43,6 +43,56 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /governance/authority-options:
+    get:
+      operationId: getGovernanceAuthorityOptions
+      summary: List client-scoped members and authority roles for appointments
+      description: Requires an owner/admin or authenticated verified governance operator. Only active members of the pinned client are included. Names are display labels, never authority or identity proof.
+      tags: [Governance]
+      responses:
+        "200":
+          description: Member choices and server-evaluated appointment capabilities
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organizationId, canNominate, canVerify, members, roles]
+                properties:
+                  organizationId:
+                    type: string
+                  canNominate:
+                    type: boolean
+                  canVerify:
+                    type: boolean
+                  members:
+                    type: array
+                    items:
+                      type: object
+                      required: [clerkUserId, role, name, email]
+                      properties:
+                        clerkUserId:
+                          type: string
+                        role:
+                          type: string
+                          enum: [owner, admin, member]
+                        name:
+                          type: [string, "null"]
+                        email:
+                          type: [string, "null"]
+                  roles:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, label]
+                      properties:
+                        id:
+                          type: string
+                        label:
+                          type: string
+        "403":
+          description: Member directory access denied
+        "503":
+          description: Member identity directory temporarily unavailable
   /uat-auth/challenge:
     post:
       operationId: startUatSignIn
