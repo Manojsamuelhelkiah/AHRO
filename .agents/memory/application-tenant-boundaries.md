@@ -7,6 +7,12 @@ The user selected shared-database, logically isolated client organizations rathe
 
 **Why:** Extend the established application-owned tenancy instead of introducing a competing tenant model or unrequested infrastructure migration.
 
+The active client/workspace name must remain visually identifiable even when the user has only one membership. A client name entered into an implementation scenario is not proof that a separate client tenant was created or selected.
+
+**Why:** The user expects to enter a newly set-up client with a clear client name reference and asked how different clients are visually distinguished.
+
+**How to apply:** Show the authenticated, page-pinned workspace identity consistently; distinguish any selected implementation-plan client name from actual tenant scope. Display demo status and actual workspace role without implying professional authority.
+
 **How to apply:** Preserve shared storage with explicit server-enforced organization boundaries; dedicated databases or cross-client learning require a separate decision.
 
 Membership removal must revoke access without allowing a shared join code or later reinstatement to revive old specialist grants.

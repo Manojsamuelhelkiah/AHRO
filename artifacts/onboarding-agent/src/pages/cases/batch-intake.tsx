@@ -10,7 +10,7 @@ import { useOrganizationRole } from '@/hooks/use-organization-role';
 import { ManualBatchIntakeForm } from './manual-batch-intake';
 import {
   MAX_ROWS, MAX_UPLOAD_BYTES, createHroBatch, downloadHroBatchTemplate, hroBatchHistoryKey, hroBatchTemplatesKey,
-  issuesToCsv, listHroBatchHistory, listHroBatchTemplates, saveBlob, validateHroBatchFile,
+  issuesToCsv, listHroBatchHistory, listHroBatchTemplates, saveBlob, validateHroBatchFile, hroBatchErrorMessage,
 } from '@/lib/hro-batch-intake-api';
 
 const select = 'h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-2 text-sm outline-none focus:border-[var(--primary)]';
@@ -37,7 +37,7 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
   const [settledScope, setSettledScope] = useState(scope);
 
   const templates = useQuery({ queryKey: hroBatchTemplatesKey(scope), queryFn: ({ signal }) => listHroBatchTemplates({ signal }), enabled: !!scope });
-  const history = useQuery({ queryKey: hroBatchHistoryKey(scope), queryFn: ({ signal }) => listHroBatchHistory({ signal }), enabled: !!scope });
+  const history = useQuery({ queryKey: hroBatchHistoryKey(scope), queryFn: ({ signal }) => listHroBatchHistory({ signal }), enabled: !!scope && org.isHR });
 
   const resetWork = (clearInput = true) => {
     epoch.current += 1; abort.current?.abort(); lock.current = false;
@@ -53,7 +53,7 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
   const download = async (format: 'csv' | 'xlsx') => {
     if (!template) return;
     try { saveBlob(await downloadHroBatchTemplate(template.id, format), `${template.id}-v${template.version}.${format}`); }
-    catch (e) { setError((e as Error).message); }
+    catch (e) { setError(hroBatchErrorMessage(e, 'The template could not be downloaded.')); }
   };
   const pick = (f: File | null) => {
     resetWork(false);
@@ -61,7 +61,7 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
     setFile(f);
   };
   const validate = async () => {
-    if (!file || !template || lock.current) return;
+    if (!org.isHR || !file || !template || lock.current) return;
     lock.current = true; const mine = ++epoch.current; abort.current?.abort(); abort.current = new AbortController();
     setBusy('validate'); setError(null); setValidation(null); setConsent(false);
     try {
@@ -69,11 +69,11 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
       if (mine !== epoch.current) return;
       if (v.rows.length > MAX_ROWS) setError(`Limit is ${MAX_ROWS} rows.`);
       setValidation(v);
-    } catch (e) { if (mine === epoch.current) setError((e as Error).message); }
+    } catch (e) { if (mine === epoch.current) setError(hroBatchErrorMessage(e, 'The file could not be validated.')); }
     finally { if (mine === epoch.current) { lock.current = false; setBusy(null); } }
   };
   const commit = async () => {
-    if (!validation?.valid || !template || !consent || !name.trim() || lock.current) return;
+    if (!org.isHR || !validation?.valid || !template || !consent || !name.trim() || lock.current) return;
     lock.current = true; const mine = ++epoch.current; abort.current?.abort(); abort.current = new AbortController();
     setBusy('commit'); setError(null);
     try {
@@ -83,7 +83,7 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
       if (fileInput.current) fileInput.current.value = '';
       queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() });
       queryClient.invalidateQueries({ queryKey: hroBatchHistoryKey(scope) });
-    } catch (e) { if (mine === epoch.current) setError((e as Error).message); }
+    } catch (e) { if (mine === epoch.current) setError(hroBatchErrorMessage(e, 'The cases could not be created.')); }
     finally { if (mine === epoch.current) { lock.current = false; setBusy(null); } }
   };
   const errorCsv = () => validation && saveBlob(new Blob([issuesToCsv(validation.issues)], { type: 'text/csv' }), 'validation-errors.csv');
@@ -101,19 +101,21 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
       </div>
       <div className="flex gap-2 border-b border-[var(--border)] p-3">
         <Button size="sm" variant={mode === 'upload' ? 'default' : 'outline'} onClick={() => { resetWork(); setMode('upload'); }} data-testid="button-mode-upload">Template upload</Button>
-        <Button size="sm" variant={mode === 'manual' ? 'default' : 'outline'} onClick={() => { resetWork(); setMode('manual'); }} data-testid="button-mode-manual">Manual entry</Button>
+        <Button size="sm" disabled={!org.isHR} variant={mode === 'manual' ? 'default' : 'outline'} onClick={() => { resetWork(); setMode('manual'); }} data-testid="button-mode-manual">Manual entry</Button>
       </div>
       {mode === 'manual' ? <div className="p-3"><ManualBatchIntakeForm key={scope} onClose={onClose} /></div> : (
       <div className="space-y-4 p-[var(--space-lg)]">
-        {!scope && <p className="text-xs text-[var(--text-muted)]">Loading your session and organization...</p>}
-        {templates.isError && <p role="alert" className="text-xs text-[var(--status-red)]">Could not load templates. <button className="underline" onClick={() => templates.refetch()}>Retry</button></p>}
+        {!scope && <p role="status" className="text-xs text-[var(--text-muted)]">{org.loading ? 'Loading your session and organization...' : 'Select an active organization to browse templates. If membership could not be loaded, refresh this page.'}</p>}
+        {scope && !org.isHR && <p role="status" className="rounded border border-[var(--border)] p-3 text-xs text-[var(--text-secondary)]">You can browse and download blank templates. Uploading and creating cases requires an organization owner/admin with approved case-flow, profile and notes edit permissions and applicable collection policies.</p>}
+        {templates.isError && <p role="alert" className="text-xs text-[var(--status-red)]">{hroBatchErrorMessage(templates.error, 'Could not load templates.')} <button className="underline" onClick={() => templates.refetch()}>Retry</button></p>}
         {templates.isLoading && <div className="h-9 animate-pulse rounded bg-[var(--surface-alt)]" />}
+        {scope && templates.isSuccess && families.length === 0 && <p role="status" className="text-xs text-[var(--text-muted)]">No batch templates are available. <button className="underline" onClick={() => templates.refetch()}>Reload templates</button></p>}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div><Label>Case family</Label>
-            <select className={select} data-testid="select-family" value={family} onChange={(e) => { resetWork(); setFamily(e.target.value); setTemplateId(''); }}>
-              <option value="">Choose a family</option>{families.map((f) => <option key={f} value={f}>{f}</option>)}</select></div>
+             <select className={select} data-testid="select-family" value={family} disabled={!scope || templates.isPending || templates.isError || families.length === 0} onChange={(e) => { resetWork(); setFamily(e.target.value); setTemplateId(''); }}>
+               <option value="">{!scope || templates.isPending ? 'Loading families…' : templates.isError ? 'Templates unavailable — retry above' : families.length === 0 ? 'No families available' : 'Choose a family'}</option>{families.map((f) => <option key={f} value={f}>{f}</option>)}</select></div>
           <div><Label>Template</Label>
-            <select className={select} data-testid="select-template" value={templateId} disabled={!family} onChange={(e) => { resetWork(); setTemplateId(e.target.value); }}>
+             <select className={select} data-testid="select-template" value={templateId} disabled={!family || templates.isPending || templates.isError} onChange={(e) => { resetWork(); setTemplateId(e.target.value); }}>
               <option value="">Choose a template</option>{options.map((t) => <option key={t.id} value={t.id}>{t.name} (v{t.version})</option>)}</select></div>
         </div>
         {template && <>
@@ -128,8 +130,8 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
               <tbody>{cols.map((c) => <tr key={c.key} className="border-t border-[var(--border)] align-top"><td className="p-2 font-medium">{c.label}</td><td className="p-2">{c.required ? 'Yes' : 'No'}</td><td className="p-2">{c.description}{c.values?.length ? ` Allowed: ${c.values.join(', ')}.` : ''}</td></tr>)}</tbody></table>
           </div>
           <div><Label>Filled file (CSV or Excel, up to 2 MB and {MAX_ROWS} rows)</Label>
-            <input ref={fileInput} type="file" accept=".csv,.xlsx" data-testid="input-file" className="mt-1 block w-full text-xs" onChange={(e) => pick(e.target.files?.[0] ?? null)} /></div>
-          <Button onClick={validate} disabled={!file || busy !== null} data-testid="button-validate"><Upload className="mr-1 h-4 w-4" />{busy === 'validate' ? 'Validating...' : 'Validate file'}</Button>
+             <input ref={fileInput} type="file" disabled={!org.isHR} accept=".csv,.xlsx" data-testid="input-file" className="mt-1 block w-full text-xs" onChange={(e) => pick(e.target.files?.[0] ?? null)} /></div>
+           <Button onClick={validate} disabled={!org.isHR || !file || busy !== null} data-testid="button-validate"><Upload className="mr-1 h-4 w-4" />{busy === 'validate' ? 'Validating...' : 'Validate file'}</Button>
         </>}
         {error && <p role="alert" data-testid="text-error" className="text-xs text-[var(--status-red)]">{error}</p>}
         {validation && template && (
@@ -150,7 +152,7 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
                 <div className="max-w-md"><Label>Batch name</Label><Input className="mt-1" value={name} onChange={(e) => setName(e.target.value)} data-testid="input-batch-name" /></div>
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" className="mt-0.5" checked={consent} onChange={(e) => setConsent(e.target.checked)} data-testid="checkbox-consent" />
                   <span>I confirm I am authorized to submit this personal data and that it should create {validation.rows.length} held review case(s). Duplicates are reconciled, not recreated.</span></label>
-                <Button onClick={commit} disabled={!consent || !name.trim() || busy !== null} data-testid="button-confirm-create">{busy === 'commit' ? 'Creating held cases...' : 'Create held cases'}</Button>
+                 <Button onClick={commit} disabled={!org.isHR || !consent || !name.trim() || busy !== null} data-testid="button-confirm-create">{busy === 'commit' ? 'Creating held cases...' : 'Create held cases'}</Button>
               </div>)}
           </div>)}
         {result && (
@@ -161,7 +163,8 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
         <div className="border-t border-[var(--border)] pt-3" data-testid="section-history">
           <h4 className="text-xs font-semibold text-[var(--text-primary)]">Import history</h4>
           {history.isLoading && <div className="mt-2 h-8 animate-pulse rounded bg-[var(--surface-alt)]" />}
-          {history.isError && <p className="mt-2 text-xs text-[var(--status-red)]">Could not load history. <button className="underline" onClick={() => history.refetch()}>Retry</button></p>}
+          {!org.isHR && <p className="mt-2 text-xs text-[var(--text-muted)]">Import history requires authorized owner/admin case access.</p>}
+          {history.isError && <p className="mt-2 text-xs text-[var(--status-red)]">{hroBatchErrorMessage(history.error, 'Could not load history.')} <button className="underline" onClick={() => history.refetch()}>Retry</button></p>}
           {history.data?.length === 0 && <p className="mt-2 text-xs text-[var(--text-muted)]">No imports yet.</p>}
           <ul className="mt-2 space-y-2">{history.data?.map((h) => (
             <li key={h.batchId} className="rounded border border-[var(--border)] p-2 text-xs" data-testid={`row-history-${h.batchId}`}>

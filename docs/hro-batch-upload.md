@@ -36,7 +36,8 @@ Importing a spreadsheet does not change payroll, grant application access, enrol
 
 ## Access and privacy
 
-- Actual organization owner/admin membership plus explicit case-flow/profile/notes edit grants are required. A demo persona label is not an authorization.
+- Active authenticated organization members can browse and download the blank built-in templates without case edit grants. These downloads contain no client/employee records.
+- Upload validation and case creation still require actual organization owner/admin membership plus explicit case-flow/profile/notes edit grants. A demo persona label is not an authorization.
 - Current approved collection/lifecycle policies must cover the supplied work jurisdiction. These are checked during valid preview and again at commit, including reconciled imports.
 - Submitted narratives require current profile, notes and sensitive-record read authority when disclosed. They are not leaked through the policy snapshot's separate projection.
 - Raw workbook/CSV bytes are parsed in bounded memory and not retained. Normalized case fields and immutable reconciliation receipts persist under the existing lifecycle/hold rules.

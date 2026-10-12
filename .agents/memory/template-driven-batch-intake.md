@@ -14,3 +14,9 @@ Original import inputs and source identifiers must survive policy rebasing. Reco
 **Why:** Correcting workforce policy must not erase intake provenance or permit the original spreadsheet to create duplicate cases.
 
 **How to apply:** Keep source receipts distinct from execution authority. Exclude opaque input narratives from ordinary policy-read projections; disclose them only through the separately authorized case narrative boundary. Non-onboarding intake creates specialist-review requests, never an implicit onboarding execution adapter.
+
+Discovery of built-in blank templates is separate from permission to submit employee data.
+
+**Why:** New clients need to discover the available transaction types before their intake grants and approved collection policies are configured; gating discovery on intake authority made the selectors appear empty.
+
+**How to apply:** Membership-only discovery applies only to built-in schemas and fictional examples. Keep filled uploads, import history, case records and client-private customizations behind their own appropriate permissions. Always explain unavailable catalog or submission access rather than hiding the reason behind empty controls.

@@ -9,6 +9,14 @@ export const hroBatchTemplatesKey = (scope: string) => ['onboarding', 'hro-batch
 export const hroBatchHistoryKey = (scope: string) => ['onboarding', 'hro-batch', scope, 'history'] as const;
 export const hroBatchHistoryPrefix = (scope: string) => ['onboarding', 'hro-batch', scope] as const;
 
+export function hroBatchErrorMessage(error: unknown, fallback: string): string {
+  if (!error || typeof error !== 'object') return fallback;
+  const response = error as { status?: number; data?: { message?: unknown }; message?: unknown };
+  if (response.status === 401) return 'Your session has expired. Refresh this page and sign in again.';
+  if (typeof response.data?.message === 'string' && response.data.message.trim()) return response.data.message;
+  return typeof response.message === 'string' && response.message.trim() ? response.message : fallback;
+}
+
 export const listHroBatchTemplates = (options?: RequestInit) =>
   customFetch<HroBatchTemplate[]>(`${base}/templates`, { ...options, method: 'GET', responseType: 'json' });
 export const listHroBatchHistory = (options?: RequestInit) =>

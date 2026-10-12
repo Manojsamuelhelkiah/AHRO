@@ -6,7 +6,8 @@ import { serializeCaseForRequest } from "./onboarding";
 import { getOrganizationId } from "../lib/organization-scope";
 import { resolveEffectiveAccessInTransaction } from "../lib/access-governance";
 import { HRO_BATCH_TEMPLATES, findHroTemplate, validateHroRows, canonicalIntakeHash, hroRequestForRow, readHroBatchRequest, type IntakeTemplate, type HroIntakeRow } from "../lib/onboarding/hro-batch-templates";
-import { buildHroTemplate, parseHroSpreadsheet, hroUploadMultipart } from "../lib/onboarding/hro-batch-files";
+import { parseHroSpreadsheet, hroUploadMultipart } from "../lib/onboarding/hro-batch-files";
+import catalogRouter from "./onboarding-batch-catalog";
 import { evaluateCaseDerivedLifecycleGateInTransaction, withSensitiveLifecycleFence } from "../lib/onboarding/sensitive-lifecycle";
 
 const router: IRouter = Router();
@@ -53,21 +54,7 @@ async function checkPreviewCollection(req: Request, rows: HroIntakeRow[]): Promi
     }
   }));
 }
-router.get("/onboarding/batch-upload/templates", async (req, res) => {
-  if (!(await authorizeIntake(req, res))) return;
-  res.json(HRO_BATCH_TEMPLATES);
-});
-router.get("/onboarding/batch-upload/templates/:templateId/download", async (req, res) => {
-  if (!(await authorizeIntake(req, res))) return;
-  const definition = findHroTemplate(req.params.templateId);
-  const format = req.query.format;
-  if (!definition || (format !== "csv" && format !== "xlsx")) { res.status(400).json({ message: "Choose a supported template and CSV or XLSX format." }); return; }
-  const bytes = await buildHroTemplate(definition, format);
-  res.setHeader("Content-Type", format === "csv" ? "text/csv; charset=utf-8" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="${definition.id}-v${definition.version}.${format}"`);
-  res.setHeader("Cache-Control", "no-store");
-  res.send(bytes);
-});
+router.use(catalogRouter);
 router.post("/onboarding/batch-upload/validate", async (req, res, next) => {
   if (!(await authorizeIntake(req, res))) return;
   upload(req, res, error => {
