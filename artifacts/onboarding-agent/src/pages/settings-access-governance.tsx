@@ -4,12 +4,13 @@ import { getPinnedOrganizationIdForPage } from "@workspace/api-client-react";
 import { AlertTriangle, Check, History, LockKeyhole, Plus, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { Badge, Button, Card, CardContent, IconTile, LoadingBlock, cn } from "@/components/ui-shared";
 import { useOrganizationRole } from "@/hooks/use-organization-role";
+import { useGovernanceAuthorityOptions } from "@/hooks/use-governance";
 
 type PrincipalType = "user" | "agent";
 type CatalogItem = { key: string; label: string; sensitivity: string; kind: string };
 type Agent = { id: string; name: string; ownerUserId: string; status: string; version: number };
 type UserGroup = {
-  id: string; name: string; status: string; version: number;
+  id: string; name: string; status: string; version: number; ownerUserId: string;
   starterId?: string | null;
   members: Array<{ principalType: string; principalId: string; expiresAt: string | null }>;
   securityGroups: string[];
@@ -216,6 +217,8 @@ export function AccessGovernanceSettings() {
   const snapshot = snapshotQuery.data;
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
+  const [transfer, setTransfer] = useState<{ group: UserGroup; ownerUserId: string; acknowledged: boolean } | null>(null);
+  const ownerDirectory = useGovernanceAuthorityOptions(canManage && !!transfer);
   const [agentName, setAgentName] = useState("");
   const [agentOwner, setAgentOwner] = useState("");
   const registeringAgent = useRef(false);
@@ -715,6 +718,7 @@ export function AccessGovernanceSettings() {
                             setRenamingUserGroup(group.id);
                             setUserGroupDraftName(group.name);
                           }}>Rename</Button>
+                          <Button variant="outline" size="sm" disabled={busy} onClick={() => setTransfer({ group, ownerUserId: "", acknowledged: false })}>Transfer stewardship</Button>
                           <Button variant="outline" size="sm" disabled={busy} onClick={() => void perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}`, { method: "PATCH", body: JSON.stringify({ status: "retired", expectedVersion: group.version }) }), "User group retired.")}>Retire</Button>
                         </div>}
                         {canManage && renamingUserGroup === group.id && <form className="flex flex-wrap gap-2" onSubmit={async (event) => {
@@ -730,6 +734,39 @@ export function AccessGovernanceSettings() {
                           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setRenamingUserGroup(null)}>Cancel</Button>
                         </form>}
                       </div>
+                      <p className="mt-2 text-xs text-[var(--text-muted)]">Steward: {principalLabel("user", group.ownerUserId, ownerDirectory.data?.members ?? data.members, data.agents)}</p>
+                      {transfer?.group.id === group.id && <form className="mt-3 space-y-3 rounded-md border border-[var(--status-amber)] p-3" onSubmit={(event) => {
+                        event.preventDefault();
+                        if (!transfer.ownerUserId || !transfer.acknowledged || busy || ownerDirectory.isError) return;
+                        const reviewed = transfer;
+                        void perform(() => accessRequest(`/user-groups/${encodeURIComponent(reviewed.group.id)}/owner`, {
+                          method: "POST",
+                          body: JSON.stringify({ ownerUserId: reviewed.ownerUserId, expectedVersion: reviewed.group.version, acknowledgeAccessImpact: true }),
+                        }), "Stewardship transferred. Retained memberships need fresh review; no access or specialist authority was granted.")
+                          .then((ok) => { if (ok) setTransfer(null); });
+                      }}>
+                        <p className="text-sm font-semibold">Transfer stewardship of {transfer.group.name}</p>
+                        <p className="text-xs text-[var(--text-secondary)]">Members, attachments, expiry settings, and starter identity are retained. All current and pending memberships will be put on hold for fresh review by the new owner. Access through this group is suspended until reviewed; other independent access paths are unchanged. This does not appoint a policy maintainer, verify a specialist, add the new owner as a member, or grant access.</p>
+                        <p className="text-xs text-[var(--text-muted)]">If you transfer stewardship to yourself, another owner must submit fresh membership requests before you can approve them. The new owner cannot approve their own membership.</p>
+                        {ownerDirectory.isLoading && <p className="text-xs">Loading active owner names…</p>}
+                        {ownerDirectory.isError && <p role="alert" className="text-xs text-[var(--status-red)]">Owner names could not be loaded. <button type="button" onClick={() => void ownerDirectory.refetch()}>Retry</button></p>}
+                        <label className="block text-xs">New organization owner
+                          <select aria-label="New user-group steward" className={`${inputClass} mt-1 w-full`} disabled={busy || !ownerDirectory.data || ownerDirectory.isError} value={transfer.ownerUserId} onChange={(event) => setTransfer({ ...transfer, ownerUserId: event.target.value, acknowledged: false })}>
+                            <option value="">Choose an active owner by name</option>
+                            {(ownerDirectory.data?.members ?? []).filter((member) =>
+                              member.role === "owner" && member.clerkUserId !== transfer.group.ownerUserId &&
+                              data.members.some((active) => active.role === "owner" && active.clerkUserId === member.clerkUserId),
+                            ).map((member) => <option key={member.clerkUserId} value={member.clerkUserId}>{memberLabel(member)}</option>)}
+                          </select>
+                        </label>
+                        {ownerDirectory.data && !ownerDirectory.data.members.some((member) => member.role === "owner" && member.clerkUserId !== transfer.group.ownerUserId && data.members.some((active) => active.role === "owner" && active.clerkUserId === member.clerkUserId)) && <p className="text-xs">No other active organization owners are available.</p>}
+                        <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={transfer.acknowledged} disabled={busy} onChange={(event) => setTransfer({ ...transfer, acknowledged: event.target.checked })} />I understand the access suspension and confirm transfer to {transfer.ownerUserId ? memberLabel(ownerDirectory.data?.members.find((member) => member.clerkUserId === transfer.ownerUserId) ?? { clerkUserId: transfer.ownerUserId, role: "owner" }) : "the selected owner"}.</label>
+                        {group.version !== transfer.group.version && <p role="alert" className="text-xs text-[var(--status-red)]">This group changed. Cancel and reopen the transfer to review its current settings.</p>}
+                        <div className="flex gap-2">
+                          <Button type="submit" size="sm" disabled={busy || ownerDirectory.isError || !transfer.acknowledged || !ownerDirectory.data?.members.some((member) => member.role === "owner" && member.clerkUserId === transfer.ownerUserId) || group.version !== transfer.group.version}>Confirm stewardship transfer</Button>
+                          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setTransfer(null)}>Cancel</Button>
+                        </div>
+                      </form>}
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {group.members.map((principal) => <span key={`${principal.principalType}-${principal.principalId}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-alt)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">{principalLabel(principal.principalType, principal.principalId, data.members, data.agents)} · {expiryLabel(principal.expiresAt)}{canManage && group.status === "active" && <button type="button" aria-label={`Remove ${principalLabel(principal.principalType, principal.principalId, data.members, data.agents)} from ${group.name}`} disabled={busy} className="font-bold text-[var(--status-red)] disabled:opacity-50" onClick={() => void perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}/members`, { method: "PUT", body: JSON.stringify({ principalType: principal.principalType, principalId: principal.principalId, active: false }) }), "Principal removed from user group.")}>×</button>}</span>)}
                         {group.securityGroups.map((groupId) => <span key={groupId} className="inline-flex items-center gap-1 rounded-full bg-[var(--primary-light)] px-2 py-1 text-[10px] text-[var(--primary)]">{data.securityGroups.find((securityGroup) => securityGroup.id === groupId)?.name ?? groupId} · {expiryLabel(group.securityGroupAttachments?.find((link) => link.securityGroupId === groupId)?.expiresAt ?? null)}{canManage && group.status === "active" && <button type="button" aria-label={`Detach ${groupId} from ${group.name}`} disabled={busy} className="font-bold text-[var(--status-red)] disabled:opacity-50" onClick={() => void perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}/security-groups`, { method: "PUT", body: JSON.stringify({ securityGroupId: groupId, active: false }) }), "Security group detached.")}>×</button>}</span>)}
@@ -752,8 +789,8 @@ export function AccessGovernanceSettings() {
                     })}
                   </div>}
                   {pendingMembers.length > 0 && <div className="mt-4 space-y-2 rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)]/30 p-3">
-                    <p className="text-xs font-semibold text-[var(--status-amber-fg)]">Pending sensitive group memberships</p>
-                    <p className="text-xs text-[var(--text-muted)]">These principals do not receive the linked high-sensitivity access until an independent owner approves the pending membership. The API enforces reviewer separation and version checks.</p>
+                    <p className="text-xs font-semibold text-[var(--status-amber-fg)]">Pending group membership reviews</p>
+                    <p className="text-xs text-[var(--text-muted)]">These memberships grant no group access until the current group owner independently approves them. Review can be required by a sensitive policy or a stewardship transfer. The API enforces reviewer separation and version checks.</p>
                     {pendingMembers.map((pending) => {
                       const group = data.userGroups.find((item) => item.id === pending.groupId);
                       return <div key={`${pending.groupId}-${pending.principalType}-${pending.principalId}`} data-testid={`row-pending-membership-${pending.groupId}-${pending.principalId}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-xs">
@@ -772,7 +809,7 @@ export function AccessGovernanceSettings() {
                               expectedVersion: pending.expectedVersion,
                             }),
                           }),
-                          "Sensitive group membership approved by an independent owner.",
+                          "Group membership approved by an independent owner.",
                         )}><ShieldCheck className="mr-1 h-3.5 w-3.5" />Approve membership</Button>}
                       </div>;
                     })}

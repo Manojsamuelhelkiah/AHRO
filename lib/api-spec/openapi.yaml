@@ -1381,6 +1381,36 @@ paths:
         "409":
           description: Version conflict or retired group
           content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+  /organizations/current/access/user-groups/{id}/owner:
+    post:
+      operationId: transferAccessUserGroupOwner
+      tags: [accessGovernance]
+      summary: Transfer user-group stewardship to an active organization owner
+      description: Owner only. Version checked. Retains records and expiry settings, suspends memberships for fresh independent review, and grants no access or specialist authority.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccessUserGroupOwnerTransfer" } } }
+      responses:
+        "200":
+          description: Stewardship transferred
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceOk" } } }
+        "400":
+          description: Invalid transfer or inactive destination owner
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "403":
+          description: Active organization owner required
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "404":
+          description: User group not found in this organization
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
+        "409":
+          description: Stale version, retired group, or unchanged owner
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccessGovernanceError" } } }
   /organizations/current/access/user-groups/{id}/members:
     put:
       operationId: setAccessUserGroupMember
@@ -8645,6 +8675,14 @@ components:
         status: { type: string, const: retired }
         expectedVersion: { type: integer }
       required: [expectedVersion]
+    AccessUserGroupOwnerTransfer:
+      type: object
+      additionalProperties: false
+      required: [ownerUserId, expectedVersion, acknowledgeAccessImpact]
+      properties:
+        ownerUserId: { type: string, minLength: 1 }
+        expectedVersion: { type: integer }
+        acknowledgeAccessImpact: { type: boolean, const: true }
     AccessUserGroupMemberUpdate:
       type: object
       properties:

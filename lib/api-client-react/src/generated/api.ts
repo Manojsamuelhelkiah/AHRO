@@ -39,6 +39,7 @@ import type {
   AccessUserGroupInput,
   AccessUserGroupMemberApproval,
   AccessUserGroupMemberUpdate,
+  AccessUserGroupOwnerTransfer,
   AccessUserGroupResponse,
   AccessUserGroupSecurityGroupApproval,
   AccessUserGroupSecurityGroupUpdate,
@@ -6702,6 +6703,79 @@ export const useUpdateAccessUserGroup = <TError = ErrorType<AccessGovernanceErro
         TContext
       > => {
       return useMutation(getUpdateAccessUserGroupMutationOptions(options));
+    }
+
+export const getTransferAccessUserGroupOwnerUrl = (id: string,) => {
+
+
+
+
+  return `/api/organizations/current/access/user-groups/${id}/owner`
+}
+
+/**
+ * Owner only. Version checked. Retains records and expiry settings, suspends memberships for fresh independent review, and grants no access or specialist authority.
+ * @summary Transfer user-group stewardship to an active organization owner
+ */
+export const transferAccessUserGroupOwner = async (id: string,
+    accessUserGroupOwnerTransfer: AccessUserGroupOwnerTransfer, options?: RequestInit): Promise<AccessGovernanceOk> => {
+
+  return customFetch<AccessGovernanceOk>(getTransferAccessUserGroupOwnerUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(accessUserGroupOwnerTransfer)
+  }
+);}
+
+
+
+
+
+export const getTransferAccessUserGroupOwnerMutationOptions = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof transferAccessUserGroupOwner>>, TError,{id: string;data: BodyType<AccessUserGroupOwnerTransfer>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof transferAccessUserGroupOwner>>, TError,{id: string;data: BodyType<AccessUserGroupOwnerTransfer>}, TContext> => {
+
+const mutationKey = ['transferAccessUserGroupOwner'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof transferAccessUserGroupOwner>>, {id: string;data: BodyType<AccessUserGroupOwnerTransfer>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  transferAccessUserGroupOwner(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TransferAccessUserGroupOwnerMutationResult = NonNullable<Awaited<ReturnType<typeof transferAccessUserGroupOwner>>>
+    export type TransferAccessUserGroupOwnerMutationBody = BodyType<AccessUserGroupOwnerTransfer>
+    export type TransferAccessUserGroupOwnerMutationError = ErrorType<AccessGovernanceError>
+
+    /**
+ * @summary Transfer user-group stewardship to an active organization owner
+ */
+export const useTransferAccessUserGroupOwner = <TError = ErrorType<AccessGovernanceError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof transferAccessUserGroupOwner>>, TError,{id: string;data: BodyType<AccessUserGroupOwnerTransfer>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof transferAccessUserGroupOwner>>,
+        TError,
+        {id: string;data: BodyType<AccessUserGroupOwnerTransfer>},
+        TContext
+      > => {
+      return useMutation(getTransferAccessUserGroupOwnerMutationOptions(options));
     }
 
 export const getSetAccessUserGroupMemberUrl = (id: string,) => {

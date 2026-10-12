@@ -874,10 +874,10 @@ test("access governance routes preserve independent approvals for mixed-principa
     `/preview?principalType=agent&principalId=${agentId}&initiatorUserId=${humanMemberUserId}`,
     managerUserId,
   );
+
   expectStatus(agentAccess, 200);
   assert.ok(agentAccess.body.allows.includes("data.identity.read"));
   assert.ok(agentAccess.body.allows.includes("data.medical.read"));
-
   const directPending = await mutate("/grants", "PUT", managerUserId, {
     principalType: "user",
     principalId: humanMemberUserId,

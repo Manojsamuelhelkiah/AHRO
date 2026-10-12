@@ -384,8 +384,6 @@ async function resolveSubjectCapabilities(
       const userGroup = userGroupById.get(link.userGroupId);
       const membership = groupMemberships.find((candidate) => candidate.groupId === link.userGroupId);
       if (!userGroup || !membership || !liveUserGroupIds.includes(userGroup.id)) return false;
-      if (!hasSensitivePolicy) return true;
-
       const memberNeedsApproval = membershipNeedsIndependentApproval({
         requiresApproval: membership.requiresApproval,
         hasCurrentSensitivePolicy: hasSensitivePolicy,
@@ -398,6 +396,10 @@ async function resolveSubjectCapabilities(
         approvedAt: membership.approvedAt,
         ownerIsActiveMember: true,
       });
+      // A stewardship transfer also fences non-sensitive memberships until
+      // reviewed. Do not bypass that explicit gate for low-sensitivity policies.
+      if (!membershipApprovalValid) return false;
+      if (!hasSensitivePolicy) return true;
       return membershipApprovalValid &&
         isIndependentOwnerApprovalValid({
           status: link.status,

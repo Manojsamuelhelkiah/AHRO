@@ -33,6 +33,7 @@
 - [Secure App Storage uploads](secure-app-storage-uploads.md) — the signer cannot bind size/type; strict limits need authenticated bounded writes plus a durable, fenced lifecycle.
 - [Application tenant boundaries](application-tenant-boundaries.md) — Clerk authenticates users; app-owned organizations isolate every client record with explicit, verified scope.
 - [Access preview consistency](access-preview-consistency.md) — owner-facing access reports must use the live evaluator, including case scope and explicit agent initiator.
+- [Group stewardship boundaries](group-stewardship-boundaries.md) — ownership handoffs must not revive dormant access; retained memberships need fresh independent review.
 - [Membership reinstatement safety](membership-reinstatement-safety.md) — use persistent lifecycle versions against timestamp reuse; retain rationale only for the intended audit action.
 - [Shared mailbox tenant attribution](shared-mailbox-tenant-attribution.md) — sender identity is insufficient; require exact case-bound references and quarantine ambiguous matches.
 - [Wouter query navigation](wouter-query-navigation.md) — pathname and search are separate reactive values; preserve both explicitly when replacing URL parameters.

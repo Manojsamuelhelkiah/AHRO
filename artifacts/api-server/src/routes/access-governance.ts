@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { TransferAccessUserGroupOwnerBody, TransferAccessUserGroupOwnerParams, TransferAccessUserGroupOwnerResponse } from "@workspace/api-zod";
 import { Router, type IRouter, type Response } from "express";
 import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import {
@@ -1100,6 +1101,94 @@ router.patch("/user-groups/:id", async (req, res, next) => {
   }
 });
 
+router.post("/user-groups/:id/owner", async (req, res, next): Promise<void> => {
+  try {
+    if (req.organizationRole !== "owner") {
+      fail(res, 403, "Only an active organization owner may transfer stewardship.", "ORGANIZATION_OWNER_REQUIRED");
+      return;
+    }
+    const parsed = TransferAccessUserGroupOwnerBody.safeParse(req.body);
+    const params = TransferAccessUserGroupOwnerParams.safeParse(req.params);
+    if (!parsed.success || !params.success || !Number.isSafeInteger(parsed.data.expectedVersion) ||
+      parsed.data.expectedVersion < 1 || parsed.data.acknowledgeAccessImpact !== true ||
+      !parsed.data.ownerUserId.trim()) {
+      fail(res, 400, "Choose an owner, provide the current version, and acknowledge the access impact.", "ACCESS_INVALID_OWNER_TRANSFER");
+      return;
+    }
+    const organizationId = getOrganizationId(req);
+    const actor = req.authUserId!;
+    const ownerUserId = parsed.data.ownerUserId.trim();
+    await db.transaction(async (tx) => {
+      // Membership removal and role changes share this fence. Recheck both
+      // owners inside it, not just the request's earlier tenant middleware.
+      await lockTenant(tx, organizationId);
+      if (!await isActiveOrganizationOwner(tx, organizationId, actor)) {
+        throw Object.assign(new Error("Your active organization ownership is required."), { status: 403, code: "ORGANIZATION_OWNER_REQUIRED" });
+      }
+      const [group] = await tx.select().from(accessUserGroups).where(and(
+        eq(accessUserGroups.organizationId, organizationId),
+        eq(accessUserGroups.id, params.data.id),
+      )).limit(1);
+      if (!group) throw Object.assign(new Error("User group not found."), { status: 404, code: "ACCESS_NOT_FOUND" });
+      if (group.version !== parsed.data.expectedVersion) throw Object.assign(new Error("User group changed; reload and review the transfer again."), { status: 409, code: "ACCESS_VERSION_CONFLICT" });
+      if (group.status !== "active") throw Object.assign(new Error("Retired groups cannot be transferred."), { status: 409, code: "ACCESS_GROUP_RETIRED" });
+      if (ownerUserId === group.ownerUserId) throw Object.assign(new Error("Choose a different organization owner."), { status: 409, code: "ACCESS_OWNER_UNCHANGED" });
+      if (!await isActiveOrganizationOwner(tx, organizationId, ownerUserId)) {
+        throw Object.assign(new Error("The new steward must be an active owner of this organization."), { status: 400, code: "ACCESS_INVALID_OWNER" });
+      }
+      const policyVersions = (await highSensitivityGroupsForUserGroup(tx, organizationId, group.id))
+        .map(({ id, policyVersion }) => `${id}@${policyVersion}`).sort().join(",");
+      // Retain every record and expiry. Suspending all live/pending memberships
+      // prevents a departed owner's dormant paths (or their own membership)
+      // from turning into new access merely because stewardship changed.
+      const members = await tx.update(accessUserGroupMembers).set({
+        status: "pending", requiresApproval: "yes", attachedByUserId: actor,
+        approvedByUserId: null, approvedAt: null,
+        version: sql`${accessUserGroupMembers.version} + 1`,
+      }).where(and(
+        eq(accessUserGroupMembers.organizationId, organizationId),
+        eq(accessUserGroupMembers.groupId, group.id),
+        or(eq(accessUserGroupMembers.status, "active"), eq(accessUserGroupMembers.status, "pending")),
+        isNull(accessUserGroupMembers.revokedAt),
+      )).returning();
+      await tx.update(accessUserGroups).set({
+        ownerUserId, version: group.version + 1,
+      }).where(and(
+        eq(accessUserGroups.organizationId, organizationId), eq(accessUserGroups.id, group.id),
+        eq(accessUserGroups.version, parsed.data.expectedVersion),
+      ));
+      for (const member of members) {
+        await recordHistory(tx, {
+          organizationId, actorUserId: actor, eventType: "user-group.member.pending",
+          entityType: "user-group", entityId: group.id,
+          detail: {
+            principalType: member.principalType === "human" ? "user" : "agent",
+            principalId: member.principalId, active: true, policyVersions,
+            stewardshipTransfer: true,
+          },
+        });
+      }
+      await recordHistory(tx, {
+        organizationId, actorUserId: actor, eventType: "user-group.owner.transferred",
+        entityType: "user-group", entityId: group.id,
+        detail: {
+          formerOwnerUserId: group.ownerUserId, ownerUserId,
+          previousVersion: group.version, version: group.version + 1,
+          membershipsPendingReview: members.length, acknowledgeAccessImpact: true,
+        },
+      });
+    });
+    res.json(TransferAccessUserGroupOwnerResponse.parse({ ok: true }));
+  } catch (error) {
+    if (error instanceof Error && "status" in error) {
+      const coded = error as Error & { status: number; code: string };
+      fail(res, coded.status, error.message, coded.code);
+      return;
+    }
+    next(error);
+  }
+});
+
 router.put("/user-groups/:id/members", async (req, res, next) => {
   try {
     if (req.organizationRole !== "owner") {
@@ -1124,6 +1213,9 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
     let membershipStatus = active ? "active" : "revoked";
     await db.transaction(async (tx) => {
       await lockTenant(tx, organizationId);
+      if (!await isActiveOrganizationOwner(tx, organizationId, actor)) {
+        throw Object.assign(new Error("An active organization owner must request membership changes."), { status: 403, code: "ORGANIZATION_OWNER_REQUIRED" });
+      }
       const [group] = await tx.select().from(accessUserGroups).where(and(
         eq(accessUserGroups.organizationId, organizationId), eq(accessUserGroups.id, req.params.id),
       )).limit(1);
@@ -1151,7 +1243,10 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
         : false;
       const expiryChanged = existingMember?.expiresAt?.getTime() !== expiresAt?.getTime() &&
         !(existingMember?.expiresAt === null && expiresAt === null);
-      if (active && sensitiveGroups.length &&
+      // A transfer review requirement survives resubmission, expiry edits, and
+      // remove/re-add cycles, even when no sensitive policy is attached.
+      const membershipRequiresReview = sensitiveGroups.length > 0 || existingMember?.requiresApproval === "yes";
+      if (active && membershipRequiresReview &&
         (existingMember?.status !== "active" || !currentMembershipApproval || expiryChanged || !grantIsLive(existingMember.expiresAt, new Date()))) {
         if (actor === group.ownerUserId || principalId === actor || (principalType === "user" && (
           principalId === group.ownerUserId ||
@@ -1207,7 +1302,7 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
         ));
         return;
       }
-      if (active && sensitiveGroups.length && existingMember?.status === "active" &&
+      if (active && membershipRequiresReview && existingMember?.status === "active" &&
         currentMembershipApproval && !expiryChanged) return;
       if (active) {
         await tx.insert(accessUserGroupMembers).values({
@@ -1302,9 +1397,6 @@ router.post("/user-groups/:id/members/approve", async (req, res, next) => {
         throw Object.assign(new Error("Owners cannot approve their own sensitive membership."), { status: 403, code: "ACCESS_OWNER_SELF_GRANT_FORBIDDEN" });
       }
       const sensitiveGroups = await highSensitivityGroupsForUserGroup(tx, organizationId, group.id);
-      if (!sensitiveGroups.length) {
-        throw Object.assign(new Error("This membership no longer requires independent review; resubmit it."), { status: 409, code: "ACCESS_REVIEW_NOT_REQUIRED" });
-      }
       if (actor !== group.ownerUserId || !await isActiveOrganizationOwner(tx, organizationId, actor)) {
         throw Object.assign(new Error("Only the active user-group owner may approve this membership."), { status: 403, code: "ACCESS_OWNER_REQUIRED" });
       }
@@ -1346,6 +1438,12 @@ router.post("/user-groups/:id/members/approve", async (req, res, next) => {
         eq(accessUserGroupMembers.status, "pending"),
       );
       const [membership] = await tx.select().from(accessUserGroupMembers).where(membershipWhere).limit(1);
+      if (!sensitiveGroups.length && membership?.requiresApproval !== "yes") {
+        throw Object.assign(new Error("This membership no longer requires independent review; resubmit it."), { status: 409, code: "ACCESS_REVIEW_NOT_REQUIRED" });
+      }
+      if (!await isActiveOrganizationOwner(tx, organizationId, pending.actorUserId)) {
+        throw Object.assign(new Error("The requesting owner is no longer active; resubmit this membership."), { status: 409, code: "ACCESS_INDEPENDENT_REVIEW_REQUIRED" });
+      }
       if (!membership || membership.revokedAt || membership.attachedByUserId !== pending.actorUserId) {
         throw Object.assign(new Error("A pending sensitive membership request was not found."), { status: 409, code: "ACCESS_MEMBERSHIP_NOT_PENDING" });
       }
