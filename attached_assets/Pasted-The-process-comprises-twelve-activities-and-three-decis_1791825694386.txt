@@ -1,0 +1,173 @@
+The process comprises twelve activities and three decision points (Gateways A-C). Gateways are shown in amber callouts on the map. Access, asset and knowledge-transfer workstreams run in parallel once the checklist is generated. 
+
+Trigger Event 
+
+The process starts when a separation event is authoritatively recorded (HRIS state change), a manager submits an offboarding form, or Security/Compliance raises an urgent exit flag. 
+
+Step 01 - Raise / Record Separation 
+
+HR Ops opens a single active exit case with employee identifier, exit type, exit reason, last working day (LWD), termination date, role, department, geography, legal entity and manager. Duplicate or conflicting requests are detected and surfaced for review. 
+
+DECISION POINT - Gateway A: Is the exit type clear and non-sensitive? 
+
+HR Ops (supported by intake review) confirms the exit type and screens for sensitive triggers (POSH, whistleblower, litigation hold, fraud/investigation, abscondment, death in service, statutory position). If clear and standard → proceed to Step 03. If sensitive or conflicting → hard-block to Step 02. 
+
+Step 02 - Route Sensitive Case (HR Ethics / Legal) 
+
+Reached only when Gateway A flags a sensitive case. Standard downstream automation does not proceed; the case is routed to HR Ethics + Legal under restricted, human-led handling with anti-retaliation and no-surprise controls. 
+
+Step 03 - Classify Exit & Confirm Pathway 
+
+HR Ops confirms the classification, urgency (Standard / Elevated / High) and any flags (privileged access, client-facing, people-manager, statutory). Low-confidence classifications are escalated to HRBP for confirmation - the process never guesses exit type. 
+
+Step 04 - Generate Role / Geography Offboarding Checklist 
+
+A role-, geography- and employee-category-specific checklist is generated (e.g., engineering repo handover, finance ERP closure, people-manager reassignment, contractor checklist, country-specific statutory F&F items). 
+
+Step 05 - Client Handover & Replacement (Client-Facing Roles) 
+
+For billable / client-facing roles, the Delivery Head arranges replacement, client-artefact transfer and client-access review, and approves any client communication (human-authored). This gates continuity for client operations. 
+
+Step 06 - Revoke System Access 
+
+IT / Security closes identified access. Standard exits are scheduled for end of LWD; shared / service accounts are reassigned first; temporary access needed for KT is limited, visible and approved. 
+
+DECISION POINT - Gateway B: Is access privileged / high-risk? 
+
+If the employee holds admin, production or client-system access, or urgency is High → expedited security closure (Step 07, act-then-review). Otherwise → proceed to asset recovery (Step 08). Access is never marked closed without evidence. 
+
+Step 07 - Expedited Security Closure 
+
+Reached for privileged / high-risk access or High-urgency (e.g., involuntary for-cause). IT Security coordinates immediate closure and reviews afterward; break-glass routes are documented if primary identity closure is delayed. 
+
+Step 08 - Recover Assets & Reconcile 
+
+Physical and digital assets are recovered (desk collection or remote return); licenses are released to pool; non-returned, damaged or lost items trigger recovery / deduction review with Finance approval. Asset write-off always requires a named human approver. 
+
+Step 09 - Knowledge Transfer Sign-off 
+
+KT is completed and signed off by the receiving manager / successor. Single-point-of-knowledge risks hard-block auto-close until a mitigation plan exists; client-facing KT requires Delivery Head approval. 
+
+Step 10 - Compute F&F & Recoveries 
+
+Finance / Payroll computes final settlement, recoveries (asset, relocation claw-back, notice adjustments) and statutory items. F&F is not closed until Payroll confirms readiness and HRIS↔Payroll data reconcile. 
+
+Step 11 - Compliance & Statutory Closure Review 
+
+Compliance / Audit verifies closure readiness against the 7-point checklist, statutory clearances, data-retention/privacy actions and legal acknowledgements (NDA / IP / non-compete). Missing evidence is a hard-block on close. 
+
+DECISION POINT - Gateway C: Is 7-point closure ready? 
+
+Closure is confirmed only when all seven closure conditions are met (see 4.6) with evidence and required human approvals. If YES → Step 12. If gaps remain → escalate to the responsible owner and keep the blocker visible. 
+
+Step 12 - Close Case, Alumni / BGV & Workforce Insight 
+
+The case is closed; the alumni / BGV / rehire-eligibility record is created (or exclusion reason captured); closure evidence and approvals are archived; and aggregated workforce-planning insight (skills at risk, attrition themes) is routed to HR / Talent Planning. 
+
+ 
+
+4.3 Possible Paths Through the Process 
+
+Path 1 - Standard Voluntary Exit (Happy Path) 
+
+Clear, non-sensitive; standard access. Trigger → 01 → GW-A(clear) → 03 → 04 → 06 → GW-B(no) → 08 → 09 → 10 → 11 → GW-C(ready) → 12 → End. Closed with alumni eligibility if policy permits. 
+
+Path 2 - Sensitive Case (Hard-Block) 
+
+Gateway A flags POSH / whistleblower / litigation-hold / investigation. Case routes to Step 02 under HR Ethics + Legal; standard automation does not proceed; closure is human-led. 
+
+Path 3 - Privileged / Involuntary For-Cause (Expedited) 
+
+Gateway B = privileged / High urgency. Immediate access closure at Step 07 (act-then-review) with IT Security; downstream steps proceed under human oversight; closure only after all approvals exist. 
+
+Path 4 - Client-Facing Consultant Exit 
+
+Client-facing flag set at Step 03. Step 05 adds replacement, artefact handover and Delivery Head review; client-access closure is coordinated with client continuity; KT requires receiving consultant / manager sign-off. 
+
+Path 5 - Rehire During Offboarding 
+
+A rehire / retract-within-cooling-period signal pauses closure; agents stop unnecessary downstream activity; HRBP dispositions the case (cancel, convert to transfer, or resume). 
+
+ 
+
+4.4 Exception & Edge-Case Scenarios 
+
+Exception 
+
+When 
+
+Current Handling 
+
+Rehire before offboarding completes 
+
+Any step 
+
+Pause closure; stop unnecessary downstream activity; escalate to HRBP. 
+
+Active legal hold / litigation 
+
+GW-A / Step 11 
+
+Do not delete/archive; route to Legal; prevent standard closure. 
+
+Manager fails to submit asset list before LWD 
+
+Step 08 
+
+Use default role-based asset expectation; flag as unconfirmed. 
+
+Access closure dependency unresolved 
+
+Step 06 / GW-B 
+
+Do not mark complete; escalate to IT/Security; keep blocker visible. 
+
+HRIS ↔ manager input conflict 
+
+Step 01 / 03 
+
+Never auto-resolve; surface both values to HRBP; system-of-record authoritative. 
+
+Death in service 
+
+GW-A 
+
+Dignified human-led path; benefits to nominee; skip exit interview. 
+
+Abscondment 
+
+GW-A 
+
+Trigger abscondment protocol; legal notice; F&F hold per policy. 
+
+Unvested ESOPs / RSUs 
+
+Step 10 
+
+Finance / equity review; human-authored communication. 
+
+HRIS and Payroll inconsistent 
+
+Step 10 
+
+Hold F&F closure until reconciled. 
+
+Consultant on billable client project 
+
+Step 05 / 09 
+
+Notify Delivery Head; arrange replacement; transfer artefacts; check client-contract obligations. 
+
+Multiple exits from same critical skill cluster 
+
+Step 12 
+
+Generate aggregated workforce-planning insight; route to HR / Talent Planning. 
+
+Small-population exit trend could identify individuals 
+
+Step 12 
+
+Do not publish analytics; escalate to HR / DPO for safe handling. 
+
+ 
