@@ -83,6 +83,7 @@ test("MFA/provider session gates, request lifetime and tenant binding preserve i
       } as unknown as Request;
       let code = 200, called = false;
       const res = Object.assign(new EventEmitter(), {
+        setHeader() { return this; },
         status(value: number) { code = value; return this; }, json() { return this; },
       }) as unknown as Response;
       await middleware(req, res, () => {

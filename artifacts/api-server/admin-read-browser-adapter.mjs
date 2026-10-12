@@ -1,0 +1,166 @@
+/**
+ * Isolated browser fixture only. Actual proof verifiers and case routes run;
+ * provider identities/MFA are fixtures, not claims of real provider sign-in.
+ */
+import { createHmac, randomUUID } from "node:crypto";
+import { AsyncResource } from "node:async_hooks";
+
+export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions }) {
+  if (process.env.ONBOARDING_E2E_TEST !== "true" || process.env.ADMIN_READ_E2E_TEST !== "true" ||
+      process.env.NODE_ENV === "production") throw new Error("Isolated admin harness only.");
+  const { db, organizationsTable, organizationMembershipsTable, onbCases, onbDocuments,
+    onbCommunications, accessNamedGrants, employeeVaultProducts } = dbPackage;
+  const { createDevelopmentAdminContext } = await import("./src/lib/development-super-admin.ts");
+  const { createPlatformAdminContext, bindPlatformSuperAdminTenant, signAdminGrant,
+    ADMIN_APPROVAL_KEY, ADMIN_COOKIE, ADMIN_LIFETIME_MS } = await import("./src/lib/private-platform-admin.ts");
+  const { resolveSensitiveAccess, withSensitiveAuthorityFence } = await import("./src/lib/onboarding/sensitive-access.ts");
+  const { hasCurrentAuthorityScope } = await import("./src/lib/onboarding/decision-authority.ts");
+  const background = new AsyncResource("unprivileged-admin-read-fixture");
+  const org = `admin-read-${randomUUID()}`;
+  const actor = `named-admin-read-${randomUUID()}`;
+  const secret = randomUUID() + randomUUID();
+  process.env.NODE_ENV = "development";
+  process.env.DEV_SUPER_ADMIN_PASSWORD = secret;
+  process.env.SESSION_SECRET = secret;
+  await db.insert(organizationsTable).values({
+    id: org, name: "Isolated administrative viewing", slug: org,
+    joinCodeHash: randomUUID(), createdByUserId: actor,
+  });
+  await db.insert(organizationMembershipsTable).values({ organizationId: org, clerkUserId: actor, role: "member" });
+  await db.insert(employeeVaultProducts).values({ organizationId: org, enabled: true, version: 1, updatedBy: actor });
+  const [c] = await db.insert(onbCases).values({
+    organizationId: org, workerName: "Confidential Read Fixture", workerEmail: "fixture@example.invalid",
+    workerPhone: "+15550000000", managerName: "Fixture Manager", recruiterName: "Fixture Recruiter",
+    hireType: "external-fte", workerCategory: "employee", role: "Engineer", department: "Test",
+    geography: "US", legalEntity: "Fixture", joiningDate: "2030-01-01",
+    lifecycleStage: "complete", orchestrationStatus: "completed", notes: "Private client narrative",
+    workforceContext: { workCountry: "US" }, createdByUserId: actor,
+  }).returning();
+  for (const key of ["flow.case.read", "data.case.profile.read", "data.case.notes.read",
+    "data.documents.read", "data.case.readiness.read", "flow.document-review.read"]) {
+    await db.insert(accessNamedGrants).values({
+      organizationId: org, principalType: "human", principalId: actor,
+      resourceType: key.startsWith("flow") ? "flow" : "field", resourceKey: key,
+      effect: "allow", scope: "tenant", source: "named", createdByUserId: actor,
+    });
+  }
+  await db.insert(onbDocuments).values({
+    organizationId: org, caseId: c.id, key: "id-proof",
+    label: "Government photo ID (passport / national ID)", category: "identity",
+    required: true, status: "pending", note: "Private document note",
+  });
+  await db.insert(onbCommunications).values({
+    organizationId: org, caseId: c.id, channel: "email", direction: "inbound", audience: "internal",
+    toAddress: "fixture@example.invalid", subject: "Private client message", body: "Private message body", status: "received",
+  });
+  const states = new Map();
+  let approvalGeneration = "fixture";
+  const cookie = (req, name) => req.cookies?.[name];
+  app.get("/api/platform-admin/session", (_req, res) => res.json({
+    eligible: false, userId: actor, primaryEmailId: "fixture-email",
+    primaryEmailVerified: true, mfaEnrolled: true, mfaRequired: true, lifetimeMinutes: 15,
+  }));
+  app.delete("/api/platform-admin/session", (req, res) => {
+    const id = cookie(req, "browser_e2e_session");
+    if (id) {
+      const state = states.get(id);
+      if (state) state.status = "revoked";
+      sessions.delete(id);
+    }
+    res.clearCookie(ADMIN_COOKIE, { path: "/" });
+    res.clearCookie("hro_dev_super_admin", { path: "/" });
+    res.json({ active: false });
+  });
+  app.post("/api/test/admin-read/session", (req, res) => {
+    const sessionId = cookie(req, "browser_e2e_session");
+    if (!sessionId || !sessions.has(sessionId)) { res.sendStatus(401); return; }
+    sessions.set(sessionId, actor);
+    const mode = req.body?.mode || "ordinary";
+    process.env.NODE_ENV = mode === "private" ? "production" : "development";
+    const issuedAt = Date.now() - (req.body?.expired ? ADMIN_LIFETIME_MS + 1000 :
+      req.body?.short ? ADMIN_LIFETIME_MS - 5000 : 0);
+    const state = { mode, status: req.body?.revoked ? "revoked" : "active",
+      generation: req.body?.rotated ? "rotated" : "fixture", issuedAt };
+    states.set(sessionId, state);
+    approvalGeneration = state.generation;
+    res.clearCookie(ADMIN_COOKIE, { path: "/" });
+    res.clearCookie("hro_dev_super_admin", { path: "/" });
+    const proofSession = req.body?.wrongSession ? "wrong-session" : sessionId;
+    if (mode === "private") {
+      const value = signAdminGrant({
+        userId: actor, sessionId: proofSession, environment: "production", generation: "fixture",
+        issuedAt, expiresAt: issuedAt + ADMIN_LIFETIME_MS,
+      }, secret);
+      res.cookie(ADMIN_COOKIE, req.body?.invalid ? "invalid" : value, { httpOnly: true, path: "/", sameSite: "lax" });
+    } else if (mode === "development") {
+      const devIssuedAt = req.body?.expired ? Date.now() - 4 * 60 * 60_000 - 1000 :
+        req.body?.short ? Date.now() - 4 * 60 * 60_000 + 5000 : Date.now();
+      const payload = Buffer.from(JSON.stringify({
+        userId: actor, sessionId: proofSession, issuedAt: devIssuedAt, expiresAt: devIssuedAt + 4 * 60 * 60_000,
+      })).toString("base64url");
+      const value = `${payload}.${createHmac("sha256", secret).update(payload).digest("base64url")}`;
+      res.cookie("hro_dev_super_admin", req.body?.invalid ? "invalid" : value, { httpOnly: true, path: "/", sameSite: "lax" });
+    }
+    res.json({ organizationId: org, caseId: c.id });
+  });
+  const privateContext = createPlatformAdminContext({
+    getUser: async () => ({
+      id: actor, primaryEmailAddressId: "fixture-email", twoFactorEnabled: true,
+      emailAddresses: [{ id: "fixture-email", verification: { status: "verified" } }],
+      privateMetadata: { [ADMIN_APPROVAL_KEY]: { userId: actor, primaryEmailId: "fixture-email",
+        environment: "production", generation: approvalGeneration, decisionRef: "fixture" } },
+    }),
+    getSession: async id => ({ userId: actor, status: states.get(id)?.status || "revoked" }),
+    isDemo: async () => false,
+  });
+  const developmentContext = createDevelopmentAdminContext({
+    getSession: async id => ({ userId: actor, status: states.get(id)?.status || "revoked", createdAt: Date.now() + 1000 }),
+  });
+  app.use("/api", async (req, res, next) => {
+    const sessionId = cookie(req, "browser_e2e_session");
+    // Also model signed-out Clerk requests: the real guard should return 401,
+    // not throw because this isolated server has no provider middleware.
+    req.auth = Object.assign(() => ({
+      userId: sessions.get(sessionId) || null, sessionId: sessions.has(sessionId) ? sessionId : null,
+      sessionClaims: { fva: [0, 0] }, tokenType: "session_token",
+    }), { [Symbol.for("@clerk/express.auth")]: true });
+    if (sessions.get(sessionId) !== actor) { next(); return; }
+    const state = states.get(sessionId);
+    const enter = state?.mode === "development" ? developmentContext : privateContext;
+    await enter(req, res, () => {
+      // A rejected development proof has already been checked with the fixture
+      // provider. Do not recheck it via the live provider in the nested guard.
+      if (state?.mode === "development" && !req.developmentSuperAdmin) {
+        req.headers.cookie = req.headers.cookie?.split(";")
+          .filter(value => !value.trim().startsWith("hro_dev_super_admin=")).join(";");
+      }
+      // Production tenant middleware independently verifies the selected tenant.
+      next();
+    });
+  });
+  app.get("/api/test/admin-read/boundaries", async (req, res) => {
+    bindPlatformSuperAdminTenant(org);
+    const access = await resolveSensitiveAccess({ organizationId: org, caseId: c.id, actorUserId: actor });
+    const wrongCase = await resolveSensitiveAccess({ organizationId: org, caseId: c.id + 999999, actorUserId: actor });
+    const wrongTenant = await resolveSensitiveAccess({ organizationId: "other-tenant", caseId: c.id, actorUserId: actor });
+    const wrongActor = await resolveSensitiveAccess({ organizationId: org, caseId: c.id, actorUserId: "other-actor" });
+    const professional = await db.transaction(tx => hasCurrentAuthorityScope(tx, {
+      organizationId: org, actorUserId: actor, scope: "hr-compliance-approve", caseId: c.id,
+    }));
+    let mutated = false;
+    try {
+      await withSensitiveAuthorityFence({
+        organizationId: org, actorUserId: actor, caseId: c.id, classification: "identity",
+        mutate: async () => { mutated = true; },
+      });
+    } catch { /* no professional authority */ }
+    res.json({ access, wrongCase, wrongTenant, wrongActor, professional, mutated });
+  });
+  // No request ALS context: background work must not inherit an admin identity.
+  app.get("/api/test/admin-read/background", async (_req, res) => {
+    const result = await background.runInAsyncScope(() => resolveSensitiveAccess({
+      organizationId: org, caseId: c.id, actorUserId: actor,
+    }));
+    res.json(result);
+  });
+}

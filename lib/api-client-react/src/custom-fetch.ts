@@ -62,6 +62,11 @@ export function getPinnedOrganizationIdForPage(): string | null {
 }
 
 let responseObserver: ((response: Response) => void) | null = null;
+let protectedResponseGeneration = 0;
+/** Fence delayed responses when authenticated privilege or identity changes. */
+export function invalidateProtectedResponses() {
+  protectedResponseGeneration += 1;
+}
 /** Per-page observer; never changes API authorization or another app's state. */
 export function setApiResponseObserver(observer: ((response: Response) => void) | null) {
   responseObserver = observer;
@@ -375,6 +380,7 @@ export async function customFetch<T = unknown>(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},
 ): Promise<T> {
+  const generation = protectedResponseGeneration;
   input = applyBaseUrl(input);
   const { responseType = "auto", headers: headersInit, ...init } = options;
 
@@ -427,5 +433,9 @@ export async function customFetch<T = unknown>(
     throw new ApiError(response, errorData, requestInfo);
   }
 
-  return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+  const result = await parseSuccessBody(response, responseType, requestInfo);
+  if (generation !== protectedResponseGeneration) {
+    throw new DOMException("Protected session changed during the request.", "AbortError");
+  }
+  return result as T;
 }

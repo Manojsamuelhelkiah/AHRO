@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import type { OnbAuthorityScope } from "@workspace/db/schema";
 import { resolveEffectiveAccessInTransaction } from "../access-governance";
 import { hasCurrentAuthorityScope } from "./decision-authority";
+import { isPlatformSuperAdmin } from "../private-platform-admin";
 
 type SensitiveAuthorityTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -139,9 +140,9 @@ export function hasOpaqueNarrativeAccess(access: SensitiveAccess): boolean {
 }
 
 /**
- * Resolve every class from live, tenant- and case-scoped authority
- * assignments.  This deliberately does not accept membership role, display
- * persona, demo mode, or a client-provided role as an input.
+ * Resolve specialist permissions and the separate verified administrative
+ * client-record read exception. This deliberately does not accept membership
+ * role, display persona, demo mode, or a client-provided role as an input.
  */
 export async function resolveSensitiveAccess(input: {
   organizationId: string;
@@ -172,6 +173,11 @@ export async function resolveSensitiveAccessInTransaction(
     caseId: input.caseId,
     purpose: "onboarding-sensitive-record",
   });
+  // The effective evaluator verifies case ownership before its admin branch.
+  // ALS contains only a live, provider-verified request bound to this tenant.
+  // This exception is for client-record reads, never professional authority.
+  const administrativeRead = isPlatformSuperAdmin(input.actorUserId, input.organizationId) &&
+    effectiveAccess.allows.includes("flow.case.read");
   const result = {
     identity: false,
     medical: false,
@@ -191,10 +197,15 @@ export async function resolveSensitiveAccessInTransaction(
       scope: SENSITIVE_SCOPE_BY_CLASS[classification],
       caseId: input.caseId,
     });
-    result[classification] = specialistAuthority &&
+    result[classification] = (administrativeRead || specialistAuthority) &&
       effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].read);
     result.edit[classification] = specialistAuthority &&
       effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit);
+  }
+  // Do not carry a read exception past its request lifetime or grant expiry
+  // while the independent authority queries above were in flight.
+  if (administrativeRead && !isPlatformSuperAdmin(input.actorUserId, input.organizationId)) {
+    for (const classification of ALL_SENSITIVE_RECORD_CLASSES) result[classification] = false;
   }
   return result;
 }

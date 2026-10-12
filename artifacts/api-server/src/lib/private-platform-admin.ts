@@ -120,6 +120,8 @@ return async function enterPlatformAdminContext(req: Request, res: Response, nex
     const current: Context = { ...grant, active: true };
     req.privatePlatformAdmin = true;
     req.platformSuperAdmin = true;
+    res.setHeader("X-Platform-Admin-Expires-At", String(grant.expiresAt));
+    res.setHeader("Cache-Control", "no-store");
     const end = () => { current.active = false; };
     res.once("finish", end); res.once("close", end);
     context.run(current, next);

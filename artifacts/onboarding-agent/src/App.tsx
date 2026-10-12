@@ -28,6 +28,7 @@ import { RecommendationsPage } from './pages/recommendations';
 import { GuardrailsPage } from './pages/guardrails';
 import { LoginPage } from './pages/login';
 import { PrivateAdminSession } from './components/private-admin-session';
+import { ProtectedSessionBoundary } from './components/protected-session-boundary';
 import { ClientSetupPage } from './pages/client-setup';
 import { CandidatePage } from './pages/candidate';
 import {
@@ -455,7 +456,8 @@ function ClerkProviderWithRoutes() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Show when="signed-in"><PrivateAdminSession /></Show>
-          <Router />
+          <Show when="signed-in"><ProtectedSessionBoundary><Router /></ProtectedSessionBoundary></Show>
+          <Show when="signed-out"><Router /></Show>
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>

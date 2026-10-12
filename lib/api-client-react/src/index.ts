@@ -8,6 +8,7 @@ export {
   setBaseUrl,
   setAuthTokenGetter,
   setApiResponseObserver,
+  invalidateProtectedResponses,
 } from "./custom-fetch";
 export type {
   AuthTokenGetter,

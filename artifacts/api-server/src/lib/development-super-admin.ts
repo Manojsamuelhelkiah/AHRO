@@ -137,7 +137,11 @@ export async function prepareDevelopmentAdminLogin(req: Request, res: Response, 
   return true;
 }
 
-export async function enterDevelopmentAdminContext(req: Request, res: Response, next: NextFunction) {
+export function createDevelopmentAdminContext(services = {
+  getSession: (id: string): Promise<{ userId: string; status: string; createdAt: number }> =>
+    clerkClient.sessions.getSession(id),
+}) {
+return async function enterDevelopmentAdminContext(req: Request, res: Response, next: NextFunction) {
   if (res.writableEnded || res.destroyed) { next(); return; }
   if (req.developmentSuperAdmin && req.authUserId && isDevelopmentSuperAdmin(req.authUserId)) { next(); return; }
   const proof = readProof(req);
@@ -148,10 +152,12 @@ export async function enterDevelopmentAdminContext(req: Request, res: Response, 
   try {
     const sessionId = getAuth(req).sessionId;
     if (!sessionId || (proof.sessionId && proof.sessionId !== sessionId)) { next(); return; }
-    const session = await clerkClient.sessions.getSession(sessionId);
+    const session = await services.getSession(sessionId);
     if (session.userId !== proof.userId || session.status !== "active" || session.createdAt < proof.issuedAt) { next(); return; }
     if (!proof.sessionId) writeProof(req, res, { ...proof, sessionId });
     req.developmentSuperAdmin = true;
+    res.setHeader("X-Platform-Admin-Expires-At", String(proof.expiresAt));
+    res.setHeader("Cache-Control", "no-store");
     const current: Scope = { userId: proof.userId, sessionId, active: true, expiresAt: proof.expiresAt };
     const end = () => { current.active = false; };
     res.once("finish", end);
@@ -161,7 +167,9 @@ export async function enterDevelopmentAdminContext(req: Request, res: Response, 
     // A failed provider check cannot turn a session into a platform admin.
     res.status(503).json({ message: "Super Admin session verification is temporarily unavailable." });
   }
+};
 }
+export const enterDevelopmentAdminContext = createDevelopmentAdminContext();
 
 export function clearDevelopmentAdminLogin(req: Request, res: Response) {
   if (!sameOrigin(req)) return;

@@ -1,27 +1,32 @@
 import { useEffect, useState } from "react";
-import { useClerk, useReverification } from "@clerk/react";
+import { useAuth, useClerk, useReverification } from "@clerk/react";
 import type { PrivateAdminEligibility } from "@workspace/api-client-react";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export function PrivateAdminSession() {
   const clerk = useClerk();
+  const { userId, sessionId } = useAuth();
   const [eligible, setEligible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [identity, setIdentity] = useState<PrivateAdminEligibility | null>(null);
   useEffect(() => {
     const controller = new AbortController();
+    setEligible(false);
+    setIdentity(null);
+    setError("");
     fetch(`${base}/api/platform-admin/session`, { credentials: "include", signal: controller.signal })
       .then(async response => {
         if (!response.ok) throw new Error("Private administrator eligibility could not be verified.");
         const result = await response.json() as PrivateAdminEligibility;
+        if (controller.signal.aborted) return;
         setIdentity(result);
         setEligible(result.eligible === true);
       })
       .catch(caught => { if (!controller.signal.aborted) setError(caught.message); });
     return () => controller.abort();
-  }, []);
+  }, [userId, sessionId]);
   const activate = useReverification(async () => {
     const response = await fetch(`${base}/api/platform-admin/session`, {
       method: "POST", credentials: "include", headers: { "content-type": "application/json" },
@@ -58,7 +63,7 @@ export function PrivateAdminSession() {
   return (
     <aside className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs" aria-label="Private administrator session">
       <div className="flex flex-wrap items-center gap-3">
-        <span>{eligible ? "Private administrator · 15-minute session · independent safeguards apply" : "Platform access requires private approval of your verified MFA account."}</span>
+        <span>{eligible ? "Eligible for private administrator access · verify to activate a 15-minute session · independent safeguards apply" : "Platform access requires private approval of your verified MFA account."}</span>
         {eligible && <button type="button" onClick={() => void start()} disabled={busy}
           className="rounded border px-2 py-1 font-semibold" data-testid="private-admin-activate">
           {busy ? "Verifying…" : "Verify / renew administrator access"}
