@@ -9,7 +9,6 @@ import { LEGACY_CHECKLIST, readinessFromChecklist } from "./settings";
 import { issueCandidatePortalLink } from "./portal-link-issuance";
 import { isUatRunIsolatedCase, UAT_RUN_ISOLATED_MARKER } from "./synthetic-offline";
 import { UAT_RUN_SETTING_PREFIX } from "./uat-isolation";
-import { applyDemoAction, getDemoRun } from "./demo-controller";
 import { evaluateUatWorkflow, type UatWorkflowEvaluation } from "./uat-workflow-evaluator";
 import { collectUatEvaluationInput } from "./uat-workflow-fixtures";
 import {
@@ -199,14 +198,9 @@ async function reconcilePendingExternal(organizationId: string, runId: string, r
     );
     return { ...recovered, candidatePortal: { canIssue: !link, status: link ? "recovered-no-url" : "not-issued", reason: link ? "Credential was recovered without returning a retained bearer URL." : "No credential receipt was found. Issue a new explicit link only after reviewing this terminal result." } };
   }
-  const demoRunId = effect.correlationId;
-  const demo = demoRunId ? await getDemoRun(organizationId, demoRunId) : null;
-  const activity = demo?.activity.find((item) => item.requestId === requestId);
-  return finishRecoveredExternal(organizationId, runId, requestId, hash,
-    activity ? (activity.providerStatus === "sent" ? "dispatched" : activity.providerStatus === "unknown" ? "uncertain" : "terminal-failure") : "uncertain",
-    activity ? `demo:${demoRunId}:${activity.providerStatus}` : "demo-receipt-not-found",
-    activity ? undefined : "Prepared Demo email action has no durable provider receipt. It is uncertain and will never be retried automatically.",
-  );
+  // Retained non-portal effects are evidence only. Even a stale retry must
+  // not update their receipt, resolve uncertainty, or invoke a controller.
+  return publicRun(run);
 }
 const HARMLESS_FIXTURE_IDS = new Set([
   "valid", "missing-information", "expired", "inconsistent-name", "unsupported-format", "oversized", "corrupt", "changed-bytes",
@@ -342,11 +336,11 @@ export function getLearningCatalog() {
   };
 }
 
-export async function createUatRun(organizationId: string, actor: string, input: { scenarioId: string; mode?: "simulated" | "real-email"; volunteerId?: string | null; requestId?: string | null }, actorRole = "tenant-member") {
+export async function createUatRun(organizationId: string, actor: string, input: { scenarioId: string; mode?: "simulated"; requestId?: string | null }, actorRole = "tenant-member") {
   const selected = scenario(input.scenarioId);
   if (!selected) throw err("UatScenarioNotFound", "Unknown UAT scenario.");
-  if (input.mode === "real-email") {
-    throw err("UatRealEmailBlocked", "Create the isolated run in simulated mode. An explicit approved-Demo-email action may only delegate to an existing Demo Organization run with its own recipient pin, confirmation, provider checks and monitoring.");
+  if (input.mode !== undefined && input.mode !== "simulated") {
+    throw err("UatRealEmailBlocked", "UAT runs do not send email. Only simulated creation is supported.");
   }
   const created = await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`onboarding-uat-create:${organizationId}:${input.requestId ?? randomUUID()}`}))`);
@@ -422,10 +416,13 @@ export async function getUatRun(organizationId: string, runId: string) {
 }
 
 export async function applyUatAction(organizationId: string, actor: string, runId: string, action: {
-  expectedVersion: number; requestId: string; kind: "record-evidence" | "exchange" | "advance-clock" | "pause" | "resume" | "cleanup" | "issue-candidate-portal" | "dispatch-approved-demo-email" | "inject-harmless-scanner-fact" | "evaluate-workflow";
+  expectedVersion: number; requestId: string; kind: "record-evidence" | "exchange" | "advance-clock" | "pause" | "resume" | "cleanup" | "issue-candidate-portal" | "inject-harmless-scanner-fact" | "evaluate-workflow";
   stepId?: string | null; result?: Result | null; note?: string | null; system?: System | null; operation?: Operation | null;
-  state?: string | null; hours?: number | null; realEmailConfirmation?: string | null; eventKey?: string | null; demoRunId?: string | null; demoExpectedVersion?: number | null; fixtureId?: string | null; scannerState?: "clean" | "pending" | "failed" | "quarantined" | null;
+  state?: string | null; hours?: number | null; eventKey?: string | null; fixtureId?: string | null; scannerState?: "clean" | "pending" | "failed" | "quarantined" | null;
 }, input?: { publicBase?: string; actorRole?: string }) {
+  if ((action as { kind: string }).kind === "dispatch-approved-demo-email") {
+    throw err("UatActionInvalid", "This historical action is retired and cannot be replayed.");
+  }
   let current = await load(organizationId, runId);
   if (!current) throw err("UatRunNotFound", "UAT run not found in this organization.");
   const hash = createHash("sha256").update(JSON.stringify({ ...action, publicBase: undefined })).digest("hex");
@@ -439,23 +436,13 @@ export async function applyUatAction(organizationId: string, actor: string, runI
   }
   if (current.version !== action.expectedVersion) throw err("UatRunVersionConflict", `Run changed since version ${action.expectedVersion}; refresh before retrying.`);
   assertLifecycleAllows(current, action);
-  const externalAction = action.kind === "issue-candidate-portal" || action.kind === "dispatch-approved-demo-email";
+  const externalAction = action.kind === "issue-candidate-portal";
   if (action.kind === "issue-candidate-portal" && (!current.linkedCaseIds[0] || !input?.publicBase)) {
     throw err("UatActionInvalid", "A linked UAT case and trusted request portal base are required.");
   }
-  if (action.kind === "dispatch-approved-demo-email") {
-    if (organizationId !== DEMO_ORGANIZATION_ID || !action.demoRunId || action.demoExpectedVersion === null || action.demoExpectedVersion === undefined ||
-      action.realEmailConfirmation !== "I_UNDERSTAND_APPROVED_QA_MAILBOX_ONLY") {
-      throw err("UatRealEmailBlocked", "Real email requires Demo Organization, an existing approved-volunteer Demo run, its current version, and explicit confirmation.");
-    }
-    const demo = await getDemoRun(organizationId, action.demoRunId);
-    if (!demo || demo.version !== action.demoExpectedVersion) {
-      throw err("UatRunVersionConflict", "The selected Demo run is missing or changed; refresh Demo Center before a live email action.");
-    }
-  }
   const evaluation = action.kind === "evaluate-workflow" ? await evaluateRunWorkflow(organizationId, current) : undefined;
   if (externalAction) {
-    const reservation = await reserveExternalAction(organizationId, runId, action.expectedVersion, action.requestId, hash, action.kind as "issue-candidate-portal" | "dispatch-approved-demo-email", actor, action.demoRunId ?? undefined);
+    const reservation = await reserveExternalAction(organizationId, runId, action.expectedVersion, action.requestId, hash, "issue-candidate-portal", actor);
     if (!reservation.reserved) {
       if (reservation.run.actions[action.requestId] === `pending:${hash}`) {
         return reconcilePendingExternal(organizationId, runId, action.requestId, hash, reservation.run);
@@ -495,27 +482,6 @@ export async function applyUatAction(organizationId: string, actor: string, runI
       candidatePortal = { caseId, linkId: issued.id, expiresAt: issued.expiresAt.toISOString(), launchUrl: issued.portalUrl };
     } catch (caught) { externalFailure = portalFailureMessage(caught); }
   }
-  let liveEmail: { state: string; note: string } | undefined;
-  if (action.kind === "dispatch-approved-demo-email") {
-    const demo = await getDemoRun(organizationId, action.demoRunId!);
-    if (!demo || demo.version !== action.demoExpectedVersion) {
-      liveEmail = { state: "blocked", note: "Selected Demo run changed after UAT action reservation; no email was dispatched." };
-    } else try {
-      const dispatched = await applyDemoAction(organizationId, actor, action.demoRunId!, {
-        expectedVersion: action.demoExpectedVersion, requestId: action.requestId, kind: "communication",
-        channel: "email", mode: "live", liveConfirmation: "I_UNDERSTAND_LIVE_DEMO",
-      });
-      const activity = dispatched.activity.find((item) => item.requestId === action.requestId);
-      liveEmail = {
-        state: activity?.providerStatus ?? "unknown",
-        note: activity?.providerStatus === "sent"
-          ? "Existing approved-volunteer Demo Center delivery recorded. Reply correlation/monitoring remains pending in that Demo run; no UAT pass was inferred."
-          : "Existing approved-volunteer Demo Center action did not establish a verified delivery. No retry or simulated substitute was performed.",
-      };
-    } catch (caught) {
-      liveEmail = { state: "blocked", note: `Existing approved-volunteer Demo Center preflight blocked the action: ${redact(caught instanceof Error ? caught.message : "unknown failure")}` };
-    }
-  }
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`onboarding-uat:${organizationId}:${runId}`}))`);
     const [row] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
@@ -545,21 +511,18 @@ export async function applyUatAction(organizationId: string, actor: string, runI
       run.evidence.push({ id: randomUUID(), at, stepId: action.stepId ?? null, result: action.result, provenance: "manual-evidence", note: redact(`${qualifier}${action.note?.trim() || "No additional note supplied."}`) });
     } else if (action.kind === "exchange") {
       if (!action.system || !action.operation || !action.state?.trim()) throw err("UatActionInvalid", "exchange requires system, operation, and state.");
-      const realEmailAttempt = action.system === "email" && action.realEmailConfirmation === "I_UNDERSTAND_APPROVED_QA_MAILBOX_ONLY";
       const eventKey = action.eventKey?.trim() || createHash("sha256").update(`${run.runId}:${action.system}:${action.operation}:${action.state}`).digest("hex");
       if (run.processedEventKeys.includes(eventKey) || run.pendingEvents.some((event) => event.eventKey === eventKey)) {
         run.pendingEvents.push({ id: randomUUID(), at, dueAt: at, kind: "duplicate-event", state: "ignored-duplicate", description: "Duplicate/replayed normalized event", note: "The run-scoped event key was already recorded; no adapter or readiness action occurred.", eventKey, system: action.system, operation: action.operation });
       } else {
-        run.exchanges.push({ id: randomUUID(), at, system: action.system, operation: action.operation, state: redact(action.state.trim()), note: realEmailAttempt
-        ? "Blocked: this simulator never dispatches real email. Use the approved volunteer boundary and existing monitored path."
-        : redact(action.note?.trim() || "Simulated normalized exchange; no provider call and no readiness transition.") });
+        run.exchanges.push({ id: randomUUID(), at, system: action.system, operation: action.operation, state: redact(action.state.trim()),
+          note: redact(action.note?.trim() || "Simulated normalized exchange; no provider call and no readiness transition.") });
         if (action.operation === "request" || action.operation === "poll") {
           run.pendingEvents.push({ id: randomUUID(), at, dueAt: future(at, 1), kind: `${action.system}-response`, state: "pending", description: `${action.system} simulated response for ${action.operation}`, note: "Will apply only when this run clock reaches its due time.", eventKey, system: action.system, operation: action.operation });
         } else {
           run.processedEventKeys.push(eventKey);
         }
       }
-      if (realEmailAttempt) run.evidence.push({ id: randomUUID(), at, stepId: action.stepId ?? null, result: "blocked", provenance: "real-email", note: "Real email remains blocked: this exchange authorized no recipient and performed no send." });
       run.workflowEvaluation = await evaluateRunWorkflow(organizationId, run);
     } else if (action.kind === "advance-clock") {
       if (!action.hours || action.hours < 1) throw err("UatActionInvalid", "advance-clock requires a positive number of hours.");
@@ -585,15 +548,6 @@ export async function applyUatAction(organizationId: string, actor: string, runI
       } else {
         run.evidence.push({ id: randomUUID(), at, stepId: null, result: "not-run", provenance: "manual-evidence", note: `Explicit no-email candidate portal link issued for linked UAT case ${candidatePortal.caseId}; bearer URL is returned once and never retained in run evidence.` });
       }
-    } else if (action.kind === "dispatch-approved-demo-email") {
-      if (!liveEmail) throw err("UatRealEmailBlocked", "The approved Demo email action did not return a monitored outcome.");
-      run.exchanges.push({ id: randomUUID(), at, system: "email", operation: "status-email", state: liveEmail.state, note: liveEmail.note });
-      run.evidence.push({
-        id: randomUUID(), at, stepId: action.stepId ?? null,
-        result: liveEmail.state === "sent" ? "not-run" : "blocked",
-        provenance: "real-email",
-        note: liveEmail.note,
-      });
     }
     else if (action.kind === "cleanup") {
       // Credential/session retirement is scoped only to case IDs owned by the
@@ -612,12 +566,11 @@ export async function applyUatAction(organizationId: string, actor: string, runI
       for (const [requestId, actionHash] of Object.entries(run.actions)) {
         if (!actionHash.startsWith("pending:")) continue;
         const effect = run.externalEffects[requestId];
+        if (effect?.kind === "dispatch-approved-demo-email") continue;
         if (effect) {
-          effect.state = effect.kind === "dispatch-approved-demo-email" ? "uncertain" : "terminal-failure";
+          effect.state = "terminal-failure";
           effect.finalizedAt = at;
-          effect.failure = effect.kind === "dispatch-approved-demo-email"
-            ? "Cleanup retired a prepared Demo email action as uncertain; no automatic retry is permitted."
-            : "Cleanup retired the prepared portal action before a credential could remain active.";
+          effect.failure = "Cleanup retired the prepared portal action before a credential could remain active.";
           effect.receiptHash = createHash("sha256").update(`cleanup:${requestId}:${effect.state}`).digest("hex");
         }
         run.actions[requestId] = actionHash.slice("pending:".length);
@@ -628,17 +581,14 @@ export async function applyUatAction(organizationId: string, actor: string, runI
     if (run.status === "active" && run.evidence.some((item) => item.result === "failed")) run.status = "blocked";
     const prepared = run.externalEffects[action.requestId];
     if (prepared?.state === "prepared") {
-      const outcome = action.kind === "issue-candidate-portal"
-        ? candidatePortal ? "confirmed" : "terminal-failure"
-        : liveEmail?.state === "sent" ? "dispatched"
-          : liveEmail?.state === "unknown" ? "uncertain" : "terminal-failure";
+      const outcome = candidatePortal ? "confirmed" : "terminal-failure";
       prepared.state = outcome;
       prepared.finalizedAt = at;
       const receipt = candidatePortal
         ? `portal:${candidatePortal.caseId}:${candidatePortal.linkId}:${candidatePortal.expiresAt}`
-        : liveEmail?.note ?? externalFailure ?? "no external receipt";
+        : externalFailure ?? "no external receipt";
       prepared.receiptHash = createHash("sha256").update(receipt).digest("hex");
-      if (outcome === "terminal-failure" || outcome === "uncertain") prepared.failure = redact(externalFailure ?? liveEmail?.note ?? "Provider outcome was not confirmed; no retry was performed.");
+      if (outcome === "terminal-failure") prepared.failure = redact(externalFailure ?? "Provider outcome was not confirmed; no retry was performed.");
     }
     run.actions[action.requestId] = hash; run.version += 1; run.updatedAt = at;
     await tx.insert(onbSettings).values({ organizationId, key: key(runId), value: JSON.stringify(run) })

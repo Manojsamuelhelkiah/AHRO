@@ -16,6 +16,7 @@ import {
 } from "./channels";
 import { getSetting, HR_ALERT_EMAIL_KEY, HR_APPROVER_EMAIL_KEY, isValidEmail } from "./settings";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isRetiredControllerCase } from "./controller-retirement";
 import {
   ACTION_IDENTITY_SETTING_KEY,
   identityForRole,
@@ -1165,7 +1166,7 @@ export async function updateBgvNotifications(input: {
   await withCaseFence(input.organizationId, input.caseId, async () => {
     await db.transaction(async (tx) => {
       const loaded = await loadLocked(tx, input.organizationId, input.caseId);
-      if (isSyntheticOfflineCase(loaded.caseRow)) {
+      if (isSyntheticOfflineCase(loaded.caseRow) || isRetiredControllerCase(loaded.caseRow)) {
         throw new BgvNotificationConflictError(
           "Paused offline cases are read-only; resume the case before changing BGV notifications.",
         );
@@ -1556,6 +1557,7 @@ async function reconcileCycle(
   const created: number[] = [];
   const retried: number[] = [];
   const skipped: number[] = [];
+  if (isRetiredControllerCase(caseRow)) return { created, retried, skipped };
   const candidateAuthorized = candidateEmailAuthorization(caseRow).allowed;
   const namedStakeholders = await namedStakeholdersForOrganization(organizationId);
   const simulatedBase = explicitSimulation ||
@@ -1724,7 +1726,7 @@ async function reconcileInternalUnlocked(input: {
     const loaded = await loadLocked(tx, input.organizationId, input.caseId);
     caseRow = loaded.caseRow;
     state = loaded.state;
-    if (isSyntheticOfflineCase(caseRow)) {
+    if (isSyntheticOfflineCase(caseRow) || isRetiredControllerCase(caseRow)) {
       pausedOffline = true;
       return;
     }
@@ -1917,7 +1919,7 @@ export async function reconcileBgvNotifications(input: {
       eq(onbCases.organizationId, input.organizationId),
     ));
     if (!caseRow) throw new BgvNotificationNotFoundError();
-    if (isSyntheticOfflineCase(caseRow)) {
+    if (isSyntheticOfflineCase(caseRow) || isRetiredControllerCase(caseRow)) {
       throw new BgvNotificationConflictError(
         "Paused offline cases are read-only; resume the case before manual reconciliation.",
       );

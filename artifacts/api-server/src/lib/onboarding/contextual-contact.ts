@@ -29,7 +29,7 @@ import {
   sendOutbound,
 } from "./channels";
 import { candidateEmailMaySend, normalizePreference } from "./channel-routing";
-import { refreshDemoAllowlist } from "./demo-volunteers";
+import { refreshDemoAllowlist } from "./recipient-allowlist";
 import { logEvent } from "./engine";
 import { startVoiceCall, simulateVoiceCall } from "./voice";
 import { getSetting, HR_APPROVER_EMAIL_KEY } from "./settings";

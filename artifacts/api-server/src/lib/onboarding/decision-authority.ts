@@ -14,6 +14,7 @@ import {
   type OnbAuthorityScope,
 } from "@workspace/db/schema";
 import type { OnboardingDbTransaction } from "./settings";
+import { isRetiredControllerCase } from "./controller-retirement";
 import type { ApprovalDecision, ApprovalProposal } from "./compound-action-contract";
 import {
   demoPrincipalSettingKey,
@@ -168,6 +169,7 @@ export async function verifyDecisionAuthorityInTransaction(
     eq(onbCases.organizationId, input.organizationId),
     eq(onbCases.id, input.approval.caseId),
   ));
+  if (c && isRetiredControllerCase(c)) return { allowed: false, reason: "case_operations_retired" };
   if (!c) return { allowed: false, reason: "case_tenant_mismatch" };
   const syntheticDemoCase =
     input.organizationId === DEMO_ORGANIZATION_ID &&
@@ -311,11 +313,12 @@ export async function decisionAuthorityStillCurrent(
     notes: onbCases.notes,
     scenarioKey: onbCases.scenarioKey,
     syntheticProvenance: onbCases.syntheticProvenance,
+    controllerRetired: onbCases.controllerRetired,
   }).from(onbCases).where(and(
     eq(onbCases.organizationId, approval.organizationId),
     eq(onbCases.id, approval.caseId),
   ));
-  if (!c || (assignment.caseId !== null && assignment.caseId !== c.id) ||
+  if (!c || isRetiredControllerCase(c) || (assignment.caseId !== null && assignment.caseId !== c.id) ||
       (assignment.siteScope && assignment.siteScope !== c.geography) ||
       (assignment.jurisdictionScope && assignment.jurisdictionScope !== c.legalEntity)) return false;
   const demoProfile = await demoProfileInTransaction(tx, assignment.personUserId);
@@ -528,10 +531,12 @@ export async function hasCurrentAuthorityScope(
     notes: onbCases.notes,
     scenarioKey: onbCases.scenarioKey,
     syntheticProvenance: onbCases.syntheticProvenance,
+    controllerRetired: onbCases.controllerRetired,
   }).from(onbCases).where(and(
     eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId),
   )))[0];
   if (input.caseId !== undefined && !c) return false;
+  if (c && isRetiredControllerCase(c)) return false;
   const now = new Date();
   const assignments = await tx.select().from(onbAuthorityAssignments).where(and(
     eq(onbAuthorityAssignments.organizationId, input.organizationId),

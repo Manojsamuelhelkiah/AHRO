@@ -28,6 +28,7 @@ import type { OnboardingDbTransaction } from "./settings";
 import { isValidEmail } from "./settings";
 import { sendAdministrativeEmail } from "./channels";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isRetiredControllerCase } from "./controller-retirement";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
   jurisdictionForWorkforceContext,
@@ -109,7 +110,7 @@ async function reopenGateCIfNeeded(
       eq(onbCases.id, caseId),
       eq(onbCases.organizationId, organizationId),
     )).for("update");
-    if (!c || (c.lifecycleStage !== "complete" && c.lifecycleStage !== "day1-review")) return;
+    if (!c || isRetiredControllerCase(c) || (c.lifecycleStage !== "complete" && c.lifecycleStage !== "day1-review")) return;
     await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, { organizationId, caseId });
     // Re-read every source under the case lock. The view used to schedule the
     // tick may be stale while a source webhook/attestation is racing it.
@@ -578,7 +579,7 @@ export async function claimReadinessSlaOutbox(
       eq(onbCases.organizationId, candidate.organizationId),
       eq(onbCases.id, candidate.caseId),
     )).for("update");
-    if (c && isSyntheticOfflineCase(c)) return null;
+    if (c && (isSyntheticOfflineCase(c) || isRetiredControllerCase(c))) return null;
     const [row] = c
       ? await tx.select().from(onbReadinessSlaOutbox).where(and(
           eq(onbReadinessSlaOutbox.organizationId, candidate.organizationId),
@@ -827,7 +828,7 @@ export async function runReadinessSlaTick(options: TickOptions = {}): Promise<Ti
   // historical completed cases without a snapshot, so they are never silently
   // enrolled by this sweep.
   const cases = (await db.select().from(onbCases))
-    .filter((caseRow) => !isSyntheticOfflineCase(caseRow));
+    .filter((caseRow) => !isSyntheticOfflineCase(caseRow) && !isRetiredControllerCase(caseRow));
   const result: TickResult = {
     cases: cases.length,
     quarantined: 0,

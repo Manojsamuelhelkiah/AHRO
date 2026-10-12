@@ -6,13 +6,13 @@
   "executionAssertionStatus": "not-executed: execution evidence belongs in a Test Center run, not this static inventory.",
   "denominators": {
     "featureCoverage": {
-      "denominator": 44,
-      "referenceMapped": 44,
-      "withGuide": 44,
-      "withScenario": 44,
+      "denominator": 42,
+      "referenceMapped": 42,
+      "withGuide": 42,
+      "withScenario": 42,
       "executedAssertions": 0,
       "blocked": 2,
-      "manual": 36
+      "manual": 34
     },
     "requirementCoverage": {
       "denominator": 81,
@@ -771,50 +771,11 @@
       "executionAssertion": "not-executed"
     },
     {
-      "id": "PFC-038",
-      "name": "Demo Center synthetic workflows",
-      "source": "product capability",
-      "entryPoints": [
-        "/demo-controller"
-      ],
-      "roles": [
-        "Demo Organization member"
-      ],
-      "guideTopic": "demo",
-      "scenarioIds": [
-        "UAT-DEMO-01"
-      ],
-      "verification": "manual",
-      "availabilityNote": "Presentation override is not workflow evidence.",
-      "referenceCoverage": "mapped",
-      "executionAssertion": "not-executed"
-    },
-    {
-      "id": "PFC-039",
-      "name": "Demo communication/action identity controls",
-      "source": "product capability",
-      "entryPoints": [
-        "/demo-controller"
-      ],
-      "roles": [
-        "Demo Organization member"
-      ],
-      "guideTopic": "demo",
-      "scenarioIds": [
-        "UAT-DEMO-01",
-        "UAT-EMAIL-01"
-      ],
-      "verification": "manual",
-      "availabilityNote": "Default communications are simulated.",
-      "referenceCoverage": "mapped",
-      "executionAssertion": "not-executed"
-    },
-    {
       "id": "PFC-040",
       "name": "UAT catalog selection and role instructions",
       "source": "product capability",
       "entryPoints": [
-        "/uat-test-center"
+        "/uat/"
       ],
       "roles": [
         "organization member"
@@ -833,7 +794,7 @@
       "name": "UAT fixture download and synthetic-document manifest",
       "source": "product capability",
       "entryPoints": [
-        "/uat-test-center"
+        "/uat/"
       ],
       "roles": [
         "organization member"
@@ -853,7 +814,7 @@
       "name": "UAT execution, pause/resume and observed evidence",
       "source": "product capability",
       "entryPoints": [
-        "/uat-test-center"
+        "/uat/"
       ],
       "roles": [
         "test coordinator"
@@ -872,7 +833,7 @@
       "name": "UAT run clock, normalized exchanges and evidence export",
       "source": "product capability",
       "entryPoints": [
-        "/uat-test-center"
+        "/uat/"
       ],
       "roles": [
         "test coordinator",
@@ -954,8 +915,7 @@
       "id": "communications",
       "title": "Communications, monitoring and recovery",
       "featureIds": [
-        "PFC-010",
-        "PFC-039"
+        "PFC-010"
       ],
       "scenarioIds": [
         "UAT-EMAIL-01",
@@ -1096,11 +1056,9 @@
     },
     {
       "id": "demo",
-      "title": "Demo Center and synthetic boundaries",
+      "title": "Fictional offline samples",
       "featureIds": [
-        "PFC-037",
-        "PFC-038",
-        "PFC-039"
+        "PFC-037"
       ],
       "scenarioIds": [
         "UAT-DEMO-01"

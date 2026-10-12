@@ -29,8 +29,6 @@ import { LoginPage } from './pages/login';
 import { PrivateAdminSession } from './components/private-admin-session';
 import { ClientSetupPage } from './pages/client-setup';
 import { CandidatePage } from './pages/candidate';
-import { DemoControllerIndexPage } from './pages/demo-controller';
-import { DemoControllerDetailPage } from './pages/demo-controller/detail';
 import {
   resolveOrganizationBootstrap,
   resolveOrganizationSwitch,
@@ -387,12 +385,6 @@ function Router() {
       </Route>
       <Route path="/audit">
         <Protected><AuditPage /></Protected>
-      </Route>
-      <Route path="/demo-controller">
-        <Protected><DemoControllerIndexPage /></Protected>
-      </Route>
-      <Route path="/demo-controller/:id">
-        <Protected><DemoControllerDetailPage /></Protected>
       </Route>
       <Route path="/uat-test-center/*?">
         <UatRelocation />

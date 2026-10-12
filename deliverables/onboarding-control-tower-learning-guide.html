@@ -8,7 +8,7 @@ body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.5;col
 <p><strong>Catalog version:</strong> 2026.09.15<br><strong>Baseline:</strong> BRD Employee Onboarding (AHRO), Draft for Review, 13-Aug-2026; conflicting version labels retained</p>
 <p class="notice"><strong>Evidence boundary:</strong> This guide describes product operation and test evidence. Reference coverage is a catalog mapping, not an executed assertion or proof that a test passed. Simulated evidence does not certify a vendor, scanner, source authenticity, specialist decision, or live readiness. The BRD remains Draft for Review with conflicting version labels.</p>
 <h2>Product-operation and UAT boundary</h2><p>Product-guide instructions describe authorized real operation; they do not make generic Case, Batch, Transfer, configuration, or provider actions isolated UAT flows. For a simulated scenario, start in Test Center and use only its run-owned linked case, candidate portal, or evaluator. The evaluator may use actual production pure predicates only on run-owned fixture/snapshot state. It must not mutate real-case readiness, dispatch providers, or change global time, credentials, leases, or real deadlines. If a real workflow, specialist role, approval, or provider is required, record <strong>Manual</strong> or <strong>Blocked</strong>.</p>
-<h2>Coverage statement</h2><p><strong>Reference coverage:</strong> product features 44/44 mapped; 44 linked to a guide and 44 linked to scenarios. BRD/cross-cutting requirements 81/81 mapped to a test route. <strong>Executed assertions recorded by this static catalog:</strong> features 0; requirements 0. Execution results belong in a Test Center run/evidence record, not this export. Unavailable or policy-dependent requirements: 28; provider-sandbox routes: 13.</p>
+<h2>Coverage statement</h2><p><strong>Reference coverage:</strong> product features 42/42 mapped; 42 linked to a guide and 42 linked to scenarios. BRD/cross-cutting requirements 81/81 mapped to a test route. <strong>Executed assertions recorded by this static catalog:</strong> features 0; requirements 0. Execution results belong in a Test Center run/evidence record, not this export. Unavailable or policy-dependent requirements: 28; provider-sandbox routes: 13.</p>
 
   <section>
     <h2 id="navigation">Start here: roles, navigation and evidence</h2>
@@ -42,12 +42,12 @@ body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.5;col
 
   <section>
     <h2 id="communications">Communications, monitoring and recovery</h2>
-    <p class="meta"><strong>Roles:</strong> HR coordinator · QA coordinator · approved volunteer · <strong>Entry:</strong> /cases/:id · /systems · /demo-controller</p>
-    <p>Communications show a redacted operational record. Default UAT uses simulation; real email is a separately opted-in approved-mailbox test using the existing monitored route.</p>
-    <h3>How to use this area</h3><ul><li>Check Systems for monitor health before relying on inbound replies.</li><li>For simulated runs, record status-email, duplicate, delayed and ambiguous events as non-authoritative exchanges.</li><li>For real email, select only an approved volunteer/mailbox through the existing path and capture a redacted existing audit record.</li></ul>
+    <p class="meta"><strong>Roles:</strong> HR coordinator · QA coordinator · <strong>Entry:</strong> /cases/:id · /systems</p>
+    <p>Communications show a redacted operational record. UAT uses simulation or manually recorded existing evidence; it does not deliver volunteer messages.</p>
+    <h3>How to use this area</h3><ul><li>Check Systems for monitor health before relying on ordinary inbound replies.</li><li>For simulated runs, record status-email, duplicate, delayed and ambiguous events as non-authoritative exchanges.</li><li>Historical provider results remain evidence only and cannot authorize retries.</li></ul>
     <h3>Evidence to retain</h3><ul><li>Communication audit, monitor state, correlation/duplicate outcome.</li></ul>
     <h3>Exceptions and boundaries</h3><ul><li>Do not authorize recipients from Test Center.</li><li>Uncertain send is not retried automatically; spoofed, self-echo and ambiguous messages must not be silently attached.</li></ul>
-    <p class="links">Features: PFC-010, PFC-039 · Scenarios: UAT-EMAIL-01, UAT-OPS-01</p>
+    <p class="links">Features: PFC-010 · Scenarios: UAT-EMAIL-01, UAT-OPS-01</p>
   </section>
 
   <section>
@@ -151,18 +151,18 @@ body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.5;col
   </section>
 
   <section>
-    <h2 id="demo">Demo Center and synthetic boundaries</h2>
-    <p class="meta"><strong>Roles:</strong> Demo Organization member · owner/admin · <strong>Entry:</strong> /demo-controller · /settings</p>
-    <p>Demo Center is available to every Demo Organization member for synthetic workflows and presentations. It is not a route around live controls.</p>
-    <h3>How to use this area</h3><ul><li>Confirm the synthetic/demo label and action identity.</li><li>Use demo communications/overrides only as described by the current control.</li><li>Review reset scope before confirming; retain run evidence first.</li></ul>
-    <h3>Evidence to retain</h3><ul><li>Demo action receipt, actor label, reset-scope confirmation.</li></ul>
-    <h3>Exceptions and boundaries</h3><ul><li>Demo presentation overrides are not provider or workflow proof.</li><li>Never use reset on genuine cases/history.</li></ul>
-    <p class="links">Features: PFC-037, PFC-038, PFC-039 · Scenarios: UAT-DEMO-01</p>
+    <h2 id="demo">Fictional offline samples</h2>
+    <p class="meta"><strong>Roles:</strong> Demo Administrator · owner/admin · <strong>Entry:</strong> /cases · /settings</p>
+    <p>Fictional offline samples support provider-isolated walkthroughs. Real-person records never become fictional through retirement or reset.</p>
+    <h3>How to use this area</h3><ul><li>Confirm the offline label and server-owned fictional identity.</li><li>Use simulated exchanges only.</li><li>Review reset scope before confirming.</li></ul>
+    <h3>Evidence to retain</h3><ul><li>Synthetic provenance and reset-scope confirmation.</li></ul>
+    <h3>Exceptions and boundaries</h3><ul><li>Simulation is not provider or workflow proof.</li><li>Never reset genuine cases or retained historical controller evidence.</li></ul>
+    <p class="links">Features: PFC-037 · Scenarios: UAT-DEMO-01</p>
   </section>
 
   <section>
     <h2 id="test-center">UAT Test Center: run, evidence and safe cleanup</h2>
-    <p class="meta"><strong>Roles:</strong> Organization member · test coordinator · <strong>Entry:</strong> /uat-test-center</p>
+    <p class="meta"><strong>Roles:</strong> Organization member · test coordinator · <strong>Entry:</strong> /uat/</p>
     <p>Select a role-appropriate scenario, create a tenant-scoped synthetic run, then use only its linked synthetic case, candidate portal or run-owned evaluator. Record observed evidence, pause/resume, export and clean only run-owned state. Reference coverage is a catalog mapping; only a recorded run can make an execution assertion.</p>
     <h3>How to use this area</h3><ul><li>Read scenario prerequisites, actor assignment, test mode and blocker before creating the run. If a role, provider or real workflow is required, record Manual or Blocked rather than using a generic product create action.</li><li>Use the fixture manifest and harmless files as inputs, not pre-verified outcomes; capture displayed local parse/content-rule state separately from scanner, authenticity and provider observations.</li><li>Record Passed, Failed, Blocked or Not applicable with a redacted reason. A safely blocked negative action can pass its test, while the unavailable capability remains blocked.</li><li>Use the run-scoped clock/exchanges and evaluator only for run-owned simulation. It can apply production pure predicates to run state but must never change real-case readiness; export before scoped cleanup.</li></ul>
     <h3>Evidence to retain</h3><ul><li>Run/catalog/baseline version, linked-subject/evaluator reference, fixture seed, step history, provenance, report export and cleanup receipt.</li></ul>
@@ -311,13 +311,13 @@ body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.5;col
   </article>
 
   <article class="scenario">
-    <h3>UAT-DEMO-01 — Demo Center and synthetic-reset boundary</h3>
+    <h3>UAT-DEMO-01 — Fictional offline simulation and synthetic-reset boundary</h3>
     <p><strong>Family:</strong> demo/synthetic · <strong>Mode:</strong> manual-evidence · <strong>Availability:</strong> manual</p>
     <p>Tests ordinary Demo Organization access, synthetic workflow controls and the boundary from real operations.</p>
     <p class="notice"><strong>Execution boundary:</strong> Manual observation only: use an independently authorized non-production fixture or record Blocked. This scenario does not make a real workflow, role, provider, or generic product create action an isolated Test Center flow.</p>
     <p class="blocked"><strong>Verification gap:</strong> Demo overrides and reset remain presentation/training aids and do not prove workflow execution or authorize live effects.</p>
     <p><strong>Roles:</strong> Demo Organization member · owner/admin</p>
-    <ol><li><strong>Demo Organization member:</strong> Open Demo Center without promotion, start a labeled synthetic workflow and inspect action identity.<br><em>Expected:</em> Ordinary Demo Organization membership is sufficient for the demo area, while action identity/audit remain present.<br><em>Evidence:</em> Demo workflow receipt and actor label.<br><em>Wait:</em> Wait for the current UI status.<br><em>Negative path:</em> Attempt a non-demo/live remote write and confirm it is denied or unavailable.</li><li><strong>owner/admin:</strong> Review synthetic reset scope and confirmation text without selecting live records.<br><em>Expected:</em> Reset scope is explicit and excludes live operational history.<br><em>Evidence:</em> Reset scope/confirmation view.<br><em>Wait:</em> Do not execute a destructive reset merely to test the button.<br><em>Negative path:</em> Try to select an out-of-scope/live resource if the UI presents one.</li></ol>
+    <ol><li><strong>Demo Organization member:</strong> Open an authorized fictional sample in Cases and inspect the offline simulation and actor identity.<br><em>Expected:</em> Case access remains grant-scoped; simulation is labeled and never calls providers.<br><em>Evidence:</em> Simulation history and actor label.<br><em>Wait:</em> Wait for the current UI status.<br><em>Negative path:</em> Attempt live outreach or an action on a retired historical case and confirm it is unavailable.</li><li><strong>owner/admin:</strong> Review synthetic reset scope and confirmation text without selecting live records.<br><em>Expected:</em> Reset scope is explicit and excludes live operational history.<br><em>Evidence:</em> Reset scope/confirmation view.<br><em>Wait:</em> Do not execute a destructive reset merely to test the button.<br><em>Negative path:</em> Try to select an out-of-scope/live resource if the UI presents one.</li></ol>
   </article>
 
   <article class="scenario">
@@ -377,12 +377,10 @@ body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.5;col
 <tr><td>PFC-035</td><td>Readiness/SLA, early-tenure and privacy settings</td><td>/settings</td><td>administration</td><td>mapped: UAT-SETTINGS-01, UAT-FLT-01</td><td>not-executed</td><td>manual<br>Legal/policy defaults cannot be invented.</td></tr>
 <tr><td>PFC-036</td><td>Early-tenure Day-1/30/60/90/probation tracking</td><td>/settings · /cases/:id</td><td>variants</td><td>mapped: UAT-SETTINGS-01</td><td>not-executed</td><td>manual<br>Enabled schedule and human completion must be observed.</td></tr>
 <tr><td>PFC-037</td><td>Synthetic reset configuration</td><td>/settings</td><td>administration</td><td>mapped: UAT-DEMO-01, UAT-SETTINGS-01</td><td>not-executed</td><td>manual<br>Scope/confirmation are reviewed; no live data reset.</td></tr>
-<tr><td>PFC-038</td><td>Demo Center synthetic workflows</td><td>/demo-controller</td><td>demo</td><td>mapped: UAT-DEMO-01</td><td>not-executed</td><td>manual<br>Presentation override is not workflow evidence.</td></tr>
-<tr><td>PFC-039</td><td>Demo communication/action identity controls</td><td>/demo-controller</td><td>demo</td><td>mapped: UAT-DEMO-01, UAT-EMAIL-01</td><td>not-executed</td><td>manual<br>Default communications are simulated.</td></tr>
-<tr><td>PFC-040</td><td>UAT catalog selection and role instructions</td><td>/uat-test-center</td><td>test-center</td><td>mapped: UAT-UAT-01</td><td>not-executed</td><td>implemented-simulated<br>Run creation is isolated and non-authoritative.</td></tr>
-<tr><td>PFC-041</td><td>UAT fixture download and synthetic-document manifest</td><td>/uat-test-center</td><td>test-center</td><td>mapped: UAT-UAT-01, UAT-DOC-01</td><td>not-executed</td><td>implemented-simulated<br>Fixtures are harmless and visibly fictional.</td></tr>
-<tr><td>PFC-042</td><td>UAT execution, pause/resume and observed evidence</td><td>/uat-test-center</td><td>test-center</td><td>mapped: UAT-UAT-01</td><td>not-executed</td><td>implemented-simulated<br>Recorded human evidence does not fabricate backend evidence.</td></tr>
-<tr><td>PFC-043</td><td>UAT run clock, normalized exchanges and evidence export</td><td>/uat-test-center</td><td>test-center</td><td>mapped: UAT-UAT-01, UAT-OPS-01</td><td>not-executed</td><td>implemented-simulated<br>Clock/exchanges never dispatch providers or change live deadlines.</td></tr>
+<tr><td>PFC-040</td><td>UAT catalog selection and role instructions</td><td>/uat/</td><td>test-center</td><td>mapped: UAT-UAT-01</td><td>not-executed</td><td>implemented-simulated<br>Run creation is isolated and non-authoritative.</td></tr>
+<tr><td>PFC-041</td><td>UAT fixture download and synthetic-document manifest</td><td>/uat/</td><td>test-center</td><td>mapped: UAT-UAT-01, UAT-DOC-01</td><td>not-executed</td><td>implemented-simulated<br>Fixtures are harmless and visibly fictional.</td></tr>
+<tr><td>PFC-042</td><td>UAT execution, pause/resume and observed evidence</td><td>/uat/</td><td>test-center</td><td>mapped: UAT-UAT-01</td><td>not-executed</td><td>implemented-simulated<br>Recorded human evidence does not fabricate backend evidence.</td></tr>
+<tr><td>PFC-043</td><td>UAT run clock, normalized exchanges and evidence export</td><td>/uat/</td><td>test-center</td><td>mapped: UAT-UAT-01, UAT-OPS-01</td><td>not-executed</td><td>implemented-simulated<br>Clock/exchanges never dispatch providers or change live deadlines.</td></tr>
 <tr><td>PFC-044</td><td>Learning Guide search, navigation and portable download</td><td>/learning-guide</td><td>navigation</td><td>mapped: UAT-UAT-01</td><td>not-executed</td><td>manual<br>Guide export content/version should be observed.</td></tr>
 </tbody></table>
 <h2>Requirement-to-test traceability</h2><p>Use the accompanying CSV for sortable review. Its <em>reference_coverage</em> field is a route mapping; <em>execution_assertion_status</em> is intentionally <em>not-executed</em>. Latest result is intentionally <em>Not run</em>, <em>Blocked</em> or <em>Manual</em> until independently observed; this export makes no overall verification claim.</p>

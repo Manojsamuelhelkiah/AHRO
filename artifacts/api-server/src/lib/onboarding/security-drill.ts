@@ -16,7 +16,7 @@ import { handleInbound } from "./engine";
 import { senderTrusted, applyWatchEmail, parseStatusEmail } from "./email-watch";
 import { twilioSignatureValid } from "./twilio-signature";
 import { recordGuardrailEvent } from "./guardrails";
-import { refreshDemoAllowlist } from "./demo-volunteers";
+import { refreshDemoAllowlist } from "./recipient-allowlist";
 import { runWithProviderDeny } from "./provider-policy";
 import { getDay1LogisticsDefault, readinessFromChecklist } from "./settings";
 import { logisticsForCase } from "./logistics-defaults";
@@ -124,7 +124,7 @@ async function drillCase(organizationId: string): Promise<{ id: number; created:
         managerName: "Security Team",
         recruiterName: "Security Team",
         joiningDate,
-        notes: `${DRILL_SYNTHETIC_FIXTURE_MARKER}\nSynthetic case for the guardrails security drill. Not a real person; contacts require explicit organization-scoped demo-volunteer authorization.`,
+        notes: `${DRILL_SYNTHETIC_FIXTURE_MARKER}\nSynthetic case for the guardrails security drill. Not a real person; external delivery is denied.`,
         checklistTemplateVersion: checklist.templateVersion,
         checklistSnapshot: checklist.items,
         checklistProfileId: checklist.profileId,

@@ -24,6 +24,7 @@ import {
 import { sendAdministrativeEmail } from "./channels";
 import { hasCurrentAuthorityScope, roleMayExerciseScope } from "./decision-authority";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isRetiredControllerCase } from "./controller-retirement";
 import { type OnboardingDbTransaction } from "./settings";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
@@ -228,7 +229,7 @@ export async function saveEarlyTenurePolicy(input: {
 async function requireCaseAuthority(tx: OnboardingDbTransaction, organizationId: string, caseId: number, actorUserId: string): Promise<typeof onbCases.$inferSelect> {
   const [c] = await tx.select().from(onbCases).where(and(eq(onbCases.organizationId, organizationId), eq(onbCases.id, caseId))).for("update");
   if (!c) throw new Error("Case not found.");
-  if (isSyntheticOfflineCase(c)) throw new Error("Synthetic/offline cases cannot be enrolled or completed as early-tenure evidence.");
+  if (isSyntheticOfflineCase(c) || isRetiredControllerCase(c)) throw new Error("Synthetic/offline or retired cases cannot be enrolled or completed as early-tenure evidence.");
   // Assignments, acknowledgements and evidence are opaque case-derived
   // content. Retention coverage/holds must allow their collection before any
   // durable early-tenure write occurs.
@@ -709,7 +710,7 @@ export async function recordProbationDecision(input: {
   if (input.disposition !== "extended" && extensionEndsAt) bad("Only an extension may include extensionEndsAt.");
   await withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
     const [c] = await tx.select().from(onbCases).where(and(eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId))).for("update");
-    if (!c || isSyntheticOfflineCase(c)) throw new Error("Case not found or not eligible for probation decision.");
+    if (!c || isSyntheticOfflineCase(c) || isRetiredControllerCase(c)) throw new Error("Case not found or not eligible for probation decision.");
     await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, {
       organizationId: input.organizationId, caseId: input.caseId,
     });
@@ -984,7 +985,7 @@ async function claimReminder(id: number, owner: string, now: Date) {
     const [row] = await tx.select().from(onbEarlyTenureReminders).where(and(eq(onbEarlyTenureReminders.organizationId, initial.organizationId), eq(onbEarlyTenureReminders.id, id))).for("update");
     if (!row || row.status !== "pending" || row.availableAt > now) return null;
     const [c] = await tx.select().from(onbCases).where(and(eq(onbCases.organizationId, row.organizationId), eq(onbCases.id, row.caseId))).for("update");
-    if (!c || isSyntheticOfflineCase(c)) {
+    if (!c || isSyntheticOfflineCase(c) || isRetiredControllerCase(c)) {
       await tx.update(onbEarlyTenureReminders).set({ status: "suppressed", deliveryInfo: "Suppressed: case unavailable or synthetic.", updatedAt: now }).where(eq(onbEarlyTenureReminders.id, id));
       return null;
     }

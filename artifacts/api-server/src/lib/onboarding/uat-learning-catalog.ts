@@ -149,7 +149,7 @@ export const UAT_SCENARIOS: readonly UatScenario[] = [
     ["candidate", "HR reviewer"], "simulated", "available", null, [
       { actor: "candidate", action: "From Test Center, use only the run-owned linked portal and downloadable harmless fixture manifest to submit variants for valid, missing information, expired date, inconsistent name, unsupported format, size mismatch, unreadable/corrupt content and changed bytes.", expected: "A downloadable fixture is input, not an auto-verified outcome. Record only the displayed local parse/content-rule result; scanner availability, scanner detection, identity and issuer authenticity are separate observations.", evidence: "Per-file run-linked status and redacted local-parse note.", wait: "Upload one variant at a time and refresh the run-linked status.", negativePath: "Use only supplied harmless renamed content for type rejection; never upload executable or malware content." },
       { actor: "HR reviewer", action: "Inspect scanner availability separately, then use the run-owned evaluator's simulated adverse/disputed BGV fixture for a human-disposition boundary.", expected: "Unavailable scanner/provider remains unavailable; local parsing is not scanner detection or authenticity, and simulated BGV never creates an automated employment decision.", evidence: "Scanner state, evaluator result and disposition-boundary note.", wait: "Do not wait for an unconfigured service.", negativePath: "Attempt to mark a fixture or simulated result as verified and record the denial/boundary." },
-    ], ["PFC-008", "PFC-009", "PFC-011", "PFC-038"], ["REQ-02", "REQ-04", "REQ-15", "BR-03", "BR-05", "BR-08"]),
+    ], ["PFC-008", "PFC-009", "PFC-011"], ["REQ-02", "REQ-04", "REQ-15", "BR-03", "BR-05", "BR-08"]),
   scenario("UAT-EMAIL-01", "Approved-mailbox reply correlation", "communications",
     "Covers simulated communication events and the separately governed real-email path.",
     ["QA coordinator", "approved volunteer"], "real-email", "blocked",
@@ -213,13 +213,13 @@ export const UAT_SCENARIOS: readonly UatScenario[] = [
     "Only an authorized non-production organization may change configuration; legal defaults must not be invented.", [
       { actor: "owner/admin", action: "Save a clearly synthetic client/process-file configuration and reload the relevant section.", expected: "Saved values persist, validation errors are explicit and source files remain governed inputs rather than executable instructions.", evidence: "Redacted before/after settings and save status.", wait: "Reload after successful save.", negativePath: "Attempt missing/invalid required configuration." },
       { actor: "owner/admin", action: "Inspect readiness/SLA, early-tenure and privacy settings and their scope before changing any synthetic value.", expected: "Unapproved jurisdiction, retention, payroll cutoff and specialist rules remain visible as decisions/gaps, not defaulted by the test.", evidence: "Setting scope/version and governance note.", wait: "Do not change live settings for a test.", negativePath: "Attempt a synthetic reset without required confirmation." },
-    ], ["PFC-027", "PFC-028", "PFC-034", "PFC-035", "PFC-036", "PFC-037", "PFC-038"], ["REQ-10", "REQ-11", "REQ-12", "REQ-13", "BR-02", "BR-08"]),
-  scenario("UAT-DEMO-01", "Demo Center and synthetic-reset boundary", "demo/synthetic",
+    ], ["PFC-027", "PFC-028", "PFC-034", "PFC-035", "PFC-036", "PFC-037"], ["REQ-10", "REQ-11", "REQ-12", "REQ-13", "BR-02", "BR-08"]),
+  scenario("UAT-DEMO-01", "Fictional offline simulation and synthetic-reset boundary", "demo/synthetic",
     "Tests ordinary Demo Organization access, synthetic workflow controls and the boundary from real operations.", ["Demo Organization member", "owner/admin"], "manual-evidence", "manual",
     "Demo overrides and reset remain presentation/training aids and do not prove workflow execution or authorize live effects.", [
-      { actor: "Demo Organization member", action: "Open Demo Center without promotion, start a labeled synthetic workflow and inspect action identity.", expected: "Ordinary Demo Organization membership is sufficient for the demo area, while action identity/audit remain present.", evidence: "Demo workflow receipt and actor label.", wait: "Wait for the current UI status.", negativePath: "Attempt a non-demo/live remote write and confirm it is denied or unavailable." },
+      { actor: "Demo Organization member", action: "Open an authorized fictional sample in Cases and inspect the offline simulation and actor identity.", expected: "Case access remains grant-scoped; simulation is labeled and never calls providers.", evidence: "Simulation history and actor label.", wait: "Wait for the current UI status.", negativePath: "Attempt live outreach or an action on a retired historical case and confirm it is unavailable." },
       { actor: "owner/admin", action: "Review synthetic reset scope and confirmation text without selecting live records.", expected: "Reset scope is explicit and excludes live operational history.", evidence: "Reset scope/confirmation view.", wait: "Do not execute a destructive reset merely to test the button.", negativePath: "Try to select an out-of-scope/live resource if the UI presents one." },
-    ], ["PFC-039", "PFC-040", "PFC-038"], ["BR-06", "BR-07", "BR-08"]),
+    ], ["PFC-037", "PFC-040"], ["BR-06", "BR-07", "BR-08"]),
   scenario("UAT-UAT-01", "Test Center lifecycle, fixtures, report and cleanup", "UAT workspace",
     "Tests catalog search/selection, run creation, fixtures, step evidence, pause/resume, export and scoped cleanup.", ["organization member", "test coordinator"], "simulated", "available", null, [
       { actor: "organization member", action: "Select a scenario, create a synthetic run, download its fixture pack and record one observed step result.", expected: "The run preserves catalog/baseline version, fixture seed, roles, timestamp, evidence provenance and case links without granting new roles.", evidence: "Run header and redacted fixture manifest.", wait: "Wait for run creation before downloading.", negativePath: "Select a blocked scenario and confirm its blocking reason remains visible." },
@@ -271,8 +271,6 @@ export const PRODUCT_FEATURES: readonly ProductFeature[] = [
   ["PFC-035", "Readiness/SLA, early-tenure and privacy settings", "BRD + product capability", ["/settings"], ["owner/admin"], "administration", ["UAT-SETTINGS-01", "UAT-FLT-01"], "manual", "Legal/policy defaults cannot be invented."],
   ["PFC-036", "Early-tenure Day-1/30/60/90/probation tracking", "BRD + product capability", ["/settings", "/cases/:id"], ["HRBP", "hiring manager"], "variants", ["UAT-SETTINGS-01"], "manual", "Enabled schedule and human completion must be observed."],
   ["PFC-037", "Synthetic reset configuration", "product capability", ["/settings"], ["owner/admin"], "administration", ["UAT-DEMO-01", "UAT-SETTINGS-01"], "manual", "Scope/confirmation are reviewed; no live data reset."],
-  ["PFC-038", "Demo Center synthetic workflows", "product capability", ["/demo-controller"], ["Demo Organization member"], "demo", ["UAT-DEMO-01"], "manual", "Presentation override is not workflow evidence."],
-  ["PFC-039", "Demo communication/action identity controls", "product capability", ["/demo-controller"], ["Demo Organization member"], "demo", ["UAT-DEMO-01", "UAT-EMAIL-01"], "manual", "Default communications are simulated."],
   ["PFC-040", "UAT catalog selection and role instructions", "product capability", ["/uat/"], ["organization member"], "test-center", ["UAT-UAT-01"], "implemented-simulated", "Run creation is isolated and non-authoritative."],
   ["PFC-041", "UAT fixture download and synthetic-document manifest", "product capability", ["/uat/"], ["organization member"], "test-center", ["UAT-UAT-01", "UAT-DOC-01"], "implemented-simulated", "Fixtures are harmless and visibly fictional."],
   ["PFC-042", "UAT execution, pause/resume and observed evidence", "product capability", ["/uat/"], ["test coordinator"], "test-center", ["UAT-UAT-01"], "implemented-simulated", "Recorded human evidence does not fabricate backend evidence."],
@@ -414,11 +412,11 @@ export const GUIDE_SECTIONS: readonly GuideSection[] = [
     featureIds: ["PFC-007", "PFC-008", "PFC-009"], scenarioIds: ["UAT-STD-01", "UAT-DOC-01"],
   },
   {
-    id: "communications", title: "Communications, monitoring and recovery", roles: ["HR coordinator", "QA coordinator", "approved volunteer"], entryPoints: ["/cases/:id", "/systems", "/demo-controller"],
-    summary: "Communications show a redacted operational record. Default UAT uses simulation; real email is a separately opted-in approved-mailbox test using the existing monitored route.",
-    instructions: ["Check Systems for monitor health before relying on inbound replies.", "For simulated runs, record status-email, duplicate, delayed and ambiguous events as non-authoritative exchanges.", "For real email, select only an approved volunteer/mailbox through the existing path and capture a redacted existing audit record."],
+    id: "communications", title: "Communications, monitoring and recovery", roles: ["HR coordinator", "QA coordinator"], entryPoints: ["/cases/:id", "/systems"],
+    summary: "Communications show a redacted operational record. UAT uses simulation or manually recorded existing evidence; it does not deliver volunteer messages.",
+    instructions: ["Check Systems for monitor health before relying on ordinary inbound replies.", "For simulated runs, record status-email, duplicate, delayed and ambiguous events as non-authoritative exchanges.", "Historical provider results remain evidence only and cannot authorize retries."],
     evidence: ["Communication audit, monitor state, correlation/duplicate outcome."], exceptions: ["Do not authorize recipients from Test Center.", "Uncertain send is not retried automatically; spoofed, self-echo and ambiguous messages must not be silently attached."],
-    featureIds: ["PFC-010", "PFC-039"], scenarioIds: ["UAT-EMAIL-01", "UAT-OPS-01"],
+    featureIds: ["PFC-010"], scenarioIds: ["UAT-EMAIL-01", "UAT-OPS-01"],
   },
   {
     id: "handoffs", title: "Work items, approvals and human ownership", roles: ["HR coordinator", "HR reviewer", "verified specialist"], entryPoints: ["/approvals", "/cases/:id"],
@@ -491,11 +489,11 @@ export const GUIDE_SECTIONS: readonly GuideSection[] = [
     featureIds: ["PFC-030", "PFC-031", "PFC-032"], scenarioIds: ["UAT-ARCH-01", "UAT-SEC-01"],
   },
   {
-    id: "demo", title: "Demo Center and synthetic boundaries", roles: ["Demo Organization member", "owner/admin"], entryPoints: ["/demo-controller", "/settings"],
-    summary: "Demo Center is available to every Demo Organization member for synthetic workflows and presentations. It is not a route around live controls.",
-    instructions: ["Confirm the synthetic/demo label and action identity.", "Use demo communications/overrides only as described by the current control.", "Review reset scope before confirming; retain run evidence first."],
-    evidence: ["Demo action receipt, actor label, reset-scope confirmation."], exceptions: ["Demo presentation overrides are not provider or workflow proof.", "Never use reset on genuine cases/history."],
-    featureIds: ["PFC-037", "PFC-038", "PFC-039"], scenarioIds: ["UAT-DEMO-01"],
+    id: "demo", title: "Fictional offline samples", roles: ["Demo Administrator", "owner/admin"], entryPoints: ["/cases", "/settings"],
+    summary: "Fictional offline samples support provider-isolated walkthroughs. Real-person records never become fictional through retirement or reset.",
+    instructions: ["Confirm the offline label and server-owned fictional identity.", "Use simulated exchanges only.", "Review reset scope before confirming."],
+    evidence: ["Synthetic provenance and reset-scope confirmation."], exceptions: ["Simulation is not provider or workflow proof.", "Never reset genuine cases or retained historical controller evidence."],
+    featureIds: ["PFC-037"], scenarioIds: ["UAT-DEMO-01"],
   },
   {
     id: "test-center", title: "UAT Test Center: run, evidence and safe cleanup", roles: ["Organization member", "test coordinator"], entryPoints: ["/uat/"],

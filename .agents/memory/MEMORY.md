@@ -47,9 +47,8 @@
 - [Readiness policy authority](readiness-policy-authority.md) — policy deadlines replace legacy timers; score never substitutes for final human authority; review cycles bind approval to evidence.
 - [Case explanation boundaries](case-explanation-boundaries.md) — explain recorded evidence, not hidden reasoning; current policy cannot prove historical rationale; chat stays read-only and scope-isolated.
 - [Synthetic case refresh](synthetic-case-refresh.md) — explicit inventory, authoritative offline mode, dispatch/deletion locking, and retained private file references protect real data and recipients.
-- [Hybrid demo boundaries](demo-controller-boundaries.md) — Demo Organization run scope, explicit volunteer outreach, and truthful simulation without changing real employment evidence.
-- [Fictional demo lifecycle boundary](fictional-demo-lifecycle-boundary.md) — fixed no-volunteer Demo Center cases may run without real-person policies; volunteer or entered data may not.
-- [Demo bootstrap approval](demo-bootstrap-approval.md) — initial Demo authority needs private operator approval; managed Clerk metadata editing is not an available setup path.
+- [Historical controller retirement](controller-retirement-boundaries.md) — retained consent, runs and provider outcomes never authorize operations; volunteers remain real people.
+- [Demo principal boundaries](demo-principal-boundaries.md) — public Demo identities stay pinned; fictional simulations never grant tenant or specialist authority.
 - [Operational simulation truthfulness](operational-simulation-truthfulness.md) — show operational emails and agent actions in Communications without implying real external work or readiness.
 - [BGV notification boundaries](bgv-notification-boundaries.md) — human notices versus simulated operations; source provenance, private findings, and stale-email fencing.
 - [Shared mailbox personas](shared-mailbox-personas.md) — intended stakeholder, delivery mailbox, and actual responder are separate; demo names never grant authority.

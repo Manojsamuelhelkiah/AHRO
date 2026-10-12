@@ -35,7 +35,6 @@ import scenarioFilesRouter from "./scenario-files";
 import organizationsRouter from "./organizations";
 import candidatePublicRouter from "./candidate-public";
 import candidateAdminRouter from "./candidate-admin";
-import onboardingDemoControllerRouter from "./onboarding-demo-controller";
 import onboardingUatTestCenterRouter from "./onboarding-uat-test-center";
 import onboardingFairnessRouter from "./onboarding-fairness";
 import actionCenterRouter from "./action-center";
@@ -55,6 +54,11 @@ import uatAuthRouter from "./uat-auth";
 import { requireUatAdmission } from "../middlewares/uat-admission";
 
 const router: IRouter = Router();
+// Deleted namespaces must not fall through to organization-id matching.
+// These tombstones perform no authentication bootstrap, parsing or mutation.
+router.use(["/organizations/demo-controller-setup", "/onboarding/demo-controller"], (_req, res) => {
+  res.sendStatus(404);
+});
 router.use(healthRouter);
 router.use(uatAuthRouter);
 router.use(platformAdminRouter);
@@ -131,7 +135,6 @@ router.use(governanceRouter);
 router.use(hrPolicyRouter);
 router.use(privacyLifecycleRouter);
 router.use(agentInvocationsRouter);
-router.use(onboardingDemoControllerRouter);
 router.use(onboardingUatTestCenterRouter);
 router.use(onboardingFairnessRouter);
 router.use(onboardingSlaRouter);

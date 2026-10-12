@@ -5,6 +5,7 @@ import {
   type GovernanceExecutionGate,
 } from "./governance-runtime";
 import { externalProviderDispatchDenied } from "./provider-policy";
+import { isRetiredControllerCase } from "./controller-retirement";
 import {
   withGovernanceDispatch,
   type GovernanceDispatchResult,
@@ -85,8 +86,6 @@ export async function evaluateProviderGovernanceGate(
   workflow: ProviderGovernanceWorkflow,
   options: {
     allowIsolatedLocalOperation?: "candidate-private-upload" | "candidate-portal-credential";
-    /** Existing Demo-only provider exception; never use for UAT. */
-    allowIsolatedProviderDispatch?: boolean;
   } = {},
 ): Promise<ProviderGovernanceGate> {
   const gate = await evaluateStoredCaseGovernanceGate({
@@ -95,9 +94,14 @@ export async function evaluateProviderGovernanceGate(
     // escape hatch may hide an unmapped real-provider workflow.
     workflow,
   });
+  const [current] = await db.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, caseRow.organizationId), eq(onbCases.id, caseRow.id),
+  )).limit(1);
+  if (current && isRetiredControllerCase(current)) {
+    return { allowed: false, workflow, gate, reason: "Historical controller case: all operational effects are retired." };
+  }
   if (gate.execution === "isolated-simulation" &&
-    !options.allowIsolatedLocalOperation &&
-    !options.allowIsolatedProviderDispatch) {
+    !options.allowIsolatedLocalOperation) {
     return {
       allowed: false,
       workflow,
@@ -139,7 +143,6 @@ export async function dispatchWithProviderGovernance<T>(input: {
    */
   minimalTypedPayload?: boolean;
    /** Only narrowly authorized communication/voice Demo paths may opt in. */
-  allowIsolatedProviderDispatch?: boolean;
    /**
     * Local non-provider operations available to a durably linked UAT case.
     * This is deliberately an enum rather than a caller-controlled boolean.
@@ -183,6 +186,10 @@ export async function dispatchWithProviderGovernance<T>(input: {
       });
       if (!currentCase) {
         deniedReason = "The onboarding case no longer exists in this organization.";
+        return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
+      }
+      if (isRetiredControllerCase(currentCase)) {
+        deniedReason = "This case is retained historical evidence; operational effects are retired.";
         return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
       }
       if (
@@ -232,7 +239,6 @@ export async function dispatchWithProviderGovernance<T>(input: {
         input.workflow,
         {
           allowIsolatedLocalOperation: input.allowIsolatedLocalOperation,
-          allowIsolatedProviderDispatch: input.allowIsolatedProviderDispatch,
         },
       );
       if (!gate.allowed) {

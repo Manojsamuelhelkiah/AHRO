@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
-  getGetOnboardingDemoControllerQueryKey,
 } from "@workspace/api-client-react";
 
 export type DecisionStatus = "draft" | "provisional" | "approved" | "rejected" | "superseded";
@@ -90,7 +89,6 @@ export const keys = {
 
 function invalidateGovernanceAndDemoReadiness(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: keys.all });
-  qc.invalidateQueries({ queryKey: getGetOnboardingDemoControllerQueryKey() });
 }
 
 export function useGetGovernanceDecisions(options?: { query?: { refetchInterval?: number; refetchIntervalInBackground?: boolean } }) {

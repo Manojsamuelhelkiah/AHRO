@@ -178,7 +178,7 @@ describe("UAT Test Center durable isolation", { skip: !hasDb }, () => {
     assert.equal(evaluated.workflowEvaluation!.decisions.some((decision) => decision.id === "documents"), true);
   });
 
-  test("recovers an interrupted prepared effect without resending and then permits cleanup", async () => {
+  test("rejects a retired email retry without rewriting its historical outcome", async () => {
     const run = await createUatRun(organizationId, actor, { scenarioId: "UAT-STD-01", requestId: randomUUID() });
     const requestId = randomUUID();
     const action = { expectedVersion: 0, requestId, kind: "dispatch-approved-demo-email" as const };
@@ -196,12 +196,16 @@ describe("UAT Test Center durable isolation", { skip: !hasDb }, () => {
     await db.update(onbSettings).set({ value: JSON.stringify(interrupted) }).where(and(
       eq(onbSettings.organizationId, organizationId), like(onbSettings.key, `onboarding-uat.run.v1:${run.runId}`),
     ));
-    const recovered = await applyUatAction(organizationId, actor, run.runId, action);
-    assert.equal(recovered.externalActionStatus?.state, "uncertain");
+    await assert.rejects(applyUatAction(organizationId, actor, run.runId,
+      action as unknown as Parameters<typeof applyUatAction>[3]), { name: "UatActionInvalid" });
+    const recovered = await getUatRun(organizationId, run.runId);
+    assert.ok(recovered);
+    assert.equal(recovered.externalActionStatus?.state, "prepared");
     const cleaned = await applyUatAction(organizationId, actor, run.runId, {
       expectedVersion: recovered.version, requestId: randomUUID(), kind: "cleanup",
     });
     assert.equal(cleaned.status, "cleaned");
+    assert.equal(cleaned.externalActionStatus?.state, "prepared");
   });
 
   test("issues a no-email credential through the real authorized local UAT boundary", async () => {

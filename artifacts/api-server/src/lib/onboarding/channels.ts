@@ -6,9 +6,8 @@ import { ReplitConnectors } from "@replit/connectors-sdk";
 import { candidateEmailDeliveryDecision, candidateEmailMaySend, isRetryableCandidateEmail } from "./channel-routing";
 import { isValidEmail } from "./settings";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { isRetiredControllerCase } from "./controller-retirement";
 import {
-  demoControllerLiveAllowed,
-  demoControllerLiveContextValid,
   externalProviderDispatchDenied,
 } from "./provider-policy";
 import {
@@ -88,121 +87,6 @@ export function emailChannelInfo(): ChannelInfo {
     target: "He***@gmail.com",
     note: "Outbound email is live via the connected Gmail account.",
   };
-}
-
-export type DemoEmailReadiness = {
-  configured: boolean;
-  reason: string;
-};
-
-const DEMO_EMAIL_READINESS_TTL_MS = 15_000;
-const DEMO_EMAIL_READINESS_FAILURE_TTL_MS = 5_000;
-const DEMO_EMAIL_READINESS_TIMEOUT_MS = 2_500;
-let demoEmailReadinessCache: { value: DemoEmailReadiness; expiresAt: number } | null = null;
-let demoEmailReadinessInFlight: Promise<DemoEmailReadiness> | null = null;
-
-/**
- * Pure, non-sensitive interpretation of the Gmail profile response. The
- * profile address is intentionally never returned to callers.
- */
-export function classifyDemoEmailReadiness(
-  responseOk: boolean,
-  profile: unknown,
-): DemoEmailReadiness {
-  if (!responseOk) {
-    return {
-      configured: false,
-      reason: "The connected Gmail provider is unavailable.",
-    };
-  }
-  if (
-    !profile ||
-    typeof profile !== "object" ||
-    typeof (profile as { emailAddress?: unknown }).emailAddress !== "string" ||
-    !(profile as { emailAddress: string }).emailAddress.trim()
-  ) {
-    return {
-      configured: false,
-      reason: "The Gmail readiness response was unavailable or invalid.",
-    };
-  }
-  return {
-    configured: true,
-    reason: "The connected Gmail provider is ready.",
-  };
-}
-
-async function probeDemoEmailReadiness(): Promise<DemoEmailReadiness> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const response = await Promise.race([
-      connectorProxy(
-        "google-mail",
-        "/gmail/v1/users/me/profile",
-        { method: "GET" },
-      ),
-      new Promise<null>((resolve) => {
-        timeout = setTimeout(() => resolve(null), DEMO_EMAIL_READINESS_TIMEOUT_MS);
-      }),
-    ]);
-    if (response === null) {
-      return {
-        configured: false,
-        reason: "The Gmail readiness check timed out.",
-      };
-    }
-    let profile: unknown = null;
-    try {
-      profile = await response.json();
-    } catch {
-      // A successful HTTP response without a parseable profile is unknown,
-      // and therefore fail-closed.
-      profile = null;
-    }
-    return classifyDemoEmailReadiness(response.ok, profile);
-  } catch {
-    return {
-      configured: false,
-      reason: "The connected Gmail provider is unavailable.",
-    };
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout);
-  }
-}
-
-/**
- * Read-only, bounded Gmail readiness for DemoController capabilities.
- * This never sends a probe message and never exposes the connected profile
- * address or provider response. Results are cached briefly to avoid turning a
- * capabilities request into repeated provider traffic.
- */
-export async function getDemoEmailReadiness(): Promise<DemoEmailReadiness> {
-  if (externalProviderDispatchDenied()) {
-    return {
-      configured: false,
-      reason: "Gmail readiness checks are denied by the active execution safety policy.",
-    };
-  }
-  const now = Date.now();
-  if (demoEmailReadinessCache && demoEmailReadinessCache.expiresAt > now) {
-    return demoEmailReadinessCache.value;
-  }
-  if (!demoEmailReadinessInFlight) {
-    demoEmailReadinessInFlight = probeDemoEmailReadiness().then((value) => {
-      demoEmailReadinessCache = {
-        value,
-        expiresAt: Date.now() + (
-          value.configured
-            ? DEMO_EMAIL_READINESS_TTL_MS
-            : DEMO_EMAIL_READINESS_FAILURE_TTL_MS
-        ),
-      };
-      return value;
-    }).finally(() => {
-      demoEmailReadinessInFlight = null;
-    });
-  }
-  return demoEmailReadinessInFlight;
 }
 
 export function whatsappChannelInfo(): ChannelInfo {
@@ -585,7 +469,7 @@ export async function sendOutbound(opts: {
   /** The caller has already added the case-bound reply reference. */
   skipCandidateReplyReference?: boolean;
   /** Keeps explicitly approved Demo volunteer mail out of candidate KPIs. */
-  audience?: "candidate" | "demo-volunteer";
+  audience?: "candidate";
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   // The communication row freezes a sensitive body and recipient before the
   // effect journal/provider boundary. Hold the lifecycle fence across the
@@ -618,7 +502,7 @@ async function sendOutboundUnsafe(opts: {
   idempotencyKey?: string;
   stableBody?: boolean;
   skipCandidateReplyReference?: boolean;
-  audience?: "candidate" | "demo-volunteer";
+  audience?: "candidate";
 }): Promise<{ id: number; status: string; failureReason: string | null }> {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   const [caseRow] = await db.select().from(onbCases).where(eq(onbCases.id, opts.caseId));
@@ -640,16 +524,10 @@ async function sendOutboundUnsafe(opts: {
   // Authorize the address supplied by the caller first.  It is only a
   // capability check; candidateEmailAuthorization below is still the source
   // of the actual case recipient.
-  const demoCallerAuthorized = opts.channel === "email" && demoControllerLiveAllowed(
-    caseRow.organizationId,
-    caseRow.id,
-    "email",
-    opts.toAddress,
-  );
   // Pick up this tenant's allowlist changes saved on another process instance.
   let allowlistRefreshed = false;
   try {
-    const { refreshDemoAllowlist } = await import("./demo-volunteers");
+    const { refreshDemoAllowlist } = await import("./recipient-allowlist");
     await refreshDemoAllowlist(caseRow.organizationId);
     allowlistRefreshed = true;
   } catch (err) {
@@ -661,23 +539,11 @@ async function sendOutboundUnsafe(opts: {
   // proposed address.  This is deliberately repeated at the provider
   // boundary below: a volunteer can be revoked or edited while this
   // operation is preparing its payload.
-  const demoLiveEmail = demoCallerAuthorized && await demoControllerLiveContextValid(
-    caseRow.organizationId,
-    caseRow.id,
-    "email",
-    actualAddress,
-  );
-  const demoLiveAtProvider = demoLiveEmail && await demoControllerLiveContextValid(
-    caseRow.organizationId,
-    caseRow.id,
-    "email",
-    actualAddress,
-  );
   // Keep the offline guard before the effect journal/provider claim. A prior
   // interrupted attempt may have left its timeline row in `sending`; the
   // authoritative offline decision must close that row as `blocked` rather
   // than replaying the unknown state forever.
-  if (isSyntheticOfflineCase(caseRow) && !demoLiveAtProvider) {
+  if (isSyntheticOfflineCase(caseRow) || isRetiredControllerCase(caseRow)) {
     if (opts.idempotencyKey) {
       const [existing] = await db.select().from(onbCommunications).where(and(
         eq(onbCommunications.organizationId, caseRow.organizationId),
@@ -730,7 +596,6 @@ async function sendOutboundUnsafe(opts: {
   const governance = await evaluateProviderGovernanceGate(
     caseRow,
     PROVIDER_GOVERNANCE_WORKFLOW.communication,
-    { allowIsolatedProviderDispatch: demoLiveAtProvider },
   );
   if (!governance.allowed) {
     return recordGovernanceBlockedCommunication({
@@ -901,7 +766,6 @@ async function sendOutboundUnsafe(opts: {
       workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
       operation: `candidate-email:${opts.caseId}:${opts.idempotencyKey ?? "unkeyed"}`,
       providerId: "gmail",
-      allowIsolatedProviderDispatch: demoLiveAtProvider,
       dispatch: () => sendEmail(actualAddress, subject ?? "Onboarding update", body),
       disposition: (value) => value.status === "sending"
         ? "unknown"
@@ -922,7 +786,6 @@ async function sendOutboundUnsafe(opts: {
       workflow: PROVIDER_GOVERNANCE_WORKFLOW.communication,
       operation: `candidate-whatsapp:${opts.caseId}:${opts.idempotencyKey ?? "unkeyed"}`,
       providerId: "twilio-whatsapp",
-      allowIsolatedProviderDispatch: demoLiveAtProvider,
       dispatch: () => sendWhatsApp(actualAddress, body),
       disposition: (value) => value.status === "sending"
         ? "unknown"
@@ -1168,7 +1031,7 @@ async function sendAdministrativeEmailUnsafe(opts: {
   let result: { status: string; failureReason: string | null; externalMessageId: string | null };
   let allowlistRefreshed = false;
   try {
-    const { refreshDemoAllowlist } = await import("./demo-volunteers");
+    const { refreshDemoAllowlist } = await import("./recipient-allowlist");
     await refreshDemoAllowlist(caseRow.organizationId);
     allowlistRefreshed = true;
   } catch (err) {
@@ -1293,6 +1156,9 @@ async function retryCandidateEmailUnsafe(
     .where(and(eq(onbCommunications.id, communicationId), eq(onbCommunications.caseId, caseId)));
   if (!existing) return { ok: false, code: "not-found", reason: "Communication not found." };
   const msg = existing.communication;
+  if (isRetiredControllerCase(existing.candidate)) {
+    return { ok: false, code: "not-retryable", reason: "Historical controller delivery is retired; no retry is permitted." };
+  }
   if (isSyntheticOfflineCase(existing.candidate)) {
     return {
       ok: false,
@@ -1307,7 +1173,7 @@ async function retryCandidateEmailUnsafe(
   // before evaluating the legacy fallback path.
   let allowlistRefreshed = false;
   try {
-    const { refreshDemoAllowlist } = await import("./demo-volunteers");
+    const { refreshDemoAllowlist } = await import("./recipient-allowlist");
     await refreshDemoAllowlist(existing.candidate.organizationId);
     allowlistRefreshed = true;
   } catch (err) {

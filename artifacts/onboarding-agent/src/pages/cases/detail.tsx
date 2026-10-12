@@ -17,9 +17,7 @@ import {
   getGetOnboardingOperationalRequestsQueryKey,
   useGetOnboardingChannels,
   getGetOnboardingChannelsQueryKey,
-  getPinnedOrganizationIdForPage,
-  useGetOnboardingDemoController,
-  getGetOnboardingDemoControllerQueryKey
+   getPinnedOrganizationIdForPage,
 } from '@workspace/api-client-react';
 import { useQuery } from '@tanstack/react-query';
 import { customFetch } from '@workspace/api-client-react';
@@ -67,7 +65,7 @@ export function CaseDetailPage() {
     }
   });
   const {
-    data: permissions,
+    data: rawPermissions,
     isLoading: permissionsLoading,
     error: permissionsError,
   } = useQuery<CaseAccessPermissions>({
@@ -81,6 +79,13 @@ export function CaseDetailPage() {
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,
   });
+  const permissions = rawPermissions && c?.controllerRetired ? {
+    ...rawPermissions,
+    access: { ...rawPermissions.access, flowEdit: false, profileEdit: false, notesEdit: false },
+    sensitive: Object.fromEntries(Object.entries(rawPermissions.sensitive).map(
+      ([key, value]) => [key, { ...value, edit: false }],
+    )) as typeof rawPermissions.sensitive,
+  } : rawPermissions;
   const { data: standardIntakeEvidence } = useQuery({
     queryKey: ['standard-intake-evidence', caseId],
     queryFn: () => customFetch<{
@@ -170,15 +175,7 @@ export function CaseDetailPage() {
     }
   });
 
-  const { data: caps } = useGetOnboardingDemoController({
-    query: {
-      enabled: !!caseId && permissions?.access.flowRead === true && permissions?.sensitive.identity.read === true,
-      queryKey: getGetOnboardingDemoControllerQueryKey(),
-      retry: false
-    }
-  });
-
-  const offlineSample = c ? isOfflineDemoSample(c) : false;
+  const offlineSample = c ? !c.controllerRetired && isOfflineDemoSample(c) : false;
   const { error: privacyError } = useListLifecycleHolds({
     enabled: Boolean(c) && !offlineSample && permissions?.access.flowRead === true,
   });
@@ -237,7 +234,6 @@ export function CaseDetailPage() {
 
   if (!c) return <div className="p-8 text-center text-[var(--status-red)] font-bold">Case not found.</div>;
 
-  const demoSession = caps?.available ? caps.existingSessions.find((s: any) => s.caseId === caseId) : undefined;
   const uatCoverageSample = isDemoCoverageCase(c);
 
   const restrictedFields: string[] = [];
@@ -280,27 +276,11 @@ export function CaseDetailPage() {
         </div>
       )}
 
-      {demoSession && (
-        <div className="mb-4 p-3 bg-[var(--primary-light)] border border-[var(--primary)] border-opacity-30 rounded-md flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-2 text-[var(--primary-dark)] text-sm font-medium">
-            <Presentation className="h-4 w-4" />
-            This is a simulated demo case ({demoSession.scenario}).
-          </div>
-          <Link href={`/demo-controller/${demoSession.runId}`} className="text-xs font-semibold bg-[var(--surface)] text-[var(--primary-dark)] px-3 py-1.5 rounded shadow-sm border border-[var(--primary)] border-opacity-20 hover:bg-[var(--primary-light)] transition-colors">
-            Open Control Tower
-          </Link>
-        </div>
-      )}
       <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
+      {c.controllerRetired && <div role="status" className="mb-6 rounded-md border p-4 text-sm">
+        This case is retained historical evidence. Operations and outreach are retired; delivery outcomes and private records remain subject to current access and retention rules.
+      </div>}
       {!offlineSample && <EmployeeVaultPanel caseId={caseId} />}
-
-      {!offlineSample && c.hybridDemoSimulation === true && permissions.access.flowRead && (
-        <SimulationPanel
-          caseId={caseId}
-          recipientEmail={null}
-          emailPromptAvailable={c.candidateEmailAuthorized === true}
-        />
-      )}
 
       {c.batchIntake && <HroIntakeRequestPanel request={c.batchIntake} />}
       {offlineSample ? (
@@ -325,10 +305,6 @@ export function CaseDetailPage() {
             permissions.access.flowRead
               ? <SimulationPanel
                   caseId={caseId}
-                  recipientEmail={demoSession?.selectedVolunteerId
-                    ? (demoSession.selectedVolunteer?.email ?? null)
-                    : null}
-                  emailPromptAvailable={c.candidateEmailAuthorized === true}
                 />
               : <RestrictedActionNotice>Simulation is restricted by your current case permissions.</RestrictedActionNotice>
           )}

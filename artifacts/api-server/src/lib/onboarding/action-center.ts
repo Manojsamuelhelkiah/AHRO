@@ -72,8 +72,7 @@ export class ActionCenterPermissionError extends Error {
  * Action Center writes are deliberately narrower than tenant membership.
  * Demo members may operate the local simulation ledger, but a Demo request
  * can never turn this endpoint into a live volunteer/provider path. Live
- * Demo contact is owned by DemoController, which supplies its run-scoped
- * allowlist and revalidation context.
+ * No Demo run or retained consent can authorize new volunteer contact.
  */
 export function assertActionCenterMutationAuthorized(
   organizationId: string,
@@ -96,7 +95,7 @@ export function assertActionCenterMutationAuthorized(
   }
   if (organizationId === DEMO_ORGANIZATION_ID && mode === "live") {
     throw new ActionCenterPermissionError(
-      "Demo live contact is only available through an authorized Demo Controller run.",
+      "Demo Action Center cannot dispatch live contact.",
     );
   }
   if (organizationId !== DEMO_ORGANIZATION_ID && !isChecklistAdministrator(organizationRole)) {

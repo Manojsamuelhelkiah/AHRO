@@ -5,7 +5,8 @@ import { db } from "@workspace/db";
 import { onbCases, onbCommunications, onbEffectJournal, onbGovernanceAuthorityAssignments, onbGovernanceDecisionReviews, onbGovernanceDecisions, onbGovernanceDispatchMarkers, onbGovernanceRequirements, onbSensitiveLifecyclePolicies, organizationsTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import { retryCandidateEmail } from "./channels";
-import { DEMO_VOLUNTEERS_KEY, refreshDemoAllowlist } from "./demo-volunteers";
+import { refreshDemoAllowlist } from "./recipient-allowlist";
+const HR_APPROVER_SETTING_KEY = "hr_approver_email";
 import { getSetting, setSetting } from "./settings";
 import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 import { governanceSnapshotForNewCase, withGovernanceDecisionSnapshot, type GovernanceCaseSnapshot } from "./governance-runtime";
@@ -168,14 +169,10 @@ describe("email retry durable claim", { skip: !hasDb }, () => {
     }
   });
 
-  test("retry refreshes explicit demo-volunteer fallback without case autoauthorization", async () => {
-    const previousVolunteers = await getSetting(DEMO_ORGANIZATION_ID, DEMO_VOLUNTEERS_KEY);
+  test("retry refreshes the configured HR recipient without case autoauthorization", async () => {
+    const previousVolunteers = await getSetting(DEMO_ORGANIZATION_ID, HR_APPROVER_SETTING_KEY);
     const email = "retry-volunteer@example.com";
-    await setSetting(DEMO_ORGANIZATION_ID, DEMO_VOLUNTEERS_KEY, JSON.stringify([{
-      name: "Retry Volunteer",
-      email,
-      channelPreference: "email",
-    }]));
+    await setSetting(DEMO_ORGANIZATION_ID, HR_APPROVER_SETTING_KEY, email);
     const [c] = await db.insert(onbCases).values({
       organizationId: DEMO_ORGANIZATION_ID,
       workerName: "__Test Volunteer Retry__",
@@ -224,7 +221,7 @@ describe("email retry durable claim", { skip: !hasDb }, () => {
     } finally {
       await db.delete(onbEffectJournal).where(eq(onbEffectJournal.caseId, c.id));
       await db.delete(onbCases).where(eq(onbCases.id, c.id));
-      await setSetting(DEMO_ORGANIZATION_ID, DEMO_VOLUNTEERS_KEY, previousVolunteers);
+      await setSetting(DEMO_ORGANIZATION_ID, HR_APPROVER_SETTING_KEY, previousVolunteers);
       await refreshDemoAllowlist(DEMO_ORGANIZATION_ID);
     }
   });

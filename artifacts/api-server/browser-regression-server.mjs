@@ -183,14 +183,13 @@ const {
   organizationsTable,
 } = dbPackage;
 let runWithProviderDeny;
-let runWithControlledDemoEmailTest;
 let SENSITIVE_DATA_CLASSES;
 let demoPrincipalSettingKey;
 let router;
 let errorHandler;
 let setOnboardingConnectorProxyForTests;
 try {
-  ({ runWithProviderDeny, runWithControlledDemoEmailTest } = await import("./src/lib/onboarding/provider-policy.ts"));
+  ({ runWithProviderDeny } = await import("./src/lib/onboarding/provider-policy.ts"));
   ({ setOnboardingConnectorProxyForTests } = await import("./src/lib/onboarding/channels.ts"));
   ({ SENSITIVE_DATA_CLASSES } = await import("./src/lib/onboarding/sensitive-lifecycle.ts"));
   ({ demoPrincipalSettingKey } = await import("./src/lib/demo-principal.ts"));
@@ -201,36 +200,8 @@ try {
   throw error;
 }
 
-let controlledEmailProviderMode = "sent";
-let controlledEmailProviderCalls = 0;
-let delayedControlledEmailRelease;
-
-setOnboardingConnectorProxyForTests(async (service, path, options) => {
-  if (service !== "google-mail") {
-    throw new Error(`Unexpected browser-regression provider: ${service}`);
-  }
-  if (path.endsWith("/profile")) {
-    return new Response(JSON.stringify({ emailAddress: "browser-regression@example.invalid" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-  if (path.endsWith("/messages/send")) {
-    controlledEmailProviderCalls += 1;
-    if (controlledEmailProviderMode === "ambiguous") {
-      throw new Error("browser-regression simulated provider timeout");
-    }
-    if (controlledEmailProviderMode === "delayed") {
-      await new Promise((resolve) => {
-        delayedControlledEmailRelease = resolve;
-      });
-    }
-    return new Response(JSON.stringify({ id: `browser-regression-message-${controlledEmailProviderCalls}` }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-  throw new Error(`Unexpected browser-regression Gmail path: ${path}`);
+setOnboardingConnectorProxyForTests(async (service, path) => {
+  throw new Error(`External delivery is forbidden in browser regression: ${service} ${path}`);
 });
 
 function cookieValue(req, name) {
@@ -409,26 +380,7 @@ app.use(cookieParser());
 app.use(express.json());
 
 app.get("/api/test/ready", (_req, res) => {
-  res.json({ ready: true, providerBoundary: "deny-external-providers", controlledEmailTransport: "in-process-only" });
-});
-
-app.post("/api/test/controlled-email/:mode", (req, res) => {
-  const mode = String(req.params.mode);
-  if (!["sent", "ambiguous", "delayed"].includes(mode) && mode !== "release") {
-    res.status(400).json({ error: "Unsupported controlled email test mode." });
-    return;
-  }
-  if (mode === "release") {
-    delayedControlledEmailRelease?.();
-    delayedControlledEmailRelease = undefined;
-  } else {
-    controlledEmailProviderMode = mode;
-  }
-  res.json({ mode: controlledEmailProviderMode, providerCalls: controlledEmailProviderCalls });
-});
-
-app.get("/api/test/controlled-email", (_req, res) => {
-  res.json({ mode: controlledEmailProviderMode, providerCalls: controlledEmailProviderCalls });
+  res.json({ ready: true, providerBoundary: "deny-external-providers" });
 });
 
 app.post("/api/onboarding/demo-login", (req, res) => {
@@ -481,9 +433,7 @@ app.use((req, _res, next) => {
   const session = cookieValue(req, "browser_e2e_session");
   const userId = session ? sessions.get(session) : null;
   if (userId) req.authUserId = userId;
-  const controlledEmailSend = req.method === "POST" &&
-    /^\/api\/onboarding\/cases\/\d+\/simulation\/send-email$/.test(req.path);
-  (controlledEmailSend ? runWithControlledDemoEmailTest : runWithProviderDeny)(() => next());
+  runWithProviderDeny(() => next());
 });
 
 // The browser regression is allowed to inspect owned fixture state, but only

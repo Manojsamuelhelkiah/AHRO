@@ -14,9 +14,6 @@ import {
   lookupMembership,
   ORGANIZATION_HEADER,
 } from "../middlewares/tenant-context";
-import demoControllerSetupRouter, {
-  requireSameOriginDemoSetup,
-} from "./organizations-demo-controller-setup";
 import {
   changeOrganizationMemberRole,
   listOrganizationMembers,
@@ -44,7 +41,6 @@ const router: IRouter = Router();
 // The setup value is returned only to the authenticated target, so establish
 // no-store and browser resource isolation before authentication can reject an
 // endpoint or any other organization route middleware can process it.
-router.use("/organizations/demo-controller-setup", requireSameOriginDemoSetup);
 router.use("/organizations", requireAuth);
 router.use("/organizations", async (req, res, next): Promise<void> => {
   try {
@@ -76,7 +72,6 @@ router.use("/organizations", async (req, res, next): Promise<void> => {
     next(error);
   }
 });
-router.use(demoControllerSetupRouter);
 const requireTenantContext = createTenantContextMiddleware(lookupMembership);
 router.use("/organizations/current/access", requireTenantContext, hroRequestContext, accessGovernanceRouter);
 

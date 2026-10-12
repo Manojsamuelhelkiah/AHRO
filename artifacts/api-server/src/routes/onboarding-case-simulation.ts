@@ -10,7 +10,6 @@ import {
   CaseSimulationNotFoundError,
   getCaseSimulation,
   restartCaseSimulation,
-  sendCurrentSimulationPrompt,
   simulateNextCaseExchange,
 } from "../lib/onboarding/case-simulation";
 import { getOrganizationId } from "../lib/organization-scope";
@@ -120,38 +119,6 @@ router.post("/onboarding/cases/:caseId/simulation/restart", async (req, res, nex
       return;
     }
     res.status(statusFor(error)).json({ error: error instanceof Error ? error.message : "Unable to restart simulation." });
-  }
-});
-
-router.post("/onboarding/cases/:caseId/simulation/send-email", async (req, res, next) => {
-  const caseId = parseCaseId(req.params.caseId);
-  if (caseId === null) {
-    res.status(400).json({ error: "caseId must be a positive integer." });
-    return;
-  }
-  const parsed = SimulateNextOnboardingCaseExchangeBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  try {
-    const result = await sendCurrentSimulationPrompt({
-      organizationId: getOrganizationId(req),
-      actor: req.authUserId!,
-      caseId,
-      expectedVersion: parsed.data.expectedVersion,
-      expectedGenerationId: parsed.data.expectedGenerationId,
-      requestId: parsed.data.requestId,
-    });
-    res.json(result);
-  } catch (error) {
-    if (statusFor(error) === 500) {
-      next(error);
-      return;
-    }
-    res.status(statusFor(error)).json({
-      error: error instanceof Error ? error.message : "Unable to send the simulated prompt by email.",
-    });
   }
 });
 

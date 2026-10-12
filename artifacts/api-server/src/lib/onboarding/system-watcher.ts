@@ -55,6 +55,7 @@ import { documentationGateReady } from "./document-validation-policy";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { hasReadinessSlaEnrollment, readinessSlaDueAtForSystem } from "./readiness-sla-policy";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isRetiredControllerCase } from "./controller-retirement";
 import { ordinaryCaseSql } from "./uat-isolation";
 import type { OnboardingDbTransaction } from "./settings";
 import { recoverWorkforceConnectorContinuations } from "./operational-requests";
@@ -311,7 +312,7 @@ async function completeCheckUnlocked(
         eq(onbCases.organizationId, check.organizationId),
       ))
       .for("update");
-    if (caseForGuard && isSyntheticOfflineCase(caseForGuard)) {
+    if (caseForGuard && (isSyntheticOfflineCase(caseForGuard) || isRetiredControllerCase(caseForGuard))) {
       offlinePaused = true;
       return;
     }

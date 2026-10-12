@@ -395,9 +395,6 @@ export function CasesPage() {
             <FlaskConical className="h-4 w-4" />
             {isSeeding ? 'Adding Demo samples…' : !isDevelopmentDemo ? 'Demo samples only' : missingSyntheticKeys.length === 0 ? 'Demo set ready' : `Add Demo set (${missingSyntheticKeys.length})`}
           </Button>
-          <Link href="/demo-controller" className="inline-flex items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--surface-soft)] h-9 px-4 py-2 gap-2">
-            <Presentation className="h-4 w-4" /> Demo Center
-          </Link>
           <Button onClick={() => setShowNew(!showNew)} className="gap-2">
             <Plus className="h-4 w-4" /> New Case
           </Button>

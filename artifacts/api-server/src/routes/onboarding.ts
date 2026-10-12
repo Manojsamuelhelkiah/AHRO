@@ -79,7 +79,7 @@ import {
   isDemoFullCoverageScenarioKey,
   seedDemoFullCoverage,
 } from "../lib/onboarding/demo-full-coverage";
-import { isEligibleHybridDemoSimulation, normalizedDemoWorkCountry } from "../lib/onboarding/demo-controller";
+import { normalizedWorkCountry as normalizedDemoWorkCountry, isRetiredControllerCase } from "../lib/onboarding/controller-retirement";
 import {
   ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS,
   ensureConnectorsSeeded,
@@ -126,7 +126,7 @@ import {
   issueCandidatePortalLink,
   portalPublicBase,
 } from "../lib/onboarding/portal-link-issuance";
-import { loadVolunteers, saveVolunteers, seedVolunteerCases, listPersonas, refreshDemoAllowlist } from "../lib/onboarding/demo-volunteers";
+import { refreshDemoAllowlist } from "../lib/onboarding/recipient-allowlist";
 import { runApproverInboxTick } from "../lib/onboarding/approver-email";
 import { GUARDRAILS, GUARDRAIL_CATEGORIES, getGuardrail, recordGuardrailEvent } from "../lib/onboarding/guardrails";
 import { runSecurityDrill } from "../lib/onboarding/security-drill";
@@ -141,7 +141,6 @@ import {
   simulateVoiceCall,
   getVoiceSession,
   voiceTurn,
-  demoVoiceTurn,
   finalizeVoiceCall,
   gatherTwiml,
   hangupTwiml,
@@ -498,7 +497,7 @@ router.use("/onboarding/cases/:caseId", async (req, res, next) => {
         !isVerifiedHybridDemoControllerCase(caseRow))
     ) {
       res.status(403).json({
-        message: "Shared demo accounts require server-owned synthetic provenance or a verified Demo Controller run.",
+        message: "Shared demo accounts require an authorized synthetic case or an existing historical case-read grant.",
         code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
       });
       return;
@@ -513,6 +512,14 @@ router.use("/onboarding/cases/:caseId", async (req, res, next) => {
     return;
   }
   try {
+    const [retainedCase] = await db.select().from(onbCases).where(and(
+      eq(onbCases.organizationId, getOrganizationId(req)),
+      eq(onbCases.id, caseId),
+    )).limit(1);
+    if (retainedCase && isRetiredControllerCase(retainedCase)) {
+      res.status(409).json({ message: "This case is retained historical evidence and cannot be operated." });
+      return;
+    }
     const isolation = await getUatCaseIsolation({
       organizationId: getOrganizationId(req),
       id: caseId,
@@ -763,6 +770,7 @@ async function serializeCase(
   const profileSensitiveAccess = canReadProfile ? sensitiveAccess : NO_SENSITIVE_ACCESS;
   return {
     id: row.id,
+    controllerRetired: isRetiredControllerCase(row),
     caseFamily: canReadProfile ? intakeRequest?.family ?? null : null,
     requestType: canReadProfile ? intakeRequest?.requestType ?? null : null,
     batchIntake: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) ? intakeRequest : null,
@@ -793,7 +801,6 @@ async function serializeCase(
     // This server-derived output flag keeps every marker-backed offline case
     // out of interactive provider/contact controls in the client.
     offlineSample: isSyntheticOfflineCase(row),
-    hybridDemoSimulation: caseAccess.flowRead && await isEligibleHybridDemoSimulation(db, row),
     /** Only server-marked, fictional Demo fixtures may bypass identity authority. */
     fictionalOfflineIdentity: canReadProfile && fictionalOfflineIdentity,
     planSummary: canReadNotes
@@ -1207,7 +1214,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
     const demoProfile = await registeredDemoProfile(req.authUserId!);
     if (demoProfile === "reviewer") {
       res.status(403).json({
-        message: "Shared demo accounts cannot create ordinary cases. Use Demo Center synthetic samples.",
+        message: "Shared reviewer accounts cannot create cases. Use the Demo Administrator profile for fictional offline samples.",
         code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
       });
       return;
@@ -3841,6 +3848,10 @@ router.post("/onboarding/webhooks/twilio/voice-answer", async (req, res, next) =
       return;
     }
     const greeting = session.turns[0]?.text ?? "Hello from the onboarding team.";
+    if (session.runId) {
+      res.type("text/xml").send(hangupTwiml("This demonstration has been retired. Goodbye."));
+      return;
+    }
     if (session.organizationId) {
       const auditAttempt = await recordTwilioWebhookAttempt({
         organizationId: session.organizationId,
@@ -3888,9 +3899,11 @@ router.post("/onboarding/webhooks/twilio/voice-turn", async (req, res, next) => 
           objectType: "voice-session",
         })
       : null;
-    const { say, done } = session.runId
-      ? await demoVoiceTurn(session, speech)
-      : await voiceTurn(session, speech);
+    if (session.runId) {
+      res.type("text/xml").send(hangupTwiml("This demonstration has been retired. Goodbye."));
+      return;
+    }
+    const { say, done } = await voiceTurn(session, speech);
     if (session.organizationId) {
       await recordAcceptedTwilioWebhook({
         organizationId: session.organizationId,
@@ -4544,12 +4557,7 @@ router.get("/onboarding/approvals", async (req, res, next) => {
       (!isDay1ReadinessApproval(approval) || caseAccess.readinessRead) &&
       (!demoProfile ||
         isSyntheticOfflineCase({ notes, scenarioKey, syntheticProvenance }) ||
-        isVerifiedHybridDemoControllerCase({
-          notes,
-          scenarioKey,
-          candidateEmailAuthorizedAt,
-          candidateEmailAuthorizedBy,
-        })));
+        false));
     const filtered = wantAll
       ? visibleRows
       : visibleRows.filter((row) => row.approval.status === "pending");
@@ -5717,44 +5725,6 @@ router.post("/onboarding/guardrails/drill", async (req, res, next) => {
 
 /* --------------------------- demo volunteers --------------------------- */
 
-router.get("/onboarding/demo/volunteers", async (req, res, next) => {
-  try {
-    if (getOrganizationId(req) !== DEMO_ORGANIZATION_ID || !isChecklistAdministrator(req.organizationRole)) {
-      res.status(403).json({ message: "Demo volunteers require a Demo Organization owner or admin." });
-      return;
-    }
-    res.json({ volunteers: await loadVolunteers(getOrganizationId(req)), personas: listPersonas() });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.put("/onboarding/demo/volunteers", async (req, res, next) => {
-  try {
-    if (getOrganizationId(req) !== DEMO_ORGANIZATION_ID || !isChecklistAdministrator(req.organizationRole)) {
-      res.status(403).json({ message: "Demo volunteers require a Demo Organization owner or admin." });
-      return;
-    }
-    const raw = Array.isArray(req.body?.volunteers) ? req.body.volunteers : [];
-    const volunteers = await saveVolunteers(getOrganizationId(req), raw);
-    res.json({ volunteers });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post("/onboarding/demo/volunteers/seed", async (req, res, next) => {
-  try {
-    if (getOrganizationId(req) !== DEMO_ORGANIZATION_ID || !isChecklistAdministrator(req.organizationRole)) {
-      res.status(403).json({ message: "Demo volunteer seeding requires a Demo Organization owner or admin." });
-      return;
-    }
-    res.json({ results: await seedVolunteerCases(DEMO_ORGANIZATION_ID) });
-  } catch (err) {
-    next(err);
-  }
-});
-
 /* --------------------------- system watcher --------------------------- */
 
 router.get("/onboarding/systems/watcher", async (req, res, next) => {
@@ -5924,11 +5894,12 @@ async function loadOutcomeKpis(req: Request) {
           .select()
           .from(onbCases)
           .where(and(...caseFilters))))
-          // Synthetic reset and demo-controller cases are deliberately not
+          // Synthetic reset and retired controller cases are deliberately not
           // evidence of a genuine onboarding outcome. Keep their simulated
           // activity visible on their own run timeline, never in KPI cohorts.
           .filter((candidate) =>
             !isSyntheticOfflineCase(candidate) &&
+            !isRetiredControllerCase(candidate) &&
             (candidate.scenarioKey === null || candidate.scenarioKey === undefined),
           )
       : [];

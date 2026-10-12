@@ -682,9 +682,9 @@ portal; work items and handoffs; workforce transfers; AI and cited policy;
 analytics and recommendations; guardrails; policy review/library/reminders;
 systems; client setup; audit/archive; membership and verified specialist
 authority; checklist profiles; early-tenure, readiness/SLA and privacy;
-Demo Center; and the Test Center itself.
+fictional offline samples; and the separate Test Center application.
 
-The **UAT Test Center** (`/uat-test-center`) creates a versioned, tenant-scoped
+The **UAT Test Center** (`/uat/`) creates a versioned, tenant-scoped
 run with a fixture seed, baseline revision, scoped clock, step/evidence history,
 normalized provider-exchange history and redacted export. It supports
 UAT-STD-01 (standard), UAT-FLT-01 (frontline/bulk), UAT-XFR-01 (transfer),
@@ -702,10 +702,9 @@ UAT-DOC-01 (document boundary), UAT-EMAIL-01 (communications), UAT-SEC-01
 - Fixture packs contain only clearly labeled fictional harmless content.
   Local file/type/integrity results do not prove malware safety, identity,
   issuer authenticity, expiry or employment eligibility.
-- Real email is not authorized by a Test Center run. Where it is available,
-  use only the existing Demo Center approved-volunteer action and the actual
-  send/reply monitoring route with explicit confirmation. A delayed or
-  uncertain live attempt is not replaced automatically with a simulation.
+- Real email is not authorized or sent by a Test Center run. Historical
+  provider results remain evidence only; delayed replies cannot advance a
+  retired controller case. An uncertain attempt is never automatically resent.
 - Provider sandbox/vendor certification, legal transfer basis, human
   specialist decisions, retention/hold outcomes and cross-tenant checks are
   intentionally marked blocked or manual until independently observed.

@@ -12,7 +12,6 @@ import {
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { errorHandler } from "./middlewares/error-handler";
-import { requireSameOriginDemoSetup } from "./routes/organizations-demo-controller-setup";
 
 const app: Express = express();
 app.set("trust proxy", 1);
@@ -40,7 +39,6 @@ app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
 // This browser-only capability must be isolated before CORS or body parsers.
 // A hostile origin cannot supply browser-controlled same-origin metadata.
-app.use("/api/organizations/demo-controller-setup", requireSameOriginDemoSetup);
 app.use(cors({ credentials: true, origin: true }));
 app.use(cookieParser());
 app.use(express.json());

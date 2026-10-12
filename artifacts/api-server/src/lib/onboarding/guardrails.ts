@@ -132,27 +132,14 @@ export const GUARDRAILS: Guardrail[] = [
     threat:
       "The agent (or an attacker steering it) emails, messages or calls arbitrary real people.",
     mechanism:
-      "Live email/WhatsApp delivery and voice calls only go to explicitly authorized addresses: the configured recipient list plus validated demo volunteers saved in Settings. The allowlist is re-read from the database before every live send and call.",
+      "Live email/WhatsApp delivery and voice calls require an authorized case recipient or explicitly configured HR recipient. Historical volunteer lists never authorize delivery. The recipient policy is re-read before live sends and calls.",
     onViolation:
       "Message is composed and logged on the timeline as logged-only (or the call is withheld with an audit event) — nothing is delivered.",
     enforcedAt: ["channels.ts (addressAllowed, sendOutbound)", "voice.ts (startVoiceCall)"],
     evals: [
       { name: "channel-routing.test.ts", kind: "automated-test" },
       { name: "voice.test.ts", kind: "automated-test" },
-      { name: "Live-verified: stranger address blocked, volunteer allowed", kind: "live-verified" },
     ],
-  },
-  {
-    key: "volunteer-validation",
-    title: "Demo volunteer validation",
-    category: "delivery-safety",
-    severity: "medium",
-    threat: "Malformed or bulk-injected contact rows silently become authorized live destinations.",
-    mechanism:
-      "Volunteer rows are normalized and validated (valid email, international phone format, phone required for WhatsApp, hard cap of 20 rows); only fully valid rows enter the delivery allowlist.",
-    onViolation: "Invalid rows are saved for editing but excluded from live delivery and seeding.",
-    enforcedAt: ["demo-volunteers.ts (normalizeVolunteer, volunteerProblems, applyAllowlist)"],
-    evals: [{ name: "Live-verified: invalid rows not authorized", kind: "live-verified" }],
   },
   {
     key: "inbound-injection-fence",

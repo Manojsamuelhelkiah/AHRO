@@ -223,7 +223,7 @@ function safeMemberDisplay(userId: string): string {
 
 /**
  * Return only the current privacy/legal authority projection needed by
- * Demo Center. It intentionally contains no email, profile, or unrelated
+ * Sensitive lifecycle administration. It contains no email, profile, or unrelated
  * tenant membership data. A nomination is visible as a route to verification,
  * never as approval authority.
  */

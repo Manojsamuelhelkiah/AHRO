@@ -5,7 +5,7 @@ import { startInboundEmailPolling } from "./lib/onboarding/inbound-email";
 import { startSystemWatcher } from "./lib/onboarding/system-watcher";
 import { startEmailWatch } from "./lib/onboarding/email-watch";
 import { backfillDocumentPacks } from "./lib/onboarding/documents";
-import { initDemoAllowlist } from "./lib/onboarding/demo-volunteers";
+import { initDemoAllowlist } from "./lib/onboarding/recipient-allowlist";
 import { recoverStaleVoiceSessions } from "./lib/onboarding/voice";
 import { startApproverInboxPolling } from "./lib/onboarding/approver-email";
 import { startConnectedReadinessAutomation } from "./lib/onboarding/connected-readiness-automation";

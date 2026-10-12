@@ -44,12 +44,11 @@ simulation or retried as a new live effect.
 `isolated-simulation` is derived only from server-stored case classification.
 It can record explicitly labelled local simulation, but source-mode simulated
 evidence never satisfies a live requirement and `runWithProviderDeny` remains
-monotonic. Explicit Demo Controller volunteer authorization and ordinary
-authenticated candidate-email authorization remain separate, narrow gates;
-neither bypasses governance.
+monotonic. Ordinary authenticated candidate-email authorization remains a narrow
+gate and never bypasses governance. Retained controller consent is historical
+evidence, not a delivery permission.
 
 Document-storage and authoritative-document-provider adapters never opt in to
-isolated provider dispatch. Only the existing, separately authorized
-Demo Controller communication/voice path may pass
-`allowIsolatedProviderDispatch: true`, and it must still satisfy its scoped
-volunteer revalidation immediately before I/O.
+isolated provider dispatch. No controller communication or voice exception
+exists. Retained controller cases are denied at the final current-case provider
+boundary independently of provenance or provider configuration.

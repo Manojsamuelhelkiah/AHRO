@@ -14,6 +14,7 @@ import {
   parseRegisteredDemoProfile,
 } from "../demo-principal";
 import type { OnboardingDbTransaction } from "./settings";
+import { isRetiredControllerCase } from "./controller-retirement";
 import { seedDemoFullCoverage } from "./demo-full-coverage";
 import {
   getSensitiveLifecycleAuthorityContextInTransaction,
@@ -37,6 +38,7 @@ const DEMO_CASE_READ_KEYS = [
 ] as const;
 
 type DemoAdminCase = {
+  controllerRetired?: boolean;
   id: number;
   notes: string | null;
   scenarioKey: string | null;
@@ -55,9 +57,9 @@ const DEMO_SYNTHETIC_PROVENANCE = new Set<OnbSyntheticProvenance>([
 
 export function isExplicitSyntheticDemoCase(
   caseRow: Pick<DemoAdminCase, "notes" | "scenarioKey"> &
-    Partial<Pick<DemoAdminCase, "syntheticProvenance">>,
+    Partial<Pick<DemoAdminCase, "syntheticProvenance" | "controllerRetired">>,
 ): boolean {
-  return caseRow.syntheticProvenance != null &&
+  return !isRetiredControllerCase(caseRow) && caseRow.syntheticProvenance != null &&
     DEMO_SYNTHETIC_PROVENANCE.has(caseRow.syntheticProvenance) &&
     caseRow.notes?.includes(SYNTHETIC_OFFLINE_MARKER) === true &&
     !isUatRunIsolatedCase(caseRow);
@@ -93,15 +95,13 @@ export async function grantSyntheticDemoAuthorityForCase(
   userId: string,
   caseRow: DemoAdminCase & { organizationId: string },
 ): Promise<void> {
-  const isVerifiedHybridControllerCase =
-    isVerifiedHybridDemoControllerCase(caseRow);
   if (
     caseRow.organizationId !== DEMO_ORGANIZATION_ID ||
     isUatRunIsolatedCase(caseRow) ||
-    (!isExplicitSyntheticDemoCase(caseRow) && !isVerifiedHybridControllerCase)
+    !isExplicitSyntheticDemoCase(caseRow)
   ) {
     throw new SyntheticDemoCaseAuthorityDeniedError(
-      "Demo authority requires explicit server-owned synthetic provenance or a verified volunteer-backed Demo Controller run.",
+      "Demo authority requires explicit server-owned fictional provenance.",
     );
   }
 
@@ -130,26 +130,7 @@ export async function grantSyntheticDemoAuthorityForCase(
   }
 
   if (caseRow.candidateEmailAuthorizedAt) {
-    const jurisdiction = jurisdictionForWorkforceContext(caseRow.workforceContext);
-    if (!isVerifiedHybridControllerCase || !jurisdiction) {
-      throw new SyntheticDemoCaseAuthorityDeniedError(
-        "Volunteered Demo cases require an explicit Demo Controller run and work-country policy.",
-      );
-    }
-    const [lifecycle, authority] = await Promise.all([
-      evaluateCaseDerivedLifecycleGateInTransaction(tx, {
-        organizationId: caseRow.organizationId,
-        jurisdiction,
-      }),
-      getSensitiveLifecycleAuthorityContextInTransaction(tx, caseRow.organizationId),
-    ]);
-    if (!lifecycle.allowed || authority.authorityStatus !== "verified") {
-      throw new SyntheticDemoCaseAuthorityDeniedError(
-        `SENSITIVE_LIFECYCLE_BLOCKED:${!lifecycle.allowed
-          ? lifecycle.reason ?? "Current lifecycle policy does not allow this volunteered case."
-          : "A current server-verified privacy or legal reviewer is required before this volunteer can be used."}`,
-      );
-    }
+    throw new SyntheticDemoCaseAuthorityDeniedError("Real-person cases cannot receive synthetic authority.");
   }
 
   if (!caseRow.candidateEmailAuthorizedAt && !isExplicitSyntheticDemoCase(caseRow)) {
@@ -161,7 +142,6 @@ export async function grantSyntheticDemoAuthorityForCase(
     tx,
     userId,
     [caseRow],
-    isVerifiedHybridControllerCase ? [caseRow.id] : [],
   );
 }
 
@@ -169,11 +149,9 @@ async function insertMissingCaseReadGrants(
   tx: Pick<OnboardingDbTransaction, "select" | "insert">,
   userId: string,
   cases: DemoAdminCase[],
-  verifiedHybridCaseIds: readonly number[] = [],
 ): Promise<void> {
-  const hybridCaseIds = new Set(verifiedHybridCaseIds);
   const eligible = cases.filter((caseRow) =>
-    isExplicitSyntheticDemoCase(caseRow) || hybridCaseIds.has(caseRow.id),
+    isExplicitSyntheticDemoCase(caseRow),
   );
   if (!eligible.length) return;
   const grants = eligible.flatMap((caseRow) =>
@@ -249,6 +227,7 @@ export async function ensureSyntheticDemoAdminAccess(userId: string): Promise<vo
       notes: onbCases.notes,
       scenarioKey: onbCases.scenarioKey,
       syntheticProvenance: onbCases.syntheticProvenance,
+      controllerRetired: onbCases.controllerRetired,
       candidateEmailAuthorizedAt: onbCases.candidateEmailAuthorizedAt,
       candidateEmailAuthorizedBy: onbCases.candidateEmailAuthorizedBy,
     })

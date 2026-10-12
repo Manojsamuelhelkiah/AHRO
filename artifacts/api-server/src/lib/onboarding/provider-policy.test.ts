@@ -7,10 +7,7 @@ import {
   securityDrillPreflight,
 } from "./security-drill";
 import {
-  demoControllerLiveAllowed,
-  demoControllerLiveContextValid,
   externalProviderDispatchDenied,
-  runWithDemoControllerLive,
   runWithProviderDeny,
 } from "./provider-policy";
 
@@ -28,23 +25,11 @@ test("normal executions retain provider dispatch eligibility", () => {
   assert.equal(externalProviderDispatchDenied(), false);
 });
 
-test("an ancestor deny cannot be reopened by a nested demo scope", async () => {
-  let revalidated = false;
-  const allowed = await runWithProviderDeny(() => runWithDemoControllerLive({
-    organizationId: "demo",
-    caseId: 42,
-    channel: "email",
-    recipient: "approved@example.com",
-    revalidate: () => {
-      revalidated = true;
-      return true;
-    },
-  }, async () => {
-    assert.equal(demoControllerLiveAllowed("demo", 42, "email", "approved@example.com"), false);
-    return demoControllerLiveContextValid("demo", 42, "email", "approved@example.com");
+test("an ancestor deny remains closed across nested scopes", async () => {
+  await runWithProviderDeny(() => runWithProviderDeny(async () => {
+    await Promise.resolve();
+    assert.equal(externalProviderDispatchDenied(), true);
   }));
-  assert.equal(allowed, false);
-  assert.equal(revalidated, false, "a deny fence must short-circuit before the run lookup");
 });
 
 test("authorization granted after drill preflight cannot reopen the deny fence", async () => {

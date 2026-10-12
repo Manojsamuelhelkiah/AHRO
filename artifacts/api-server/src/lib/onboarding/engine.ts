@@ -58,6 +58,7 @@ import type {
 } from "@workspace/db/schema";
 import { approvalVersion, reopenApprovalInTransaction } from "./approval-version";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isRetiredControllerCase } from "./controller-retirement";
 import {
   initializeOperationalRequests,
   initializeWorkforceStepTasks,
@@ -1320,6 +1321,7 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${tenant.organizationId}))`);
     const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
     if (!c) return false;
+    if (isRetiredControllerCase(c)) return false;
     // Enrollment is additive: a legacy complete case must not be replayed by
     // the approval recovery worker merely because it has an old approved row.
     if (c.lifecycleStage === "complete") return false;
@@ -1505,7 +1507,7 @@ export function startOrchestration(caseId: number) {
         .select()
         .from(onbCases)
         .where(eq(onbCases.id, caseId));
-      if (offlineCase && isSyntheticOfflineCase(offlineCase)) return;
+      if (offlineCase && (isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase))) return;
       const owner = randomUUID();
       const [claimed] = await db.update(onbCases)
         .set({
@@ -1571,7 +1573,7 @@ async function resumeChecklistOrchestrationInContext(caseId: number): Promise<bo
     .select()
     .from(onbCases)
     .where(eq(onbCases.id, caseId));
-  if (offlineCase && isSyntheticOfflineCase(offlineCase)) return false;
+  if (offlineCase && (isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase))) return false;
   const owner = randomUUID();
   const [claimed] = await db.update(onbCases)
     .set({
@@ -1950,7 +1952,7 @@ export function resumeAfterDecision(opts: {
         .select()
         .from(onbCases)
         .where(eq(onbCases.id, opts.caseId));
-      if (offlineCase && isSyntheticOfflineCase(offlineCase)) return;
+      if (offlineCase && (isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase))) return;
       if (opts.ruleRef === MIGRATION_REVIEW_HOLD_RULE) {
         if (!opts.approved) return;
         // This approval is an explicit governance classification of the
@@ -2071,7 +2073,7 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
   void runCaseContextAttempt(caseId, async () => {
     try {
       const c = await getCase(caseId);
-      if (isSyntheticOfflineCase(c)) return;
+      if (isSyntheticOfflineCase(c) || isRetiredControllerCase(c)) return;
       const sensitive = /salary|pay|compensation|visa|immigration|medical|health|legal|complaint|harass|grievance/i.test(body);
 
       if (sensitive) {

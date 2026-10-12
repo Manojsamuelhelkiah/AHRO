@@ -5,7 +5,6 @@ import {
   getGetOnboardingCaseSimulationQueryKey,
   useSimulateNextOnboardingCaseExchange,
   useRestartOnboardingCaseSimulation,
-  useSendOnboardingCaseSimulationEmail,
   getListOnboardingCaseEventsQueryKey,
   getListOnboardingCaseCommunicationsQueryKey
 } from '@workspace/api-client-react';
@@ -14,12 +13,8 @@ import { cn } from '@/components/ui-shared';
 
 export function SimulationPanel({
   caseId,
-  recipientEmail,
-  emailPromptAvailable = false,
 }: {
   caseId: number;
-  recipientEmail?: string | null;
-  emailPromptAvailable?: boolean;
 }) {
   const queryClient = useQueryClient();
   const { data: simState, error, isLoading, refetch } = useGetOnboardingCaseSimulation(caseId, {
@@ -32,9 +27,7 @@ export function SimulationPanel({
 
   const simulateMutation = useSimulateNextOnboardingCaseExchange();
   const restartMutation = useRestartOnboardingCaseSimulation();
-  const emailMutation = useSendOnboardingCaseSimulationEmail();
   const [confirmRestart, setConfirmRestart] = useState(false);
-  const [confirmEmail, setConfirmEmail] = useState(false);
 
   if (isLoading) {
     return (
@@ -110,35 +103,9 @@ export function SimulationPanel({
       },
     });
   };
-  const handleSendEmail = () => {
-    const key = `onboarding-case-simulation-email-v1:${caseId}:${simState.generationId}`;
-    const data = pendingRequest(key, simState);
-    emailMutation.mutate({ caseId, data }, {
-      onSuccess: (newData) => {
-        window.sessionStorage.removeItem(key);
-        setConfirmEmail(false);
-        emailMutation.reset();
-        queryClient.setQueryData(getGetOnboardingCaseSimulationQueryKey(caseId), newData);
-        void queryClient.invalidateQueries({ queryKey: getListOnboardingCaseEventsQueryKey(caseId) });
-        void queryClient.invalidateQueries({ queryKey: getListOnboardingCaseCommunicationsQueryKey(caseId) });
-      },
-      onError: (err: any) => {
-        if ((err?.status ?? err?.response?.status) === 409) {
-          window.sessionStorage.removeItem(key);
-          setConfirmEmail(false);
-          void refetch();
-        }
-      },
-    });
-  };
-  const busy = simulateMutation.isPending || restartMutation.isPending || emailMutation.isPending;
+  const busy = simulateMutation.isPending || restartMutation.isPending;
   const isComplete = simState.status === 'completed';
   const emailDelivery = simState.emailDelivery;
-  // The recipient may be intentionally withheld. The server resolves and
-  // revalidates the pinned volunteer; this panel accepts no recipient input.
-  const canRequestEmailPrompt = Boolean(recipientEmail) || emailPromptAvailable;
-  const emailAwaitingReply = emailDelivery?.freshness === 'current-generation'
-    && ['prepared', 'sent', 'sending'].includes(emailDelivery.status);
 
   return (
     <div className="border border-[var(--border)] rounded-lg bg-[var(--surface)] shadow-sm mb-6 overflow-hidden flex flex-col">
@@ -151,7 +118,7 @@ export function SimulationPanel({
               Simulated State
             </span>
           </div>
-            <p className="text-xs text-[var(--text-muted)] font-medium">Business outcomes are always simulated. Optional prompt delivery uses only the pinned Demo volunteer.</p>
+            <p className="text-xs text-[var(--text-muted)] font-medium">Offline simulation only. No messages are sent and no provider is called.</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <button
@@ -160,21 +127,6 @@ export function SimulationPanel({
             className="text-xs font-bold border border-[var(--border)] rounded-md px-3 py-1.5 disabled:opacity-50"
           >
             Restart simulation
-          </button>
-            <button
-            onClick={() => { emailMutation.reset(); setConfirmEmail(true); }}
-              disabled={busy || confirmRestart || !canRequestEmailPrompt || isComplete || emailAwaitingReply}
-            className={cn(
-              "flex items-center gap-1.5 border border-[var(--primary)] text-[var(--primary-dark)] px-3 py-1.5 rounded-md text-xs font-bold transition-all",
-              busy || confirmRestart || !canRequestEmailPrompt || isComplete || emailAwaitingReply ? "opacity-50 cursor-not-allowed" : "hover:bg-[var(--primary-light)]",
-            )}
-              title={emailAwaitingReply
-                ? "A controlled email is already awaiting a reply; automatic resend is disabled"
-                : recipientEmail ? `Pinned approved Demo volunteer: ${recipientEmail}`
-                  : emailPromptAvailable ? "The server will use only the currently pinned, approved Demo volunteer."
-                    : "Select an approved Demo volunteer in Demo Controller first"}
-          >
-            <Mail className="h-3.5 w-3.5" /> Email current prompt
           </button>
           {isComplete && (
             <span className="text-xs font-semibold text-[var(--status-green-fg)] bg-[var(--status-green-bg)] px-2 py-1 rounded border border-[var(--status-green)] border-opacity-20 flex items-center gap-1.5">
@@ -195,13 +147,6 @@ export function SimulationPanel({
             {simulateMutation.isPending ? 'Simulating...' : 'Simulate next exchange'}
           </button>
         </div>
-        <div className="text-[10px] text-[var(--text-muted)] mt-2">
-          {recipientEmail
-            ? <>Controlled real-email recipient (revalidated before send): <strong>{recipientEmail}</strong>. Gmail replies are polled by the server.</>
-            : emailPromptAvailable
-              ? <>The pinned volunteer's identity is not shown here; the server revalidates authorization before real-email delivery.</>
-              : <>Setup required: pin an approved Demo volunteer in Demo Controller before real-email simulation is available.</>}
-        </div>
       </div>
       {confirmRestart && (
         <div role="alertdialog" aria-label="Restart simulation?" aria-describedby="restart-simulation-description" className="p-4 border-b border-[var(--border)] bg-[var(--surface-alt)] space-y-3">
@@ -215,26 +160,6 @@ export function SimulationPanel({
             <button onClick={() => setConfirmRestart(false)} disabled={busy} className="text-xs font-semibold disabled:opacity-50">Cancel</button>
             <button onClick={handleRestart} disabled={busy} className="text-xs font-bold bg-[var(--primary)] text-white rounded-md px-3 py-2 disabled:opacity-50">
               {restartMutation.isPending ? 'Restarting...' : 'Confirm restart'}
-            </button>
-          </div>
-        </div>
-      )}
-      {confirmEmail && (
-        <div role="alertdialog" aria-label="Send simulated prompt by email?" className="p-4 border-b border-[var(--border)] bg-[var(--primary-light-bg)] space-y-3">
-          <h4 className="font-bold text-sm">Send the current simulated prompt by real email?</h4>
-          <p className="text-xs text-[var(--text-secondary)]">
-            Delivery is real, but the recipient is restricted to the currently pinned approved Demo volunteer and the result remains simulated-only.
-            {recipientEmail
-              ? <> Recipient: <strong>{recipientEmail}</strong>.</>
-              : emailPromptAvailable
-                ? ' The recipient address is withheld from this view; the server uses the pinned volunteer only.'
-                : ' No approved volunteer is pinned.'}
-            {' '}No readiness, authority, lifecycle, provider evidence, SLA, or KPI state will change. Replies are monitored from Gmail and never accepted from this panel.
-          </p>
-          <div className="flex gap-3">
-            <button onClick={() => setConfirmEmail(false)} disabled={busy} className="text-xs font-semibold disabled:opacity-50">Cancel</button>
-            <button onClick={handleSendEmail} disabled={busy || isComplete || !canRequestEmailPrompt || emailAwaitingReply} className="text-xs font-bold bg-[var(--primary)] text-white rounded-md px-3 py-2 disabled:opacity-50">
-              {emailMutation.isPending ? 'Sending...' : 'Confirm real email send'}
             </button>
           </div>
         </div>
@@ -260,17 +185,12 @@ export function SimulationPanel({
           )}
         </div>
       )}
-      {emailMutation.isError && (
-        <div role="alert" className="px-4 py-2 bg-[var(--status-red-bg)] border-b border-[var(--status-red)] border-opacity-20 text-xs text-[var(--status-red-fg)]">
-          {(emailMutation.error as any)?.message || 'The controlled Demo email could not be sent. An uncertain delivery is never retried automatically.'}
-        </div>
-      )}
       {emailDelivery && (
         <div className="px-4 py-2 bg-[var(--status-info-bg)] border-b border-[var(--status-info-fg)] border-opacity-20 text-xs text-[var(--status-info-fg)]">
           <strong>Real email:</strong> {emailDelivery.status} to {emailDelivery.recipient}.
           {' '}<strong>Business result:</strong> simulated-only.
           {emailDelivery.status === 'sending' && <> Delivery is uncertain; automatic resend is disabled.</>}
-          {emailDelivery.status === 'sent' && <> Awaiting a monitored Gmail reply.</>}
+          {emailDelivery.status === 'sent' && <> Historical delivery only; replies cannot advance this simulation.</>}
           {emailDelivery.status === 'replied' && <> Reply recorded; the simulated outcome is shown below.</>}
           {emailDelivery.status === 'stale' && <> This delivery belongs to a retired simulation generation.</>}
           {emailDelivery.status === 'failed' && <> The provider did not accept the message.</>}

@@ -3,7 +3,7 @@
 Entry URL: **`/uat/`**. Catalog/run deep links use `/uat/?run=…`,
 policy quality uses `/uat/policy-quality`, fairness uses `/uat/fairness`.
 Historical Control Tower `/uat-test-center` links show a relocation screen only.
-Demo Center and Learning Guide remain in Control Tower.
+Learning Guide remains in Control Tower. UAT does not dispatch volunteer communications.
 
 ## Authentication and operation
 

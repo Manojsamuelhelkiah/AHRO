@@ -4,8 +4,7 @@
  * Ordinary calls are a spoken conversation driven by the same reasoning
  * engine as email: each hire utterance (Twilio <Gather input="speech">) is
  * answered by an LLM turn grounded in the case's recorded state. The
- * DemoController path uses a separate deterministic script and never enters
- * that engine.
+ * Retained controller sessions never enter that engine or authorize dialing.
  *
  * Guardrails mirror the messaging channels: real calls are only placed to
  * allow-listed numbers (ONBOARDING_ALLOWED_RECIPIENTS — same list as email/
@@ -14,6 +13,7 @@
  * so the flow can be demonstrated without a phone.
  */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { isRetiredControllerCase } from "./controller-retirement";
 import { db } from "@workspace/db";
 import { recordGuardrailEvent } from "./guardrails";
 import { onbCases, onbCommunications, onbEffectJournal, onbVoiceSessions } from "@workspace/db/schema";
@@ -31,7 +31,6 @@ import {
 import { logEvent, createApproval } from "./engine";
 import { maskPhone, addressAllowed } from "./channels";
 import {
-  demoControllerLiveContextValid,
   externalProviderDispatchDenied,
   runWithProviderDeny,
 } from "./provider-policy";
@@ -83,7 +82,7 @@ export type Session = {
   callSid: string | null;
   /** Stable local identity written before any provider I/O. */
   localCallId?: string | null;
-  /** Demo Controller run correlation, when this is an isolated demo call. */
+  /** Historical controller correlation only; never dialing authority. */
   runId?: string | null;
   /** Stable request identity for the effect journal. */
   requestId?: string | null;
@@ -297,7 +296,7 @@ export async function voiceTurn(
   // Demo Controller calls are deliberately not allowed through the ordinary
   // case-facts/LLM decision engine.  Keep this branch here as a second fence
   // for callers that invoke voiceTurn directly instead of the webhook route.
-  if (session.runId) return demoVoiceTurn(session, hireSpeech);
+  if (session.runId) return { say: "This demonstration has been retired. Goodbye.", done: true };
   const speech = hireSpeech.slice(0, 500);
   // Twilio retry of the same request: answer identically, don't re-reason.
   if (session.lastSpeech === speech && session.lastResponse) {
@@ -329,53 +328,6 @@ export async function voiceTurn(
   }
 }
 
-const DEMO_VOICE_SCRIPT = [
-  "[DEMO] Thank you. This is an isolated onboarding demonstration. Is there anything you would like the team to note?",
-  "[DEMO] Thank you for taking part in this demonstration. We will record your words for the selected demo run. Goodbye.",
-] as const;
-
-/**
- * Deterministic script for a hybrid DemoController call.  It records the
- * caller's actual speech but never invokes the ordinary voice LLM, engine,
- * payroll, approvals, or case decision paths.
- */
-export async function demoVoiceTurn(
-  session: Session,
-  callerSpeech: string,
-): Promise<{ say: string; done: boolean }> {
-  if (!session.runId) {
-    throw new Error("demo voice script requires a DemoController runId");
-  }
-  const speech = callerSpeech.trim().slice(0, 4000);
-  if (session.lastSpeech === speech && session.lastResponse) {
-    return session.lastResponse;
-  }
-  if (busyTokens.has(session.token)) {
-    return { say: "[DEMO] One moment please.", done: false };
-  }
-  busyTokens.add(session.token);
-  try {
-    session.turns.push({ role: "hire", text: speech });
-    const hireTurns = session.turns.filter((turn) => turn.role === "hire").length;
-    const done = hireTurns >= DEMO_VOICE_SCRIPT.length;
-    const say = DEMO_VOICE_SCRIPT[Math.min(hireTurns, DEMO_VOICE_SCRIPT.length) - 1] ??
-      DEMO_VOICE_SCRIPT[DEMO_VOICE_SCRIPT.length - 1];
-    session.turns.push({ role: "agent", text: say });
-    session.lastSpeech = speech;
-    session.lastResponse = { say, done };
-    const saved = await saveSession(session);
-    if (!saved) {
-      return {
-        say: "[DEMO] The demo run has been recorded. Goodbye.",
-        done: true,
-      };
-    }
-    return { say, done };
-  } finally {
-    busyTokens.delete(session.token);
-  }
-}
-
 async function runVoiceTurn(
   session: Session,
   hireSpeech: string,
@@ -383,6 +335,9 @@ async function runVoiceTurn(
   session.turns.push({ role: "hire", text: hireSpeech });
 
   const { c, docs, booked } = await caseFacts(session.caseId);
+  if (isRetiredControllerCase(c)) {
+    return { say: "This demonstration has been retired. Goodbye.", done: true };
+  }
   const transcript = session.turns
     .map((t) => `${t.role === "agent" ? "Assistant" : "Hire"}: ${t.text}`)
     .join("\n");
@@ -667,26 +622,7 @@ async function persistDemoCallOutcome(
     await markOutcomeStep(session, progress, "demo-transcript");
   }
   if (progress["demo-run-callback"]) return;
-  // Avoid a static circular import (demo-controller imports voice). The
-  // callback is required for a demo session and is invoked only after the
-  // actual caller transcript/status has been persisted.
-  const controller = await import("./demo-controller") as typeof import("./demo-controller") & {
-    recordDemoVoiceOutcome?: (input: {
-      caseId: number;
-      callId: string;
-      transcript: string;
-      status: string;
-    }) => Promise<void>;
-  };
-  if (typeof controller.recordDemoVoiceOutcome !== "function") {
-    throw new Error("Demo Controller voice outcome callback is unavailable");
-  }
-  await controller.recordDemoVoiceOutcome({
-    caseId: session.caseId,
-    callId,
-    transcript,
-    status: callOutcome,
-  });
+  // Retained callbacks record provider evidence only; no run may advance.
   await markOutcomeStep(session, progress, "demo-run-callback");
 }
 
@@ -753,7 +689,7 @@ async function persistCallOutcome(
     // A controller-authorized synthetic call may retain its transcript, but
     // inbound webhooks must never promote it into ordinary engine decisions,
     // approvals, payroll, or connector work after finalization.
-    if (isSyntheticOfflineCase(c) && !session.simulated) return;
+    if (isRetiredControllerCase(c) || isSyntheticOfflineCase(c) && !session.simulated) return;
     if (stored) await markOutcomeStep(session, progress, "transcript");
   }
 
@@ -934,10 +870,6 @@ export async function startVoiceCall(opts: {
   reason?: string;
   /** Optional policy-generated goal supplied by contextual contact. */
   goal?: string;
-  /** DemoController correlation; ordinary calls leave these unset. */
-  runId?: string;
-  requestId?: string;
-  localCallId?: string;
 }): Promise<{ status: "calling" | "logged-only" | "failed"; note: string; token?: string }> {
   const guarded = await withCaseDispatchGuard(opts.caseId, () =>
     startVoiceCallUnsafe(opts),
@@ -955,15 +887,9 @@ async function startVoiceCallUnsafe(opts: {
   scenario: VoiceScenario;
   reason?: string;
   goal?: string;
-  runId?: string;
-  requestId?: string;
-  localCallId?: string;
 }): Promise<{ status: "calling" | "logged-only" | "failed"; note: string; token?: string }> {
   const { c } = await caseFacts(opts.caseId);
-  const demoLiveCall = c.workerPhone
-    ? await demoControllerLiveContextValid(c.organizationId, c.id, "call", c.workerPhone)
-    : false;
-  if (isSyntheticOfflineCase(c) && !demoLiveCall) {
+  if (isSyntheticOfflineCase(c) || isRetiredControllerCase(c)) {
     return { status: "failed", note: SYNTHETIC_OFFLINE_WARNING };
   }
   const label = opts.scenario === "day-before" ? "day-before check-in" : "SLA escalation";
@@ -980,7 +906,6 @@ async function startVoiceCallUnsafe(opts: {
   const governance = await evaluateProviderGovernanceGate(
     c,
     PROVIDER_GOVERNANCE_WORKFLOW.voice,
-    { allowIsolatedProviderDispatch: demoLiveCall },
   );
   if (!governance.allowed) {
     await logEvent(opts.caseId, "channel", "system", "Voice call withheld (governance)",
@@ -1000,9 +925,9 @@ async function startVoiceCallUnsafe(opts: {
     simulated: false,
     startedAt: Date.now(),
     callSid: null,
-    localCallId: opts.localCallId ?? randomUUID(),
-    runId: opts.runId ?? null,
-    requestId: opts.requestId ?? randomUUID(),
+    localCallId: randomUUID(),
+    runId: null,
+    requestId: randomUUID(),
     providerStatus: "pending",
     providerFailureReason: null,
     lastSpeech: null,
@@ -1011,7 +936,7 @@ async function startVoiceCallUnsafe(opts: {
 
   let allowlistRefreshed = false;
   try {
-    const { refreshDemoAllowlist } = await import("./demo-volunteers");
+    const { refreshDemoAllowlist } = await import("./recipient-allowlist");
     await refreshDemoAllowlist(c.organizationId);
     allowlistRefreshed = true;
   } catch (err) {
@@ -1052,9 +977,7 @@ async function startVoiceCallUnsafe(opts: {
     return { status: "failed", note: "Twilio voice is not fully configured (no voice-capable number or public URL)." };
   }
 
-  const greeting = session.runId
-    ? "[DEMO] This is an isolated onboarding demonstration call. Your actual words will be recorded only on this demo run. Is this a good time?"
-    : voiceGreeting(opts.scenario, c.workerName.split(" ")[0] ?? "there");
+  const greeting = voiceGreeting(opts.scenario, c.workerName.split(" ")[0] ?? "there");
   session.turns.push({ role: "agent", text: greeting });
   // Atomic call-start claim, persisted before dialing: the partial unique
   // index (one unfinalized session per case) makes exactly ONE concurrent
@@ -1121,7 +1044,7 @@ async function startVoiceCallUnsafe(opts: {
     }
   }
 
-  if (externalProviderDispatchDenied() || !demoLiveCall && isSyntheticOfflineCase(c)) {
+  if (externalProviderDispatchDenied() || isSyntheticOfflineCase(c) || isRetiredControllerCase(c)) {
     await db.delete(onbVoiceSessions).where(and(
       eq(onbVoiceSessions.token, session.token),
       eq(onbVoiceSessions.organizationId, c.organizationId),
@@ -1202,7 +1125,6 @@ async function startVoiceCallUnsafe(opts: {
   const lookupGovernance = await evaluateProviderGovernanceGate(
     c,
     PROVIDER_GOVERNANCE_WORKFLOW.voice,
-    { allowIsolatedProviderDispatch: demoLiveCall },
   );
   if (!lookupGovernance.allowed) {
     await db.update(onbEffectJournal).set({
@@ -1246,13 +1168,10 @@ async function startVoiceCallUnsafe(opts: {
   // The volunteer/run claim can change while Twilio's originating-number
   // lookup is in flight. Revalidate the final recipient immediately before
   // the mutating Calls API request; a revoked or edited volunteer blocks.
-  if (
-    session.runId &&
-    !(await demoControllerLiveContextValid(c.organizationId, c.id, "call", c.workerPhone))
-  ) {
+  if (isRetiredControllerCase((await caseFacts(opts.caseId)).c)) {
     await db.update(onbEffectJournal).set({
       status: "failed",
-      lastError: "Demo volunteer/run authorization changed before provider dispatch",
+      lastError: "Case operations were retired before provider dispatch",
       claimUntil: null,
       updatedAt: new Date(),
     }).where(and(
@@ -1268,16 +1187,15 @@ async function startVoiceCallUnsafe(opts: {
     ));
     return {
       status: "logged-only",
-      note: "The selected volunteer or demo run changed before provider dispatch; no call was placed.",
+      note: "The call is no longer authorized; no call was placed.",
     };
   }
   // This is the final check immediately before the mutating Twilio Calls API.
-  // Existing allowlist, Demo Controller, rate, and journal controls remain
+  // Existing allowlist, retirement, rate, and journal controls remain
   // independent prerequisites; none of them is a governance substitute.
   const finalGovernance = await evaluateProviderGovernanceGate(
     c,
     PROVIDER_GOVERNANCE_WORKFLOW.voice,
-    { allowIsolatedProviderDispatch: demoLiveCall },
   );
   if (!finalGovernance.allowed) {
     await db.update(onbEffectJournal).set({
@@ -1314,7 +1232,6 @@ async function startVoiceCallUnsafe(opts: {
       workflow: PROVIDER_GOVERNANCE_WORKFLOW.voice,
       operation: `voice-call:${c.id}:${session.requestId}`,
       providerId: "twilio",
-      allowIsolatedProviderDispatch: demoLiveCall,
       dispatch: () => fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`, {
         method: "POST",
         headers: {
@@ -1495,7 +1412,7 @@ export async function simulateVoiceCall(
   reason?: string,
 ): Promise<{ transcript: Turn[]; decisions: { decision: Decision; note: string }[] }> {
   const { c } = await caseFacts(caseId);
-  if (isSyntheticOfflineCase(c)) {
+  if (isSyntheticOfflineCase(c) || isRetiredControllerCase(c)) {
     return { transcript: [], decisions: [] };
   }
   const session: Session = {

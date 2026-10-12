@@ -1,7 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
-  demoVoiceTurn,
   xmlEscape,
   gatherTwiml,
   hangupTwiml,
@@ -42,33 +41,3 @@ describe("voiceGreeting", () => {
   });
 });
 
-describe("isolated DemoController voice script", () => {
-  test("retains actual caller speech and never needs a reasoning/provider call", async () => {
-    const session: Session = {
-      token: "demo-script-test",
-      caseId: 42,
-      organizationId: "demo",
-      scenario: "day-before",
-      reason: "[DEMO]",
-      turns: [{ role: "agent", text: "[DEMO] Opening" }],
-      decisions: [],
-      finalized: false,
-      simulated: true,
-      startedAt: Date.now(),
-      callSid: null,
-      localCallId: "local-call-42",
-      runId: "run-42",
-      requestId: "request-42",
-      lastSpeech: null,
-      lastResponse: null,
-    };
-
-    const first = await demoVoiceTurn(session, "The caller's actual answer");
-    assert.equal(first.done, false);
-    assert.equal(session.turns[1]?.text, "The caller's actual answer");
-    const second = await demoVoiceTurn(session, "A second actual answer");
-    assert.equal(second.done, true);
-    assert.equal(session.turns[3]?.text, "A second actual answer");
-    assert.equal(session.decisions.length, 0);
-  });
-});

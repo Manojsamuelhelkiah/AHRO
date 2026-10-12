@@ -361,9 +361,6 @@ function UatRunPanel({ runId, onBack }: { runId: string; onBack: () => void }) {
   const [note, setNote] = useState("");
   const [hours, setHours] = useState("24");
   const [exchange, setExchange] = useState({ system: "hris", operation: "request", state: "queued" });
-  const [demoRunId, setDemoRunId] = useState("");
-  const [demoExpectedVersion, setDemoExpectedVersion] = useState("");
-  const [approvedDemoEmailConfirmed, setApprovedDemoEmailConfirmed] = useState(false);
   const [fixtureId, setFixtureId] = useState<FixtureVariantId>("valid");
   const [scannerState, setScannerState] = useState<Exclude<NonNullable<OnboardingUatRunAction["scannerState"]>, null>>("clean");
   const [error, setError] = useState<string | null>(null);
@@ -434,7 +431,6 @@ function UatRunPanel({ runId, onBack }: { runId: string; onBack: () => void }) {
   const portal = run.candidatePortal;
   const canIssuePortal = canOperate && run.linkedCaseIds.length > 0 && portal?.canIssue !== false;
   const isRealEmailScenario = run.scenarioId === "UAT-EMAIL-01";
-  const canDispatchApprovedDemoEmail = canOperate && isRealEmailScenario && approvedDemoEmailConfirmed && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(demoRunId.trim()) && Number.isInteger(Number(demoExpectedVersion)) && Number(demoExpectedVersion) >= 0;
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><Button type="button" variant="ghost" size="sm" onClick={onBack}><ChevronLeft className="mr-1 h-4 w-4" />All scenarios & runs</Button><Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void refetch()}><RefreshCw className="mr-1 h-3.5 w-3.5" />{isFetching ? "Refreshing…" : "Refresh run"}</Button></div>
     <Card className="space-y-4 p-5">
@@ -512,15 +508,6 @@ function UatRunPanel({ runId, onBack }: { runId: string; onBack: () => void }) {
         {run.pendingEvents && <div className="mt-4 border-t border-[var(--border)] pt-4"><h4 className="text-sm font-semibold">Pending run-scoped events</h4>{run.pendingEvents.length ? <div className="mt-2 space-y-2">{run.pendingEvents.map((event, index) => <p key={event.id ?? index} className="rounded bg-[var(--surface-alt)] p-2 text-xs text-[var(--text-secondary)]"><strong>{event.kind ?? "Scheduled event"}</strong>{event.state ? ` · ${event.state}` : ""}{event.dueAt || event.at ? ` · ${formatDate(event.dueAt ?? event.at ?? "")}` : ""}<br />{event.description ?? event.note ?? "No additional safe event detail was provided."}</p>)}</div> : <p className="mt-2 text-xs text-[var(--text-muted)]">No pending events for this run.</p>}</div>}
       </Card>
     </div>
-    {isRealEmailScenario && <Card className="space-y-3 p-5" data-testid="card-approved-demo-email">
-      <div className="flex items-center gap-2"><Send className="h-5 w-5 text-[var(--primary)]" /><h3 className="font-semibold">Approved Demo Organization email boundary</h3></div>
-      <p className="text-sm text-[var(--text-secondary)]">This optional action delegates only to an existing approved-volunteer Demo Center run. It never accepts a recipient address here, never authorizes a new recipient, and does not turn delivery or reply correlation into a UAT pass.</p>
-      <div className="rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-xs text-[var(--text-secondary)]"><strong className="text-[var(--text-primary)]">Server-enforced requirements:</strong> Demo Organization membership; an existing approved-volunteer Demo run; that run’s current version; the explicit acknowledgement below; existing provider preflight and monitoring. A blocked preflight is recorded as blocked—there is no retry or simulated substitute.</div>
-      <div className="grid gap-3 md:grid-cols-2"><div><Label htmlFor="uat-demo-run-id">Existing Demo run ID</Label><Input id="uat-demo-run-id" value={demoRunId} onChange={(event) => setDemoRunId(event.target.value)} placeholder="Demo Center run UUID" data-testid="input-uat-demo-run-id" /></div><div><Label htmlFor="uat-demo-run-version">Existing Demo run version</Label><Input id="uat-demo-run-version" type="number" min="0" step="1" value={demoExpectedVersion} onChange={(event) => setDemoExpectedVersion(event.target.value)} placeholder="Current version" data-testid="input-uat-demo-run-version" /></div></div>
-      <label className="flex gap-2 text-xs text-[var(--text-secondary)]"><input type="checkbox" checked={approvedDemoEmailConfirmed} onChange={(event) => setApprovedDemoEmailConfirmed(event.target.checked)} data-testid="checkbox-uat-approved-demo-email" /><span>I understand this is limited to the existing approved QA mailbox/volunteer path and requires Demo Organization authorization.</span></label>
-      <Button type="button" variant="outline" disabled={!canDispatchApprovedDemoEmail || mutate.isPending} onClick={() => void action({ kind: "dispatch-approved-demo-email", demoRunId: demoRunId.trim(), demoExpectedVersion: Number(demoExpectedVersion), realEmailConfirmation: "I_UNDERSTAND_APPROVED_QA_MAILBOX_ONLY", note: "Explicit UAT delegation to the existing approved-volunteer Demo Center email path." })} data-testid="button-dispatch-approved-demo-email"><Send className="mr-1 h-4 w-4" />Dispatch through approved Demo run</Button>
-      {!canOperate && <p className="text-xs text-[var(--text-muted)]">Resume an active, isolated run before this optional boundary can be requested.</p>}
-    </Card>}
   </div>;
 }
 

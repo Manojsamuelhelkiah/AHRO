@@ -14,7 +14,6 @@ const entryPoints = [
 ].filter((file) => !requestedTestFile || file === requestedTestFile)
   .map((f) => path.join(dir, f));
 const integratedEntryPoints = [
-  "src/pages/demo-controller/access-setup.integration.test.tsx",
   "src/pages/settings-context-retention.integration.test.tsx",
   "src/pages/settings-context-manager.integration.test.tsx",
 ].map((file) => path.join(dir, file));
@@ -121,16 +120,16 @@ if (integrationEntryPoints.length > 0) {
     ],
     plugins: [
       {
-        name: "demo-controller-integration-stubs",
+        name: "clerk-integration-stubs",
         setup(build) {
           build.onResolve({ filter: /^@clerk\/react$/ }, () => ({
-            path: "demo-controller-clerk-test-stub",
-            namespace: "demo-controller-test",
+            path: "clerk-test-stub",
+            namespace: "clerk-test",
           }));
           build.onLoad(
             {
-              filter: /^demo-controller-clerk-test-stub$/,
-              namespace: "demo-controller-test",
+              filter: /^clerk-test-stub$/,
+              namespace: "clerk-test",
             },
             () => ({
               loader: "js",

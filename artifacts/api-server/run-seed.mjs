@@ -1,9 +1,9 @@
-// Bundles and runs the volunteer seeding script (same esbuild harness as tests).
+// Bundles and runs an explicitly selected offline seed script.
 import { build } from "esbuild";
 import { spawn } from "node:child_process";
 
 await build({
-  entryPoints: [process.env.SEED_SCRIPT || "src/scripts/seed-volunteers.ts"],
+  entryPoints: [process.env.SEED_SCRIPT || "src/scripts/seed-demo-full-coverage.ts"],
   outfile: "dist-test/seed-script.mjs",
   bundle: true,
   platform: "node",

@@ -10,7 +10,6 @@ const SENSITIVE_READ_PATHS = [
   /^\/onboarding\/cases\/[^/]+\/(documents|evidence|records|communications)$/,
   /^\/onboarding\/cases\/[^/]+\/portal$/,
   /^\/onboarding\/approvals\/[^/]+\/history$/,
-  /^\/onboarding\/demo-runs\/[^/]+\/documents$/,
   /^\/onboarding\/action-center(?:\/.*)?$/,
 ];
 
@@ -99,7 +98,6 @@ export function requestAction(req: Pick<Request, "path" | "method">): string {
     [/^\/onboarding\/action-center\/actions\/remind-document$/, "action-center-remind-document"],
     [/^\/onboarding\/action-center\/identities$/, "action-center-identities"],
     [/^\/onboarding\/action-center(?:\/|$)/, "action-center"],
-    [/^\/onboarding\/demo-runs(?:\/|$)/, "demo-run"],
   ];
   const operation = templates.find(([pattern]) => pattern.test(path))?.[1] ?? "onboarding-operation";
   return `control-tower.${operation}.${req.method.toLowerCase()}`;

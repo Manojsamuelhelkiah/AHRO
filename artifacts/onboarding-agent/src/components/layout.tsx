@@ -31,7 +31,6 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
     label: 'Platform',
     items: [
       { path: '/systems', label: 'Systems', icon: Server },
-      { path: '/demo-controller', label: 'Demo Center', icon: Presentation },
       { path: '/learning-guide', label: 'Learning Guide', icon: BookOpen },
       { path: '/audit', label: 'Audit Trail', icon: Shield },
       { path: '/hr-policy-library', label: 'HR Policy Library', icon: BookOpen },

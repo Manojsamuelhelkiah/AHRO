@@ -35,6 +35,7 @@ import type { OnboardingDbTransaction } from "./settings";
 import { isValidEmail } from "./settings";
 import { reopenApprovalInTransaction } from "./approval-version";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isRetiredControllerCase } from "./controller-retirement";
 import {
   hasTrustedBgvClearanceEvidence,
   hasTrustedHrisActivationEvidence,
@@ -239,7 +240,7 @@ export async function ensureReadinessSlaEnrollment(
       eq(onbCases.organizationId, organizationId),
     )).for("update");
     if (!c) return null;
-    if (isSyntheticOfflineCase(c)) return null;
+    if (isSyntheticOfflineCase(c) || isRetiredControllerCase(c)) return null;
     await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, { organizationId, caseId });
     const [existingState] = await tx.select().from(onbReadinessSlaCaseState).where(and(
       eq(onbReadinessSlaCaseState.caseId, caseId),

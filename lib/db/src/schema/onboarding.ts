@@ -227,6 +227,8 @@ export const onbCases = pgTable("onb_cases", {
   notes: text("notes"),
   /** Set only by server-owned fictional offline case creators; never inferred from notes. */
   syntheticProvenance: text("synthetic_provenance").$type<OnbSyntheticProvenance>(),
+  /** Permanent operational deny fence; never implies fictional identity. */
+  controllerRetired: boolean("controller_retired").notNull().default(false),
   /**
    * Case-scoped consent for live candidate email. Set only by the
    * authenticated manual-intake route; scenario/demo seed paths leave it null.

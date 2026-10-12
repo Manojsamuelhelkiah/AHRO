@@ -10,12 +10,9 @@ import { sql } from "drizzle-orm";
 import { organizationsTable } from "./organizations";
 
 /**
- * Durable, one-time setup requests for the Demo Controller bootstrap flow.
- *
- * approvalValue is only returned to the authenticated target of its request.
- * approvalFingerprint is the request/user/demo-bound SHA-256 fingerprint used
- * for comparison with the deployment approval authority; the configured
- * deployment secret is never persisted or logged.
+ * Archival setup and membership-change evidence only. No runtime router
+ * returns or accepts approval values, and these records grant no new authority.
+ * Retain the schema under tenant retention/hold rules; do not auto-drop it.
  */
 export const demoControllerSetupRequestsTable = pgTable(
   "demo_controller_setup_requests",

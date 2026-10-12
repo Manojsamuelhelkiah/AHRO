@@ -43,7 +43,7 @@ Node/TypeScript API with authentication middleware on every route.
 | Settings & channels | ~5 | Operational settings, channel configuration, test alerts |
 | Guardrails | 3 | Guardrail catalog, event log, drill-down |
 | Voice calls | ~3 | Initiate live calls, session progress |
-| Demo / simulation | ~5 | Demo login, simulated calls and hire replies, seeded volunteers (optional for production) |
+| Demo / simulation | ~3 | Demo login, fictional offline calls and hire replies; no volunteer outreach |
 | Webhooks | ~8 | Twilio WhatsApp inbound; Twilio voice answer/turn/status; external-system webhook; email-watch tick; heartbeat tick |
 | Health | 1 | Health check |
 

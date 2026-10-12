@@ -2,17 +2,11 @@ import React, { useEffect, useState } from 'react';
 import {
   useGetOnboardingSettings,
   useUpdateOnboardingSettings,
-  useGetDemoVolunteers,
-  useUpdateDemoVolunteers,
-  useSeedDemoVolunteers,
   useListOnboardingScenarios,
   useRunOnboardingScenario,
   getListOnboardingCasesQueryKey,
-  getGetDemoVolunteersQueryKey,
   getGetOnboardingSettingsQueryKey,
   getGetOnboardingDashboardQueryKey,
-  type DemoVolunteer,
-  type DemoPersona,
   type OnbChecklistTemplateItem,
   type OnbChecklistEnforcementStage,
   type OnbDay1Logistics,
@@ -42,26 +36,6 @@ const PHONE_RE = /^\+\d{8,15}$/;
 
 const GEOGRAPHIES = ['India', 'United States', 'UK', 'Europe', 'Singapore'];
 
-function blankVolunteer(): DemoVolunteer {
-  const inAWeek = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10);
-  return {
-    name: '', email: '', phone: '', channelPreference: 'email', persona: 'custom',
-    role: 'Software Engineer', department: 'Engineering', geography: 'India',
-    hireType: 'external', workerCategory: 'full-time',
-    managerName: 'Demo Manager', recruiterName: 'Demo Recruiter',
-    joiningDate: inAWeek, notes: 'Demo volunteer',
-  };
-}
-
-function volunteerProblem(v: DemoVolunteer): string | null {
-  if (!v.name.trim()) return 'Name is required';
-  if (!EMAIL_RE.test(v.email.trim())) return 'Valid email required';
-  const phone = v.phone.replace(/[\s-]/g, '');
-  if (phone && !PHONE_RE.test(phone)) return 'Phone must look like +919876543210';
-  if ((v.channelPreference === 'whatsapp' || v.channelPreference === 'both') && !phone) return 'WhatsApp needs a phone';
-  return null;
-}
-
 const inputCls = 'block w-full text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] py-[6px] border border-input outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] bg-background shadow-sm';
 
 function relativeTime(value: string | null | undefined): string {
@@ -72,59 +46,6 @@ function relativeTime(value: string | null | undefined): string {
     return 'No successful run recorded';
   }
 }
-function PersonaBrief({ persona, volunteerName }: { persona: DemoPersona | undefined; volunteerName: string }) {
-  const [copied, setCopied] = useState(false);
-  if (!persona) return null;
-  const briefText = `Hi${volunteerName ? ` ${volunteerName.split(' ')[0]}` : ''}! You're playing: ${persona.title}.\n\n${persona.description}\n\nYour part: ${persona.volunteerBrief}`;
-  return (
-    <div className="mt-2.5 p-2.5 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-alt)] text-[var(--text-xs)]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-semibold text-[var(--text-primary)] text-[var(--text-sm)]">{persona.title}</p>
-          <p className="text-[var(--text-muted)] mt-1"><span className="font-medium text-[var(--text-secondary)]">Their part:</span> {persona.volunteerBrief}</p>
-          <p className="text-[var(--text-muted)] mt-1"><span className="font-medium text-[var(--text-secondary)]">What the agent should do:</span> {persona.expectedBehaviour}</p>
-        </div>
-        <Button
-          variant="secondary" size="sm" className="shrink-0 gap-1.5 text-[var(--text-xs)]"
-          onClick={() => { navigator.clipboard.writeText(briefText).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
-        >
-          <Check className={cn('w-3.5 h-3.5', copied ? 'text-[var(--status-green)]' : 'opacity-0 w-0')} />
-          {copied ? 'Copied' : 'Copy briefing'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-const HR_BRIEF_TEXT = `You're playing: HR / Human-in-the-loop (the escalation chair).
-
-Your part: keep the control tower open. The AI hands over to you whenever it reaches a limit it was designed to respect — watch the Approvals queue. Expect handovers when: a background check has an exception (BGV persona), a hire reports a blocker on a call, the AI can't answer a question confidently, or a promised email couldn't be delivered. Open each approval, read the AI's recommendation and rationale, then approve or reject — the agent resumes automatically. If the AI stumbles during a phone call it promises the hire "a human will call you back": that promise lands in your queue, and honoring it is your showcase moment. You're also the outage contact — the HR Alert Email above is where the system emails you if its own machinery breaks.`;
-
-function HrOperatorBrief() {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="mt-4 p-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-alt)] text-[var(--text-xs)]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-semibold text-[var(--text-primary)] text-[var(--text-sm)]">The seventh chair: HR / Human-in-the-loop (not a volunteer row)</p>
-          <p className="text-[var(--text-muted)] mt-1">
-            Every demo needs one person working the <span className="font-medium text-[var(--text-secondary)]">Approvals queue</span> — the escalation
-            human the AI defers to for background-check exceptions, call blockers, unanswerable questions, and broken
-            promises. Approving or rejecting there is what makes the human-in-the-loop story land.
-          </p>
-        </div>
-        <Button
-          variant="secondary" size="sm" className="shrink-0 gap-1.5 text-[var(--text-xs)]"
-          onClick={() => { navigator.clipboard.writeText(HR_BRIEF_TEXT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
-        >
-          <Check className={cn('w-3.5 h-3.5', copied ? 'text-[var(--status-green)]' : 'opacity-0 w-0')} />
-          {copied ? 'Copied' : 'Copy briefing'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function RemoteApproverSettings() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useGetOnboardingSettings();
@@ -216,187 +137,6 @@ function RemoteApproverSettings() {
           <p className="mt-0.5">{result.message}</p>
         </div>
       )}
-    </div>
-  );
-}
-
-function DemoVolunteersCard() {
-  const queryClient = useQueryClient();
-  const { data, isLoading } = useGetDemoVolunteers();
-  const update = useUpdateDemoVolunteers();
-  const seed = useSeedDemoVolunteers();
-
-  const [rows, setRows] = useState<DemoVolunteer[]>([]);
-  const [touched, setTouched] = useState(false);
-  const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
-  const [seedResults, setSeedResults] = useState<{ name: string; status: string; note: string; caseId: number | null }[] | null>(null);
-
-  useEffect(() => {
-    if (data && !touched) setRows(data.volunteers);
-  }, [data, touched]);
-
-  const edit = (i: number, patch: Partial<DemoVolunteer>) => {
-    setTouched(true);
-    setNotice(null);
-    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  };
-
-  const problems = rows.map(volunteerProblem);
-  const anyInvalid = rows.some((r, i) => problems[i] !== null && (r.name || r.email));
-
-  const save = () => {
-    setNotice(null);
-    setSeedResults(null);
-    update.mutate(
-      { data: { volunteers: rows } },
-      {
-        onSuccess: (saved) => {
-          setTouched(false);
-          setRows(saved.volunteers);
-          const live = saved.volunteers.filter((v) => !volunteerProblem(v));
-          setNotice({
-            ok: true,
-            message: live.length > 0
-              ? `Saved. Live emails, WhatsApp and calls are now enabled for ${live.length} volunteer${live.length === 1 ? '' : 's'} — and nobody else.`
-              : 'Saved. No valid volunteers yet, so live delivery stays off.',
-          });
-          queryClient.invalidateQueries({ queryKey: getGetDemoVolunteersQueryKey() });
-        },
-        onError: (err: any) => setNotice({ ok: false, message: err?.message ?? 'Saving failed — please try again.' }),
-      },
-    );
-  };
-
-  const runSeed = () => {
-    setNotice(null);
-    seed.mutate(undefined, {
-      onSuccess: (res) => setSeedResults(res.results),
-      onError: (err: any) => setNotice({ ok: false, message: err?.message ?? 'Seeding failed — please try again.' }),
-    });
-  };
-
-  return (
-    <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
-      <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <IconTile icon={Users} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" />
-            <div>
-              <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Demo Volunteers</h3>
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>
-                Real people for live demos. Saving authorizes their email/phone for real messages and calls — no one else
-                can be contacted. "Create demo cases" runs each volunteer through the full agent pipeline.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="p-[var(--space-lg)] bg-[var(--surface)]">
-        {isLoading ? (
-          <LoadingBlock>Loading volunteers...</LoadingBlock>
-        ) : (
-          <>
-            <div className="space-y-3">
-              {rows.map((v, i) => {
-                const problem = problems[i];
-                return (
-                  <div key={i} className={cn('border rounded-[var(--radius-md)] p-3 transition-colors', problem && (v.name || v.email) ? 'border-[var(--status-amber)] bg-[var(--status-amber-bg)]/30' : 'border-[var(--border)] bg-[var(--surface)]')}>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <input placeholder="Full name" value={v.name} onChange={(e) => edit(i, { name: e.target.value })} className={inputCls} />
-                      <input placeholder="email@example.com" type="email" value={v.email} onChange={(e) => edit(i, { email: e.target.value })} className={inputCls} />
-                      <input placeholder="+919876543210 (optional)" value={v.phone} onChange={(e) => edit(i, { phone: e.target.value })} className={inputCls} />
-                      <select value={v.persona} onChange={(e) => edit(i, { persona: e.target.value })} className={cn(inputCls, 'font-medium')} title="Persona this volunteer plays">
-                        {(data?.personas ?? []).map((p) => <option key={p.key} value={p.key}>{p.title}</option>)}
-                      </select>
-                      <select value={v.channelPreference} onChange={(e) => edit(i, { channelPreference: e.target.value })} className={inputCls}>
-                        <option value="email">Email only</option>
-                        <option value="whatsapp">WhatsApp</option>
-                        <option value="both">Email + WhatsApp</option>
-                      </select>
-                      <select value={v.geography} onChange={(e) => edit(i, { geography: e.target.value })} className={inputCls}>
-                        {GEOGRAPHIES.map((g) => <option key={g} value={g}>{g}</option>)}
-                      </select>
-                      <div className="flex gap-2">
-                        <input type="date" value={v.joiningDate} onChange={(e) => edit(i, { joiningDate: e.target.value })} className={inputCls} title="Joining date" />
-                        <select value={v.workerCategory} onChange={(e) => edit(i, { workerCategory: e.target.value })} className={cn(inputCls, 'w-36')}>
-                          <option value="full-time">Full-time</option>
-                          <option value="contractor">Contractor</option>
-                        </select>
-                        <Button variant="ghost" size="icon" className="shrink-0 text-[var(--text-muted)] hover:text-[var(--status-red)] hover:bg-[var(--status-red-bg)]" title="Remove volunteer"
-                          onClick={() => { setTouched(true); setNotice(null); setRows((prev) => prev.filter((_, idx) => idx !== i)); }}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    {problem && (v.name || v.email) && (
-                      <p className="text-[var(--text-xs)] text-[var(--status-amber-fg)] flex items-center gap-1 mt-2">
-                        <AlertTriangle className="w-3 h-3" /> {problem}
-                      </p>
-                    )}
-                    <PersonaBrief persona={(data?.personas ?? []).find((p) => p.key === v.persona)} volunteerName={v.name} />
-
-                  </div>
-                );
-              })}
-              {rows.length === 0 && (
-                <LoadingBlock>No volunteers yet. Add one to enable live demo delivery.</LoadingBlock>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-2 mt-4 pt-2 border-t border-[var(--border)]">
-              <Button variant="secondary" className="gap-2" onClick={() => { setTouched(true); setRows((prev) => [...prev, blankVolunteer()]); }}>
-                <Plus className="w-4 h-4" /> Add volunteer
-              </Button>
-              <Button onClick={save} disabled={update.isPending || !touched || anyInvalid} className="gap-2">
-                <Check className="w-4 h-4" /> Save & authorize
-              </Button>
-              <Button variant="outline" onClick={runSeed} disabled={seed.isPending || touched || (data?.volunteers.length ?? 0) === 0}
-                className="gap-2 ml-auto" title={touched ? 'Save first, then create cases' : undefined}>
-                <Rocket className="w-4 h-4" /> {seed.isPending ? 'Creating cases…' : 'Create demo cases'}
-              </Button>
-            </div>
-            {touched && <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-2">Unsaved changes — save before creating demo cases.</p>}
-
-            {notice && (
-              <div className={cn('p-3 mt-4 text-[var(--text-sm)] rounded-[var(--radius-md)] border flex items-start gap-3',
-                notice.ok ? 'bg-[var(--status-green-bg)] border-transparent text-[var(--status-green-fg)]' : 'bg-[var(--status-red-bg)] border-transparent text-[var(--status-red-fg)]')}>
-                {notice.ok ? <Check className="w-5 h-5 shrink-0 mt-0.5" /> : <X className="w-5 h-5 shrink-0 mt-0.5" />}
-                <p className="mt-0.5">{notice.message}</p>
-              </div>
-            )}
-
-            {seedResults && (
-              <div className="mt-4 border border-[var(--border)] rounded-[var(--radius-md)] divide-y divide-[var(--border)] overflow-hidden">
-                {seedResults.map((r, i) => (
-                  <div key={i} className="p-2.5 bg-[var(--surface)] text-[var(--text-sm)] flex items-center gap-3">
-                    <Badge className={cn('text-[var(--text-xs)] shadow-none shrink-0',
-                      r.status === 'seeded' ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]'
-                        : r.status === 'skipped' ? 'bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]'
-                          : 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]')}>
-                      {r.status}
-                    </Badge>
-                    <span className="font-medium text-[var(--text-primary)]">{r.name}</span>
-                    <span className="text-[var(--text-muted)]">{r.note}</span>
-                    {r.caseId !== null && (
-                      <a href={`cases/${r.caseId}`} className="ml-auto text-[var(--primary)] font-medium hover:underline shrink-0">Open case #{r.caseId}</a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <HrOperatorBrief />
-
-            <RemoteApproverSettings />
-
-            <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-4 flex items-start gap-1.5">
-              <Phone className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              Twilio trial note: phone numbers must also be added as Verified Caller IDs in the Twilio console before live
-              calls or WhatsApp will connect. WhatsApp volunteers must send the sandbox join message once.
-            </p>
-          </>
-        )}
-      </div>
     </div>
   );
 }
@@ -838,7 +578,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <DemoVolunteersCard />
+      <RemoteApproverSettings />
       <SyntheticResetCard />
       <ReadinessSlaSettingsCard />
       <EarlyTenureSettingsCard />
@@ -1120,7 +860,7 @@ export function SettingsPage() {
 
       <Day1LogisticsSettingsCard />
 
-      <DemoVolunteersCard />
+      <RemoteApproverSettings />
 
       <ScenarioTestingCard />
     </div>

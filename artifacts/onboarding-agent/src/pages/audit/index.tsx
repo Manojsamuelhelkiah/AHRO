@@ -943,14 +943,13 @@ export function AuditPage() {
               </div>
             </div>
             <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--text-secondary)]">
-              To review evidence for a synthetic walkthrough, open the run in Demo Center and use its
-              <strong className="text-[var(--text-primary)]"> Audit Trail &amp; Evidence</strong> section.
+              Review case-linked historical evidence in Cases using your current case permissions.
             </div>
             <Link
-              href="/demo-controller"
+              href="/cases"
               className="inline-flex h-10 items-center justify-center rounded-md bg-[var(--primary)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--primary-dark)]"
             >
-              Open Demo Center
+              Open Cases
             </Link>
           </CardContent>
         </Card>
