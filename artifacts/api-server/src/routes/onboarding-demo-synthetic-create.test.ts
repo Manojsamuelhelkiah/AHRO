@@ -1,590 +1,193 @@
-import { deleteTestOrganizations } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { Server } from "node:http";
 import { after, before, describe, test } from "node:test";
 import express from "express";
-import { and, eq, inArray } from "drizzle-orm";
-import {
-  DEMO_ORGANIZATION_ID,
-  accessNamedGrants,
-  db,
-  onbIntakeBatchPeople,
-  onbIntakeBatches,
-  onbAuthorityAssignments,
-  onbCandidateLinks,
-  onbCaseLogistics,
-  onbCases,
-  onbCommunications,
-  onbEffectJournal,
-  onbEvents,
-  onbReadinessSlaCaseState,
-  onbReadinessSlaLedger,
-  onbReadinessSlaOutbox,
-  onbReadinessSlaSnapshots,
-  onbSensitiveLifecyclePolicies,
-  onbSettings,
-  organizationMembershipsTable,
-  organizationsTable,
+import type { Server } from "node:http";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { db, DEMO_ORGANIZATION_ID, organizationsTable, organizationMembershipsTable, accessNamedGrants,
+  onbCases, onbCommunications, onbEvents, onbEffectJournal, onbAuthorityAssignments, onbSettings, onbSensitiveLifecyclePolicies, onbReadinessSlaPolicies,
 } from "@workspace/db";
-import { SENSITIVE_DATA_CLASSES } from "../lib/onboarding/sensitive-lifecycle";
-import {
-  SYNTHETIC_OFFLINE_MARKER,
-} from "../lib/onboarding/synthetic-offline";
-import batchIntakeRouter from "./onboarding-batch-intake";
+import { deleteTestOrganizations } from "../test-support/organization-fixtures";
+import { createTenantContextMiddleware, lookupMembership } from "../middlewares/tenant-context";
+import { caseRetirementFence } from "../middlewares/case-retirement";
 import { demoPrincipalSettingKey } from "../lib/demo-principal";
-import {
-  createTenantContextMiddleware,
-  lookupMembership,
-} from "../middlewares/tenant-context";
+import { SYNTHETIC_OFFLINE_MARKER } from "../lib/onboarding/synthetic-offline";
+import { withCaseDispatchGuard } from "../lib/onboarding/dispatch-guard";
+import { startOrchestration } from "../lib/onboarding/engine";
 import { errorHandler } from "../middlewares/error-handler";
+import { SENSITIVE_DATA_CLASSES } from "../lib/onboarding/sensitive-lifecycle";
 import onboardingRouter from "./onboarding";
 
-const hasDb = Boolean(process.env.DATABASE_URL);
-const suffix = `${process.pid}-${randomUUID()}`;
-const administrator = `synthetic-create-admin-${suffix}`;
-const reviewer = `synthetic-create-reviewer-${suffix}`;
-const ordinaryCreator = `synthetic-create-ordinary-${suffix}`;
-const foreignOrganizationId = `synthetic-create-foreign-${suffix}`;
-const policyRevision = 1_000_000 + Number.parseInt(
-  randomUUID().replaceAll("-", "").slice(0, 6),
-  16,
-);
-const fixtureWorkerName = `Synthetic Route Worker ${suffix}`;
-let server: Server | undefined;
-let baseUrl = "";
-const createdCaseIds: number[] = [];
-
-function intake(workerName = fixtureWorkerName) {
-  return {
-    workerName,
-    workerEmail: `synthetic-route-${suffix}@example.invalid`,
-    channelPreference: "both",
-    hireType: "external-fte",
-    workerCategory: "employee",
-    role: "Demo Engineer",
-    department: "Quality",
-    geography: "US",
-    legalEntity: "Demo Organization",
-    managerName: "Demo Manager",
-    recruiterName: "Demo Recruiter",
-    joiningDate: "2035-01-01",
-    urgency: "normal",
-    offerAcceptanceComplete: false,
-    workforceContext: {
-      workCountry: "US",
-      workEnvironment: "office",
-      siteExposure: false,
-      safetyCritical: false,
-    },
-  };
+const suffix = `retirement-${randomUUID()}`;
+const admin = `${suffix}-admin`, reviewer = `${suffix}-reviewer`, ordinary = `${suffix}-ordinary`;
+const foreign = `${suffix}-foreign`;
+let server: Server, base: string, caseId: number;
+async function request(actor: string | null, tenant: string, path: string, method = "POST", data: unknown = {}) {
+  return fetch(`${base}${path}`, { method, headers: {
+    "content-type": "application/json", "x-organization-id": tenant, ...(actor ? { "x-test-user": actor } : {}),
+  }, ...(method === "GET" ? {} : { body: JSON.stringify(data) }) });
 }
-
-async function request(userId: string, organizationId: string, path: string, init?: RequestInit) {
-  return fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      "x-test-user": userId,
-      "x-organization-id": organizationId,
-      ...(init?.headers ?? {}),
-    },
-  });
+async function snapshot() {
+  const rows = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+  const comms = await db.select().from(onbCommunications).where(eq(onbCommunications.caseId, caseId));
+  const events = await db.select().from(onbEvents).where(eq(onbEvents.caseId, caseId));
+  const effects = await db.select().from(onbEffectJournal).where(eq(onbEffectJournal.caseId, caseId));
+  const grants = await db.select().from(onbAuthorityAssignments).where(eq(onbAuthorityAssignments.caseId, caseId));
+  return JSON.stringify({ rows, comms, events, effects, grants });
 }
-
-describe("Demo Administrator synthetic Create Case", { skip: !hasDb }, () => {
+describe("authenticated case retirement and historical isolation", { skip: !process.env.DATABASE_URL }, () => {
   before(async () => {
-    const existing = await db.select({ id: organizationsTable.id })
-      .from(organizationsTable)
-      .where(eq(organizationsTable.id, DEMO_ORGANIZATION_ID))
-      .limit(1);
-    if (!existing.length) {
-      await db.insert(organizationsTable).values({
-        id: DEMO_ORGANIZATION_ID,
-        name: "Development Demo",
-        slug: "development-demo",
-        joinCodeHash: `test-demo-${suffix}`,
-        createdByUserId: administrator,
-      });
-    }
-    await db.insert(organizationsTable).values({
-      id: foreignOrganizationId,
-      name: "Foreign tenant",
-      slug: foreignOrganizationId,
-      joinCodeHash: `test-foreign-${suffix}`,
-      createdByUserId: administrator,
-    });
+    await db.insert(organizationsTable).values({ id: DEMO_ORGANIZATION_ID, name: "Demo", slug: "development-demo", joinCodeHash: suffix, createdByUserId: admin }).onConflictDoNothing();
+    await db.insert(organizationsTable).values({ id: foreign, name: foreign, slug: foreign, joinCodeHash: foreign, createdByUserId: ordinary });
     await db.insert(organizationMembershipsTable).values([
-      { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: administrator, role: "member" },
+      { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: admin, role: "member" },
       { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: reviewer, role: "member" },
-      { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: ordinaryCreator, role: "member" },
-      // The registered profile ceiling, rather than the absence of a foreign
-      // membership, must deny the foreign-tenant request.
-      { organizationId: foreignOrganizationId, clerkUserId: administrator, role: "owner" },
+      { organizationId: foreign, clerkUserId: admin, role: "owner" },
+      { organizationId: foreign, clerkUserId: ordinary, role: "owner" },
     ]);
     await db.insert(onbSettings).values([
-      {
-        organizationId: DEMO_ORGANIZATION_ID,
-        key: demoPrincipalSettingKey(administrator),
-        value: "administrator",
-      },
-      {
-        organizationId: DEMO_ORGANIZATION_ID,
-        key: demoPrincipalSettingKey(reviewer),
-        value: "reviewer",
-      },
+      { organizationId: DEMO_ORGANIZATION_ID, key: demoPrincipalSettingKey(admin), value: "administrator" },
+      { organizationId: DEMO_ORGANIZATION_ID, key: demoPrincipalSettingKey(reviewer), value: "reviewer" },
     ]);
-    const ordinaryAccessKeys = [
-      "data.case.profile.read",
-      "data.case.profile.edit",
-      "data.case.notes.read",
-      "data.case.notes.edit",
-      "data.case.readiness.read",
-      "data.case.readiness.edit",
-      "flow.case.read",
-      "flow.case.edit",
-    ];
-    await db.insert(accessNamedGrants).values(ordinaryAccessKeys.map((resourceKey) => ({
-      organizationId: DEMO_ORGANIZATION_ID,
-      principalType: "human" as const,
-      principalId: ordinaryCreator,
-      scope: "tenant" as const,
-      caseId: null,
-      resourceType: resourceKey.startsWith("flow.") ? "flow" as const : "field" as const,
-      resourceKey,
-      source: "named" as const,
-      effect: "allow" as const,
-      createdByUserId: ordinaryCreator,
-      approvedByUserId: `${suffix}-independent-approver`,
-      approvedAt: new Date(),
+    await db.insert(accessNamedGrants).values(["data.case.profile.read", "data.case.profile.edit", "data.case.notes.read", "data.case.notes.edit", "flow.case.read", "flow.case.edit"].map(resourceKey => ({
+      organizationId: foreign, principalType: "human" as const, principalId: ordinary,
+      scope: "tenant" as const, resourceType: resourceKey.startsWith("flow") ? "flow" as const : "field" as const,
+      resourceKey, source: "named" as const, effect: "allow" as const,
+      createdByUserId: ordinary, approvedByUserId: `${suffix}-independent`, approvedAt: new Date(),
     })));
-    // The production route uses the normal sensitive-lifecycle gate for
-    // synthetic cases too. These short-lived, test-owned approvals establish
-    // that the synthetic path does not bypass that protection.
-    await db.insert(onbSensitiveLifecyclePolicies).values(
-      SENSITIVE_DATA_CLASSES.map((dataClass) => ({
-        organizationId: DEMO_ORGANIZATION_ID,
-        dataClass,
-        jurisdiction: "US",
-        revision: policyRevision,
-        purpose: "Synthetic route test lifecycle policy",
-        lawfulBasis: "Synthetic route test lifecycle basis",
-        retentionDays: 1,
-        providerSharingApproved: false,
-        permittedProviders: [],
-        policyReference: `synthetic-route-test:${suffix}:${dataClass}`,
-        approvalReference: `synthetic-route-test:${suffix}:${dataClass}`,
-        approvedByUserId: administrator,
-        approvedAuthorityAssignmentId: 1,
-        isCurrent: true,
-      })),
-    );
+    await db.insert(onbSensitiveLifecyclePolicies).values(SENSITIVE_DATA_CLASSES.map(dataClass => ({
+      organizationId: foreign, dataClass, jurisdiction: "US", revision: 1, purpose: "Disposable regression fixture",
+      lawfulBasis: "Test-only fixture", retentionDays: 1, providerSharingApproved: false, permittedProviders: [],
+      policyReference: suffix, approvalReference: suffix, approvedByUserId: ordinary,
+      approvedAuthorityAssignmentId: 1, isCurrent: true,
+    })));
+    const [row] = await db.insert(onbCases).values({
+      organizationId: DEMO_ORGANIZATION_ID, workerName: "Retained private test fixture",
+      workerEmail: `${suffix}@example.invalid`, joiningDate: "2035-01-01",
+      workerCategory: "employee", role: "History fixture", department: "Testing", geography: "US",
+      legalEntity: "Demo", managerName: "Fixture manager", recruiterName: "Fixture recruiter",
+      syntheticProvenance: "onboarding-demo-fictional", notes: SYNTHETIC_OFFLINE_MARKER,
+      orchestrationStatus: "paused", hireType: "external-fte",
+    }).returning();
+    caseId = row.id;
+    await db.insert(accessNamedGrants).values(["data.case.profile.read", "data.case.notes.read", "flow.case.read"].map(resourceKey => ({
+      organizationId: DEMO_ORGANIZATION_ID, principalType: "human" as const, principalId: admin,
+      scope: "case" as const, caseId, resourceType: resourceKey.startsWith("flow") ? "flow" as const : "field" as const,
+      resourceKey, source: "named" as const, effect: "allow" as const,
+      createdByUserId: admin, approvedByUserId: `${suffix}-independent`, approvedAt: new Date(),
+    })));
     const app = express();
     app.use(express.json());
-    app.use((req, _res, next) => {
-      req.authUserId = String(req.header("x-test-user") ?? "");
-      next();
-    });
+    app.use((req, _res, next) => { req.authUserId = req.header("x-test-user"); next(); });
     app.use(createTenantContextMiddleware(lookupMembership));
+    app.use(caseRetirementFence);
     app.use(onboardingRouter);
-    app.use(batchIntakeRouter);
+    app.post("/ordinary-control", (_req, res) => res.json({ allowed: true }));
     app.use(errorHandler);
     server = app.listen(0, "127.0.0.1");
-    await new Promise<void>((resolve) => server!.once("listening", resolve));
-    const address = server.address();
-    assert.ok(address && typeof address !== "string");
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    await new Promise<void>(resolve => server.once("listening", resolve));
+    const address = server.address(); assert.ok(address && typeof address !== "string");
+    base = `http://127.0.0.1:${address.port}`;
   });
-
   after(async () => {
-    if (server) await new Promise<void>((resolve, reject) =>
-      server!.close((error) => error ? reject(error) : resolve()),
-    );
-    if (createdCaseIds.length > 0) {
-      for (let attempt = 0; attempt < 40; attempt += 1) {
-        const rows = await db.select({
-          orchestrationStatus: onbCases.orchestrationStatus,
-          orchestrationClaimOwner: onbCases.orchestrationClaimOwner,
-        }).from(onbCases).where(inArray(onbCases.id, createdCaseIds));
-        if (!rows.some((row) =>
-          row.orchestrationStatus === "running" || row.orchestrationClaimOwner
-        )) break;
-        await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise<void>((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
+    await db.delete(onbCases).where(eq(onbCases.id, caseId));
+    await db.delete(onbEffectJournal).where(eq(onbEffectJournal.organizationId, foreign));
+    await db.delete(onbCases).where(eq(onbCases.organizationId, foreign));
+    await db.delete(accessNamedGrants).where(eq(accessNamedGrants.organizationId, foreign));
+    await db.delete(onbReadinessSlaPolicies).where(eq(onbReadinessSlaPolicies.organizationId, foreign));
+    await db.delete(onbSensitiveLifecyclePolicies).where(eq(onbSensitiveLifecyclePolicies.organizationId, foreign));
+    await db.delete(onbEvents).where(eq(onbEvents.organizationId, foreign));
+    await db.delete(onbCommunications).where(eq(onbCommunications.organizationId, foreign));
+    await db.delete(onbSettings).where(eq(onbSettings.organizationId, foreign));
+    await db.delete(accessNamedGrants).where(inArray(accessNamedGrants.principalId, [admin, reviewer]));
+    await db.delete(onbSettings).where(and(eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID), inArray(onbSettings.key, [demoPrincipalSettingKey(admin), demoPrincipalSettingKey(reviewer)])));
+    await db.delete(organizationMembershipsTable).where(inArray(organizationMembershipsTable.clerkUserId, [admin, reviewer, ordinary]));
+    await deleteTestOrganizations(eq(organizationsTable.id, foreign), async (tx, ids) => {
+      assert.deepEqual(ids, [foreign]);
+      assert.match(foreign, /^retirement-[a-f0-9-]+-foreign$/);
+      // Dispose only this newly created developer fixture's remaining children.
+      // Discover current schema tables so new case-governance children cannot
+      // strand a fixture or require touching any pre-existing tenant evidence.
+      const tables = await tx.execute<{ table_name: string }>(sql`
+        SELECT table_name FROM information_schema.columns
+        WHERE table_schema = current_schema() AND column_name = 'organization_id'
+          AND left(table_name, 4) = 'onb_'
+      `);
+      let pending = tables.rows.map(row => row.table_name);
+      while (pending.length) {
+        const postponed: string[] = [];
+        for (const table of pending) {
+          await tx.execute(sql`SAVEPOINT retirement_fixture_cleanup`);
+          try {
+            await tx.execute(sql`DELETE FROM ${sql.identifier(table)} WHERE organization_id = ${foreign}`);
+            await tx.execute(sql`RELEASE SAVEPOINT retirement_fixture_cleanup`);
+          } catch (error) {
+            await tx.execute(sql`ROLLBACK TO SAVEPOINT retirement_fixture_cleanup`);
+            await tx.execute(sql`RELEASE SAVEPOINT retirement_fixture_cleanup`);
+            const code = (error as { code?: string; cause?: { code?: string } }).cause?.code
+              ?? (error as { code?: string }).code;
+            if (code !== "23503") throw error;
+            postponed.push(table);
+          }
+        }
+        assert.ok(postponed.length < pending.length, `Fixture FK cycle: ${postponed.join(", ")}`);
+        pending = postponed;
       }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      await db.delete(onbAuthorityAssignments).where(and(
-        inArray(onbAuthorityAssignments.caseId, createdCaseIds),
-        eq(onbAuthorityAssignments.personUserId, administrator),
-      ));
-      await db.delete(onbCases).where(inArray(onbCases.id, createdCaseIds));
-    }
-    await db.delete(onbSensitiveLifecyclePolicies).where(and(
-      eq(onbSensitiveLifecyclePolicies.organizationId, DEMO_ORGANIZATION_ID),
-      eq(onbSensitiveLifecyclePolicies.revision, policyRevision),
-    ));
-    await db.delete(accessNamedGrants).where(and(
-      eq(accessNamedGrants.organizationId, DEMO_ORGANIZATION_ID),
-      eq(accessNamedGrants.principalId, ordinaryCreator),
-    ));
-    await db.delete(onbSettings).where(and(
-      eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
-      inArray(onbSettings.key, [
-        demoPrincipalSettingKey(administrator),
-        demoPrincipalSettingKey(reviewer),
-      ]),
-    ));
-    await db.delete(organizationMembershipsTable).where(and(
-      eq(organizationMembershipsTable.clerkUserId, administrator),
-      inArray(organizationMembershipsTable.organizationId, [
-        DEMO_ORGANIZATION_ID,
-        foreignOrganizationId,
-      ]),
-    ));
-    await db.delete(organizationMembershipsTable).where(and(
-      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
-      eq(organizationMembershipsTable.clerkUserId, reviewer),
-    ));
-    await db.delete(organizationMembershipsTable).where(and(
-      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
-      eq(organizationMembershipsTable.clerkUserId, ordinaryCreator),
-    ));
-    await deleteTestOrganizations(eq(organizationsTable.id, foreignOrganizationId));
-  });
-
-  test("creates an offline case, grants only case-bound read access, and opens it", async () => {
-    const response = await request(administrator, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
-      method: "POST",
-      body: JSON.stringify(intake()),
     });
-    const responseBody = await response.text();
-    assert.equal(response.status, 201, responseBody);
-    const created = JSON.parse(responseBody) as {
-      id: number;
-      scenarioKey: string | null;
-      offlineSample: boolean;
-    };
-    createdCaseIds.push(created.id);
-    assert.equal(created.scenarioKey, null);
-    assert.equal(created.offlineSample, true);
-
-    const opened = await request(administrator, DEMO_ORGANIZATION_ID, `/onboarding/cases/${created.id}`);
-    const openedBody = await opened.text();
-    assert.equal(opened.status, 200, openedBody);
-    const openedCase = JSON.parse(openedBody) as {
-      workerName: string;
-      workerEmail: string;
-      fictionalOfflineIdentity: boolean;
-    };
-    assert.match(openedCase.workerName, /^Fictional Demo Hire /);
-    assert.match(openedCase.workerEmail, /^fictional-demo-[a-f0-9]+@example\.invalid$/);
-    assert.equal(openedCase.fictionalOfflineIdentity, true);
-    const permissionsResponse = await request(
-      administrator,
-      DEMO_ORGANIZATION_ID,
-      `/onboarding/cases/${created.id}/access-permissions`,
-    );
-    assert.equal(permissionsResponse.status, 200);
-    const permissions = await permissionsResponse.json() as {
-      sensitive: { identity: { read: boolean; edit: boolean } };
-    };
-    assert.deepEqual(permissions.sensitive.identity, { read: false, edit: false });
-    const caseAccessGrants = await db.select({
-      resourceKey: accessNamedGrants.resourceKey,
-      caseId: accessNamedGrants.caseId,
-      scope: accessNamedGrants.scope,
-    }).from(accessNamedGrants).where(and(
-      eq(accessNamedGrants.organizationId, DEMO_ORGANIZATION_ID),
-      eq(accessNamedGrants.principalId, administrator),
-      eq(accessNamedGrants.scope, "case"),
-      eq(accessNamedGrants.caseId, created.id),
-      eq(accessNamedGrants.source, "named"),
-      eq(accessNamedGrants.effect, "allow"),
-    ));
-    assert.deepEqual(
-      caseAccessGrants.map((grant) => grant.resourceKey).sort(),
-      [
-        "data.case.notes.read",
-        "data.case.profile.read",
-        "data.case.readiness.read",
-        "data.documents.read",
-        "flow.case.read",
-      ].sort(),
-    );
-    assert.ok(caseAccessGrants.every((grant) =>
-      grant.scope === "case" && grant.caseId === created.id
-    ));
-
-    const reviewerRead = await request(reviewer, DEMO_ORGANIZATION_ID, `/onboarding/cases/${created.id}`);
-    assert.equal(reviewerRead.status, 403);
-    assert.equal((await reviewerRead.json() as { code?: string }).code, "CASE_ACCESS_REQUIRED");
-
-    const [caseRow] = await db.select().from(onbCases).where(and(
-      eq(onbCases.id, created.id),
-      eq(onbCases.organizationId, DEMO_ORGANIZATION_ID),
-    ));
-    assert.ok(caseRow);
-    assert.ok(caseRow.notes?.includes(SYNTHETIC_OFFLINE_MARKER));
-    assert.equal(caseRow.syntheticProvenance, "onboarding-demo-fictional");
-    assert.equal(caseRow.scenarioKey, null);
-    assert.equal(caseRow.orchestrationStatus, "blocked");
-    assert.equal(caseRow.orchestrationCheckpoint, "synthetic-offline");
-    assert.equal(caseRow.candidateEmailAuthorizedAt, null);
-    assert.equal(caseRow.candidateEmailAuthorizedBy, null);
-
-    const authorityAssignments = await db.select().from(onbAuthorityAssignments).where(and(
-      eq(onbAuthorityAssignments.organizationId, DEMO_ORGANIZATION_ID),
-      eq(onbAuthorityAssignments.personUserId, administrator),
-      eq(onbAuthorityAssignments.caseId, created.id),
-    ));
-    assert.equal(authorityAssignments.length, 0);
-    const [membership] = await db.select({ role: organizationMembershipsTable.role })
-      .from(organizationMembershipsTable)
-      .where(and(
-        eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
-        eq(organizationMembershipsTable.clerkUserId, administrator),
-      ));
-    assert.equal(membership?.role, "member");
-
-    const [events, communications, effects, links, logistics, slaSnapshots, slaState, slaLedger, slaOutbox] =
-      await Promise.all([
-        db.select().from(onbEvents).where(eq(onbEvents.caseId, created.id)),
-        db.select().from(onbCommunications).where(eq(onbCommunications.caseId, created.id)),
-        db.select().from(onbEffectJournal).where(eq(onbEffectJournal.caseId, created.id)),
-        db.select().from(onbCandidateLinks).where(eq(onbCandidateLinks.caseId, created.id)),
-        db.select().from(onbCaseLogistics).where(eq(onbCaseLogistics.caseId, created.id)),
-        db.select().from(onbReadinessSlaSnapshots).where(eq(onbReadinessSlaSnapshots.caseId, created.id)),
-        db.select().from(onbReadinessSlaCaseState).where(eq(onbReadinessSlaCaseState.caseId, created.id)),
-        db.select().from(onbReadinessSlaLedger).where(eq(onbReadinessSlaLedger.caseId, created.id)),
-        db.select().from(onbReadinessSlaOutbox).where(eq(onbReadinessSlaOutbox.caseId, created.id)),
-      ]);
-    assert.deepEqual([events, communications, effects, links, slaSnapshots, slaState, slaLedger, slaOutbox].map((rows) => rows.length),
-      [0, 0, 0, 0, 0, 0, 0, 0]);
-    // Case-local logistics is a persisted planning record, not an outreach or
-    // provider effect. Its existence is permitted by normal case creation.
-    assert.equal(logistics.length, 1);
-
-    await db.insert(onbCommunications).values([
-      {
-        organizationId: DEMO_ORGANIZATION_ID,
-        caseId: created.id,
-        channel: "simulation",
-        direction: "outbound",
-        audience: "admin",
-        toAddress: "simulation-only",
-        subject: "Raw simulation subject must not be shown",
-        body: "Raw simulation details must not be shown",
-        status: "logged-only",
-        sensitive: false,
-        sensitiveDataClass: "unclassified-legacy",
-        idempotencyKey: `case-simulation:${created.id}:generation-1:exchange-1:communication`,
-      },
-      {
-        organizationId: DEMO_ORGANIZATION_ID,
-        caseId: created.id,
-        channel: "email",
-        direction: "outbound",
-        audience: "candidate",
-        toAddress: `candidate-${suffix}@example.invalid`,
-        subject: "Private candidate subject",
-        body: "Private candidate communication body",
-        status: "sent",
-        sensitive: true,
-        sensitiveDataClass: "candidate-contact",
-        idempotencyKey: `candidate-contact-test:${created.id}`,
-      },
-      {
-        organizationId: DEMO_ORGANIZATION_ID,
-        caseId: created.id,
-        channel: "email",
-        direction: "outbound",
-        audience: "candidate",
-        toAddress: `volunteer-${suffix}@example.invalid`,
-        subject: "[DEMO SIMULATION][SIM-THREAD:private-marker] response prompt",
-        body: "Private email token: private-token",
-        status: "sent",
-        sensitive: true,
-        sensitiveDataClass: "candidate-contact",
-        idempotencyKey: `case-simulation-email:${created.id}:generation-1:email-1`,
-      },
-    ]);
-    const communicationsResponse = await request(
-      administrator,
-      DEMO_ORGANIZATION_ID,
-      `/onboarding/cases/${created.id}/communications`,
-    );
-    assert.equal(communicationsResponse.status, 200);
-    const projectedCommunications = await communicationsResponse.json() as Array<{
-      channel: string;
-      subject: string;
-      body: string;
-      toAddress?: string;
-    }>;
-    assert.equal(projectedCommunications.length, 1);
-    assert.equal(projectedCommunications[0]?.channel, "simulation");
-    assert.equal(projectedCommunications[0]?.subject, "Response-driven simulation");
-    assert.match(projectedCommunications[0]?.body ?? "", /synthetic simulation exchange/i);
-    assert.equal(projectedCommunications[0]?.toAddress, undefined);
-    assert.doesNotMatch(
-      JSON.stringify(projectedCommunications),
-      /Raw simulation|Private candidate|Private email|candidate-private|volunteer-|private-token|example\.invalid/i,
-    );
   });
-
-  test("batch intake rejects client-spoofed synthetic markers before a Demo Admin can inherit case access", async () => {
-    const markerCases = [
-      {
-        idempotencyKey: `spoof-offline-${suffix}`,
-        personKey: `spoof-offline-${suffix}`,
-        workerEmail: `spoof-offline-${suffix}@example.invalid`,
-        notes: SYNTHETIC_OFFLINE_MARKER,
-      },
-      {
-        idempotencyKey: `spoof-controller-${suffix}`,
-        personKey: `spoof-controller-${suffix}`,
-        workerEmail: `spoof-controller-${suffix}@example.invalid`,
-        notes: `[demo-controller-run:${suffix}]`,
-      },
-    ];
-    const adminCaseGrantsBefore = await db.select({
-      caseId: accessNamedGrants.caseId,
-      resourceKey: accessNamedGrants.resourceKey,
-    }).from(accessNamedGrants).where(and(
-      eq(accessNamedGrants.organizationId, DEMO_ORGANIZATION_ID),
-      eq(accessNamedGrants.principalId, administrator),
-      eq(accessNamedGrants.scope, "case"),
-      eq(accessNamedGrants.source, "named"),
-    ));
-
-    // Batch intake is an owner/admin route. Promote only this ordinary test
-    // principal for the request; the registered Demo Admin remains a member.
-    await db.update(organizationMembershipsTable).set({ role: "owner" }).where(and(
-      eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
-      eq(organizationMembershipsTable.clerkUserId, ordinaryCreator),
-    ));
-    try {
-      for (const markerCase of markerCases) {
-        const response = await request(ordinaryCreator, DEMO_ORGANIZATION_ID, "/onboarding/batch-intake", {
-          method: "POST",
-          body: JSON.stringify({
-            idempotencyKey: markerCase.idempotencyKey,
-            name: "Spoofed synthetic marker batch",
-            people: [{
-              ...intake(`Spoofed ${markerCase.personKey}`),
-              personKey: markerCase.personKey,
-              workerEmail: markerCase.workerEmail,
-              notes: markerCase.notes,
-            }],
-          }),
-        });
-        assert.equal(response.status, 400);
-        assert.equal((await response.json() as { code?: string }).code, "RESERVED_SYNTHETIC_MARKER");
+  test("stale actions and shared Demo intake cannot create, replace, progress, approve or delete", async () => {
+    const before = await snapshot();
+    for (const actor of [admin, reviewer]) {
+      for (const [path, method] of [
+        ["/onboarding/cases", "POST"], ["/onboarding/standard-intake/events", "POST"], ["/onboarding/batch-intake/commit", "POST"],
+        ["/onboarding/scenarios/standard-fte/run", "POST"], ["/onboarding/synthetic-reset", "POST"],
+        [`/onboarding/cases/${caseId}/simulation/simulate-next`, "POST"],
+        [`/onboarding/cases/${caseId}/readiness`, "PATCH"], [`/onboarding/cases/${caseId}`, "DELETE"],
+      ]) {
+        const response = await request(actor, DEMO_ORGANIZATION_ID, path, method);
+        assert.equal(response.status, 410, path);
+        assert.equal((await response.json() as { code: string }).code, "CASE_TEST_CAPABILITY_RETIRED");
       }
-    } finally {
-      await db.update(organizationMembershipsTable).set({ role: "member" }).where(and(
-        eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
-        eq(organizationMembershipsTable.clerkUserId, ordinaryCreator),
-      ));
     }
-
-    const [batchRows, personRows, caseRows] = await Promise.all([
-      db.select({ idempotencyKey: onbIntakeBatches.idempotencyKey }).from(onbIntakeBatches).where(and(
-        eq(onbIntakeBatches.organizationId, DEMO_ORGANIZATION_ID),
-        inArray(onbIntakeBatches.idempotencyKey, markerCases.map((item) => item.idempotencyKey)),
-      )),
-      db.select({ personKey: onbIntakeBatchPeople.personKey }).from(onbIntakeBatchPeople).where(and(
-        eq(onbIntakeBatchPeople.organizationId, DEMO_ORGANIZATION_ID),
-        inArray(onbIntakeBatchPeople.personKey, markerCases.map((item) => item.personKey)),
-      )),
-      db.select({
-        id: onbCases.id,
-        syntheticProvenance: onbCases.syntheticProvenance,
-      }).from(onbCases).where(and(
-        eq(onbCases.organizationId, DEMO_ORGANIZATION_ID),
-        inArray(onbCases.workerEmail, markerCases.map((item) => item.workerEmail)),
-      )),
-    ]);
-    assert.deepEqual(batchRows, [], "rejected marker payloads leave no batch record");
-    assert.deepEqual(personRows, [], "rejected marker payloads leave no person snapshot");
-    assert.deepEqual(caseRows, [], "no fake offline case exists to expose its identity or acquire synthetic provenance");
-
-    const adminCaseGrantsAfter = await db.select({
-      caseId: accessNamedGrants.caseId,
-      resourceKey: accessNamedGrants.resourceKey,
-    }).from(accessNamedGrants).where(and(
-      eq(accessNamedGrants.organizationId, DEMO_ORGANIZATION_ID),
-      eq(accessNamedGrants.principalId, administrator),
-      eq(accessNamedGrants.scope, "case"),
-      eq(accessNamedGrants.source, "named"),
-    ));
-    assert.deepEqual(
-      adminCaseGrantsAfter.map((grant) => `${grant.caseId}:${grant.resourceKey}`).sort(),
-      adminCaseGrantsBefore.map((grant) => `${grant.caseId}:${grant.resourceKey}`).sort(),
-      "spoofed batch notes cannot create shared Demo Admin case grants",
-    );
+    assert.equal(await snapshot(), before);
   });
-
-  test("uses an explicit country geography for lifecycle jurisdiction", async () => {
-    const body = intake(`Synthetic geography fallback ${suffix}`);
-    body.geography = "USA";
-    delete (body as Partial<typeof body>).workforceContext;
-    const response = await request(ordinaryCreator, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-    const responseBody = await response.text();
-    assert.equal(response.status, 201, responseBody);
-    const created = JSON.parse(responseBody) as { id: number; offlineSample: boolean };
-    createdCaseIds.push(created.id);
-    assert.equal(created.offlineSample, false);
-    const [caseRow] = await db.select({ workforceContext: onbCases.workforceContext })
-      .from(onbCases)
-      .where(eq(onbCases.id, created.id));
-    assert.equal(caseRow?.workforceContext?.workCountry, "US");
+  test("anonymous and foreign-tenant requests cannot obtain history or retirement details", async () => {
+    assert.equal((await request(null, DEMO_ORGANIZATION_ID, "/onboarding/synthetic-reset")).status, 401);
+    assert.equal((await request(admin, foreign, "/onboarding/cases")).status, 403);
+    const response = await request(ordinary, foreign, `/onboarding/cases/${caseId}`, "GET");
+    assert.equal(response.status, 404);
+    assert.equal((await request(ordinary, foreign, "/ordinary-control")).status, 200);
   });
-
-  test("returns a useful validation error when no country can be resolved", async () => {
-    const body = intake(`Synthetic missing jurisdiction ${suffix}`);
-    body.geography = "South region";
-    delete (body as Partial<typeof body>).workforceContext;
-    const response = await request(ordinaryCreator, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-    assert.equal(response.status, 400);
-    const responseBody = await response.json() as { message: string };
-    assert.match(responseBody.message, /Work Country is required/);
+  test("authorized historical reads remain scoped and read-only; dispatch and orchestration cannot manufacture outcomes", async () => {
+    const before = await snapshot();
+    const response = await request(admin, DEMO_ORGANIZATION_ID, `/onboarding/cases/${caseId}`, "GET");
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal((await response.json() as { controllerRetired: boolean }).controllerRetired, true);
+    assert.equal((await request(reviewer, DEMO_ORGANIZATION_ID, `/onboarding/cases/${caseId}`, "GET")).status, 403);
+    let calls = 0;
+    await withCaseDispatchGuard(caseId, async () => { calls++; }, { onOffline: async () => { calls++; } });
+    await startOrchestration(caseId);
+    assert.equal(calls, 0);
+    assert.equal(await snapshot(), before);
   });
-
-  test("keeps the Demo Reviewer denied with no case or authority side effect", async () => {
-    const response = await request(reviewer, DEMO_ORGANIZATION_ID, "/onboarding/cases", {
-      method: "POST",
-      body: JSON.stringify(intake(`Reviewer denied ${suffix}`)),
+  test("ordinary scoped intake still creates a real case without inheriting test provenance or demo authority", async () => {
+    const response = await request(ordinary, foreign, "/onboarding/cases", "POST", {
+      workerName: "Ordinary intake fixture", workerEmail: `${suffix}-real@example.invalid`,
+      channelPreference: "both", hireType: "external-fte", workerCategory: "employee",
+      role: "Engineer", department: "Testing", geography: "US", legalEntity: "Fixture",
+      managerName: "Manager", recruiterName: "Recruiter", joiningDate: "2035-01-01",
+      urgency: "normal", offerAcceptanceComplete: false,
+      workforceContext: { workCountry: "US", workEnvironment: "office", siteExposure: false, safetyCritical: false },
     });
-    assert.equal(response.status, 403);
-    const [cases, grants] = await Promise.all([
-      db.select().from(onbCases).where(and(
-        eq(onbCases.organizationId, DEMO_ORGANIZATION_ID),
-        eq(onbCases.workerName, `Reviewer denied ${suffix}`),
-      )),
-      db.select().from(onbAuthorityAssignments).where(and(
-        eq(onbAuthorityAssignments.organizationId, DEMO_ORGANIZATION_ID),
-        eq(onbAuthorityAssignments.personUserId, reviewer),
-      )),
-    ]);
-    assert.equal(cases.length, 0);
-    assert.equal(grants.length, 0);
-  });
-
-  test("denies a registered Demo Administrator's foreign-tenant request before route effects", async () => {
-    const response = await request(administrator, foreignOrganizationId, "/onboarding/cases", {
-      method: "POST",
-      body: JSON.stringify(intake(`Foreign denied ${suffix}`)),
-    });
-    assert.equal(response.status, 403);
-    const rows = await db.select().from(onbCases).where(and(
-      eq(onbCases.organizationId, foreignOrganizationId),
-      eq(onbCases.workerName, `Foreign denied ${suffix}`),
-    ));
-    assert.equal(rows.length, 0);
+    assert.equal(response.status, 201, await response.clone().text());
+    const result = await response.json() as { id: number; controllerRetired: boolean };
+    const [row] = await db.select().from(onbCases).where(eq(onbCases.id, result.id));
+    assert.equal(row.syntheticProvenance, null);
+    assert.equal(row.scenarioKey, null);
+    assert.equal(result.controllerRetired, false);
+    // No provider dispatch is permitted by the fixture's collection-only policies
+    // and unaccepted offer. Let its immediate gate settlement finish before cleanup.
+    await new Promise(resolve => setTimeout(resolve, 100));
   });
 });

@@ -385,7 +385,7 @@ function AuditPageContent({
       <PageHeader 
         title={demoMode ? "Demo Audit Trail" : "Audit Review & Integrity"}
         subtitle={demoMode
-          ? "Read-only activity for your authorized synthetic demo cases."
+          ? "Read-only history for your authorized non-operational test records."
           : "Accountable, restricted review of system activity."}
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -439,7 +439,7 @@ function AuditPageContent({
 
       {demoMode && (
         <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
-          This view includes case-linked events for synthetic cases assigned to your Demo Administrator profile, plus your own unscoped demo actions.
+          This view includes restricted historical events for test records assigned to your Demo Administrator profile, plus your own unscoped demo actions. These records are non-operational.
           Organization-wide integrity, export, retention, legal-hold, approval-history, and correction controls remain restricted.
         </div>
       )}

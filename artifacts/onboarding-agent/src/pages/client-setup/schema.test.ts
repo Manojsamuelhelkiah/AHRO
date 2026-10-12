@@ -73,7 +73,7 @@ test("the demo organization opens with a complete synthetic profile that remains
   const freshDemo = resolveInitialDraft(null, true);
   assert.equal(clientSetupSchema.safeParse(freshDemo).success, true);
   assert.deepEqual(freshDemo, demoDraft);
-  assert.match(freshDemo.clientName, /Synthetic Demo/);
+  assert.match(freshDemo.clientName, /Sample Workspace/);
   assert.ok(freshDemo.personas.every(({ name, email }) => name && email.endsWith("@example.com")));
   assert.ok(freshDemo.systems.every(({ name, vendor, ownerEmail }) => name && vendor && ownerEmail.endsWith("@example.com")));
 

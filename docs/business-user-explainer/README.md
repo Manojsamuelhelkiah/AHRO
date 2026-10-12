@@ -5,11 +5,10 @@ two-page security-leadership brief and the detailed control/evidence register.
 Source pointers identify implementation boundaries. Test pointers identify nearby
 tests; they do not assert that a suite was run or passed.
 
-`control_use_cases.py` supplies one short fictional business use case for each of
-the 50 controls. Examples appear in the register PDF, browser reader and structured
-inventory; they do not change control status or constitute operational evidence.
-Validation requires exact control coverage, distinct examples and matching content
-across those three formats.
+Illustrative fictional stories and case-execution tools have been retired.
+The 50 controls, safe behavior, source pointers, evidence requirements and
+limitations remain. Validation reconciles these across PDF, HTML and JSON copies.
+Historical records remain restricted, read-only and non-operational; no data is purged.
 
 Build and check:
 

@@ -216,6 +216,7 @@ function intakeClassification(context: { workEnvironment?: string; siteExposure?
 }
 
 export function CasesPage() {
+  const organization = useGetCurrentOrganization();
   const search = useSearch();
   const checklistProfileId = new URLSearchParams(search).get('checklistProfileId');
   const organizationId = getPinnedOrganizationIdForPage();
@@ -231,7 +232,7 @@ export function CasesPage() {
   });
   // Never show cached metadata after a denied or failed refresh.
   const programs = transferQuery.isError ? undefined : transferQuery.data;
-  const { data: cases, isLoading, isError, refetch } = useListOnboardingCases({
+  const { data: caseRows, isLoading, isError, refetch } = useListOnboardingCases({
     request: { headers: organizationId ? { 'x-organization-id': organizationId } : {} },
     query: {
       queryKey: [...getListOnboardingCasesQueryKey(), organizationId],
@@ -241,6 +242,8 @@ export function CasesPage() {
       }
     }
   });
+  const [showHistory, setShowHistory] = useState(false);
+  const cases = caseRows?.filter(row => showHistory ? row.controllerRetired : !row.controllerRetired);
   const [showNew, setShowNew] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
   const [showStandardIntake, setShowStandardIntake] = useState(false);
@@ -381,21 +384,8 @@ export function CasesPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader title={context.title} subtitle={context.subtitle}>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={seedSyntheticCoverage}
-            disabled={!isDevelopmentDemo || isLoading || isSeeding || missingSyntheticKeys.length === 0}
-            className="gap-2"
-            title={!isDevelopmentDemo
-              ? 'Sample coverage is restricted to the Development Demo organization; this workspace will not be seeded.'
-              : missingSyntheticKeys.length === 0
-                ? 'Offline demo coverage is already present'
-                : `Create ${missingSyntheticKeys.length} missing offline Demo cases`}
-          >
-            <FlaskConical className="h-4 w-4" />
-            {isSeeding ? 'Adding Demo samples…' : !isDevelopmentDemo ? 'Demo samples only' : missingSyntheticKeys.length === 0 ? 'Demo set ready' : `Add Demo set (${missingSyntheticKeys.length})`}
-          </Button>
           <Link href="/cases/separations"><Button variant="outline" className="gap-2" data-testid="link-separations">Separations</Button></Link>
+          {!organization.data?.demoProfile && <>
           <Button onClick={() => setShowNew(!showNew)} className="gap-2">
             <Plus className="h-4 w-4" /> New Case
           </Button>
@@ -405,8 +395,16 @@ export function CasesPage() {
            <Button variant="outline" onClick={() => setShowStandardIntake(!showStandardIntake)} className="gap-2">
              <ShieldCheck className="h-4 w-4" /> Trusted Intake
            </Button>
+          </>}
         </div>
       </PageHeader>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={showHistory} onChange={event => setShowHistory(event.target.checked)} />
+        Show historical test records instead of operational cases
+      </label>
+      {showHistory && <p role="status" className="rounded border p-3 text-sm">
+        Historical test records are read-only and non-operational. Stored status and evidence describe history, not current business activity or readiness.
+      </p>}
 
       {seedError && (
         <div role="alert" className="rounded-[var(--radius-md)] border px-4 py-3 text-sm" style={{ borderColor: 'var(--status-red)', backgroundColor: 'var(--status-red-bg)', color: 'var(--status-red-fg)' }}>
@@ -631,8 +629,8 @@ export function CasesPage() {
                         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>No individual HR operations cases yet</div>
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>
                           {isDevelopmentDemo
-                            ? 'Add the offline Demo set to view one safe sample for every employee-lifecycle family.'
-                            : 'Cases created in this organization will appear here. Demo samples are never added to customer workspaces.'}
+                            ? 'No operational cases are available. Authorized historical records can be viewed separately.'
+                            : 'Cases created in this organization will appear here.'}
                         </div>
                       </>
                     ) : (
@@ -883,7 +881,7 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
         </p>
         {currentOrganization.data?.demoProfile === 'administrator' && (
           <p className="rounded border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950" role="status">
-            Your server-authorized Demo Administrator profile will create an offline synthetic case in Demo Organization. For privacy, the server replaces every entered person and case detail with an application-generated fictional profile. No emails, messages, provider actions, portal links, SLA enrollment, or orchestration will run.
+            Shared demo accounts have read-only access to authorized historical records. Case creation is unavailable.
           </p>
         )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
@@ -1020,7 +1018,7 @@ export function NewCaseForm({ onClose }: { onClose: () => void }) {
             </p>
           )}
           <Button type="submit" disabled={createCase.isPending}>
-            {createCase.isPending ? 'Creating...' : currentOrganization.data?.demoProfile === 'administrator' ? 'Create Offline Synthetic Case' : 'Create Case'}
+            {createCase.isPending ? 'Creating...' : 'Create Case'}
           </Button>
         </div>
       </form>

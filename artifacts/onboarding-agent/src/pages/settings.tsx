@@ -21,7 +21,6 @@ import { formatDistanceToNowStrict } from 'date-fns';
 
 import { TargetedChecklistProfiles } from './settings-checklist-profiles';
 import { ReadinessSlaSettingsCard } from './settings-readiness-sla';
-import { SyntheticResetCard } from './settings-synthetic-reset';
 import { ActionCenterIdentitiesSettings } from './action-center-settings';
 import { JobProfilesAndAuthorities } from './settings-job-profiles';
 import { OrganizationMembersSettings } from './settings-organization-members';
@@ -340,7 +339,7 @@ const LOGISTICS_FIELDS: {
   { key: 'googleMapsUrl', label: 'Google Maps URL', placeholder: 'https://maps.google.com/…', type: 'url' },
   { key: 'meetingUrl', label: 'Meeting URL', placeholder: 'https://meet.example.com/…', type: 'url' },
   { key: 'reportingContact', label: 'Reporting contact', placeholder: 'Alex Example — Demo People Team' },
-  { key: 'arrivalInstructions', label: 'Arrival instructions', placeholder: 'Synthetic demo arrival instructions' },
+  { key: 'arrivalInstructions', label: 'Arrival instructions', placeholder: 'Arrival instructions approved by HR' },
 ];
 
 function Day1LogisticsSettingsCard() {
@@ -391,7 +390,7 @@ function Day1LogisticsSettingsCard() {
         {isLoading || !draft ? <LoadingBlock>Loading Day-1 logistics...</LoadingBlock> : (
           <>
             <div className="mb-4 p-3 rounded-[var(--radius-md)] border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] text-[var(--text-xs)] text-[var(--status-amber-fg)]">
-              Fresh tenants start with clearly synthetic example values (Example HQ, Demo People Team, and an example meeting URL).
+              Fresh tenants start with unapproved placeholder values. Replace them with approved workplace details before use.
               Replace them before real use. Leave the orientation date blank to use each hire’s joining date.
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -584,7 +583,6 @@ function SettingsContent() {
       </div>
 
       <RemoteApproverSettings />
-      <SyntheticResetCard />
       <ReadinessSlaSettingsCard />
       <EarlyTenureSettingsCard />
       <AuthorityGovernanceCard />
@@ -867,7 +865,6 @@ function SettingsContent() {
 
       <RemoteApproverSettings />
 
-      <ScenarioTestingCard />
     </div>
   );
 }

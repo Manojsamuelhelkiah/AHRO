@@ -48,7 +48,8 @@ await build({
   },
 });
 
-const result = spawnSync(
+const requestedBgvOnly = requestedTestFile?.endsWith("bgv-notifications.test.ts");
+const result = requestedBgvOnly ? { status: 0 } : spawnSync(
   process.execPath,
   [
     "--test",
@@ -66,9 +67,10 @@ const result = spawnSync(
 );
 // This provider-stubbed suite explicitly requires development semantics.
 // Keep all other suites on their established production-mode harness.
-const bgvResult = requestedTestFile
-  ? { status: 0 }
-  : spawnSync(process.execPath, [
-    "--test", path.join(dir, "dist-test/lib/onboarding/bgv-notifications.test.mjs"),
-  ], { stdio: "inherit", env: { ...process.env, NODE_ENV: "development", ONBOARDING_AUTOMATED_TEST: "true" } });
+const bgvFile = globSync("dist-test/**/bgv-notifications.test.mjs", { cwd: dir })[0];
+const bgvResult = !requestedTestFile || requestedBgvOnly
+  ? spawnSync(process.execPath, ["--test", path.join(dir, bgvFile)], {
+    stdio: "inherit", env: { ...process.env, NODE_ENV: "development", ONBOARDING_AUTOMATED_TEST: "true" },
+  })
+  : { status: 0 };
 process.exit((result.status ?? 1) || (bgvResult.status ?? 1));

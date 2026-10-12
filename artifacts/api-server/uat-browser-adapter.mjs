@@ -22,6 +22,7 @@ export async function installUatBrowserAdapter(app, { dbPackage, sessions, userI
   };
   const { requireTenantContext } = await import("./src/middlewares/tenant-context.ts");
   const { createUatAdmissionGuard } = await import("./src/middlewares/uat-admission.ts");
+  const { caseRetirementFence } = await import("./src/middlewares/case-retirement.ts");
   const { default: runs } = await import("./src/routes/onboarding-uat-test-center.ts");
   const { default: fairness } = await import("./src/routes/onboarding-fairness.ts");
   const { default: policies } = await import("./src/routes/hr-policies.ts");
@@ -79,6 +80,7 @@ export async function installUatBrowserAdapter(app, { dbPackage, sessions, userI
   const protectedRouter = express.Router();
   protectedRouter.use((req, _res, next) => admission.isUatProtectedPath(req.path) ? next() : next("router"));
   protectedRouter.use(requireAuth, requireTenantContext, createUatAdmissionGuard(live));
+  protectedRouter.use(caseRetirementFence);
   protectedRouter.use(runs, fairness, policies);
   app.use("/api", protectedRouter);
 }

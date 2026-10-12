@@ -175,7 +175,7 @@ export function CaseDetailPage() {
     }
   });
 
-  const offlineSample = c ? !c.controllerRetired && isOfflineDemoSample(c) : false;
+  const offlineSample = c ? c.controllerRetired || isOfflineDemoSample(c) : false;
   const { error: privacyError } = useListLifecycleHolds({
     enabled: Boolean(c) && !offlineSample && permissions?.access.flowRead === true,
   });
@@ -286,31 +286,10 @@ export function CaseDetailPage() {
 
       {c.batchIntake && <HroIntakeRequestPanel request={c.batchIntake} />}
       {offlineSample ? (
-        <>
-          <div className="mb-6 rounded-lg border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-4 shadow-sm">
-            <h2 className="text-sm font-bold text-[var(--status-amber-fg)]">Service-case synopsis</h2>
-            <p className="mt-1 text-sm leading-relaxed text-[var(--status-amber-fg)]">
-              {c.planSummary || 'This offline Demo sample has no live service execution.'}
-            </p>
-            <p className="mt-2 text-xs font-medium text-[var(--status-amber-fg)]">
-              Simulated/manual sample only. No onboarding gateway is completed, and no HRIS, payroll, benefits, IAM, LMS, mobility, document, or other provider connection is active.
-            </p>
-          </div>
-          {uatCoverageSample ? (
-            <div className="mb-6 rounded-lg border border-[var(--primary)] border-opacity-30 bg-[var(--primary-light)] p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-[var(--primary-dark)]">UAT coverage sample</h2>
-              <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
-                This sample is evaluated through the UAT Test Center. Per-case response simulation is intentionally unavailable for UAT-isolated cases.
-              </p>
-            </div>
-          ) : (
-            permissions.access.flowRead
-              ? <SimulationPanel
-                  caseId={caseId}
-                />
-              : <RestrictedActionNotice>Simulation is restricted by your current case permissions.</RestrictedActionNotice>
-          )}
-        </>
+        <div role="status" className="mb-6 rounded-lg border p-4 text-sm">
+          Historical test record — read-only and permanently non-operational.
+          Retained events and private evidence are not business activity, approval authority, or proof of readiness.
+        </div>
       ) : (
         <>
           <GatewaysStrip

@@ -1,3 +1,5 @@
+import { isHistoricalTestRecord } from "./historical-test-record";
+
 /**
  * Calculation rules for the onboarding outcome KPI contract.
  *
@@ -40,6 +42,8 @@ export type OutcomeCase = {
   geography?: string | null;
   hireType?: string | null;
   scenarioKey?: string | null;
+  syntheticProvenance?: string | null;
+  controllerRetired?: boolean;
   lifecycleStage?: string | null;
   gateCApprovalStatus?: string | null;
   offerAcceptanceComplete?: boolean;
@@ -332,7 +336,7 @@ function minimumSampleMetric(
 }
 
 function caseIsEligible(c: OutcomeCase): boolean {
-  return NEW_HIRE_TYPES.has(c.hireType ?? "");
+  return !isHistoricalTestRecord(c) && NEW_HIRE_TYPES.has(c.hireType ?? "");
 }
 
 function eventTime(event: OutcomeEvent): number | null {
@@ -569,7 +573,7 @@ export function calculateOutcomeKpis(
             (hireType === undefined || c.hireType === hireType)
           );
         })
-        .filter((c) => c.scenarioKey === null || c.scenarioKey === undefined)
+        .filter((c) => !isHistoricalTestRecord(c))
       : [];
   const eligible = cohort.filter(caseIsEligible);
   const events = input.events ?? [];

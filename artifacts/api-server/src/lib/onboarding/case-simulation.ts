@@ -1,4 +1,5 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
+import { denyRetiredCaseCapability, retiredCaseCapabilitiesEnabled } from "../retired-case-capabilities";
 import { and, eq, isNull, like, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -674,6 +675,7 @@ export async function simulateNextCaseExchange(input: {
   expectedGenerationId: string;
   requestId: string;
 }): Promise<CaseSimulationState> {
+  denyRetiredCaseCapability();
   if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
     throw new CaseSimulationConflictError("expectedVersion must be a non-negative integer.");
   }
@@ -849,6 +851,7 @@ export type SimulationEmailRoute = SimulationEmailDispatch & {
 
 /** Poller-only view of server-owned simulation email correlation data. */
 export async function listSimulationEmailRoutes(): Promise<SimulationEmailRoute[]> {
+  if (!retiredCaseCapabilitiesEnabled()) return [];
   const rows = await db.select({ organizationId: onbSettings.organizationId, value: onbSettings.value })
     .from(onbSettings)
     .where(like(onbSettings.key, `${CASE_SIMULATION_SETTING_PREFIX}%`));
@@ -898,6 +901,7 @@ export async function recordSimulationEmailReply(input: {
   token: string;
   threadMarker: string;
 }): Promise<"recorded" | "duplicate" | "stale" | "ignored"> {
+  if (!retiredCaseCapabilitiesEnabled()) return "ignored";
   const sanitized = sanitizeSimulationReply(input.body);
   if (!sanitized) return "ignored";
   return withSensitiveLifecycleFence(input.organizationId, async () => {
@@ -973,6 +977,7 @@ export async function restartCaseSimulation(input: {
   expectedGenerationId: string;
   requestId: string;
 }): Promise<CaseSimulationState> {
+  denyRetiredCaseCapability();
   if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) {
     throw new CaseSimulationConflictError("expectedVersion must be a non-negative integer.");
   }

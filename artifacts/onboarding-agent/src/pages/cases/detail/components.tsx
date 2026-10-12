@@ -8,8 +8,8 @@ import { ContactDialog } from './ContactDialog';
 import { casePresentationOf, isDemoCoverageCase } from '../case-presentation';
 import { useCaseAccess } from './case-access';
 
-export function isOfflineDemoSample(c: { scenarioKey?: string | null; offlineSample?: boolean }) {
-  return c.offlineSample === true || isDemoCoverageCase(c);
+export function isOfflineDemoSample(c: { scenarioKey?: string | null; offlineSample?: boolean; controllerRetired?: boolean }) {
+  return c.controllerRetired === true || c.offlineSample === true || c.scenarioKey != null || isDemoCoverageCase(c);
 }
 
 function casePresentation(c: any) {
@@ -96,7 +96,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
              <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{offlineSample && canViewIdentity ? `For ${c.workerName} • ` : ''}{access?.access.profileRead ? `${c.role} • ${c.geography}` : 'Profile details restricted'}{canViewIdentity ? ` • Effective ${format(new Date(c.joiningDate), 'MMM d, yyyy')}` : ''}</p>
             {offlineSample && (
               <p className="mt-2 text-[var(--text-xs)] font-semibold text-[var(--status-amber-fg)]">
-                Demo-only offline synthetic sample — no provider is connected, authorized, or contacted.
+                Historical test record — read-only; no provider work or business completion is authorized.
               </p>
             )}
            

@@ -113,7 +113,7 @@ export function Slide06() {
       <Card title="Configure">Client Setup, checklists, job profiles, SLA/readiness, early tenure, privacy and membership settings.</Card>
       <Card title="Govern">Policy Assistant, policy library, policy review, guardrails, specialist authority and audit.</Card>
       <Card title="Observe">Analytics, bottleneck simulation, outcome KPIs, systems health, alerts and recommendations.</Card>
-      <Card title="Assure">Learning Guide, UAT Test Center, Demo Center, evidence export and scoped synthetic cleanup.</Card>
+      <Card title="Assure">Learning Guide, restricted acceptance history, governance review and evidence export.</Card>
       <Card title="All-HR case coverage">Twelve service categories and demo-safe scenario definitions support a common portfolio view; samples illustrate scope, not external completion.</Card>
     </div>
     <Footer value="Product surface reflects routes and views in the current application, reviewed 14 September 2026." />
@@ -283,7 +283,7 @@ export function Slide18() {
     <Header section="Assurance" title="Test Center distinguishes mapped coverage from verified evidence" />
     <div className="my-[4vh] grid flex-1 grid-cols-3 gap-[1.6vw]">
       <Card title="Mapped">The Learning Guide and catalog link features, roles, routes, scenarios and expected evidence. Mapping is not an execution result.</Card>
-      <Card title="Observed">A tenant-scoped synthetic run records steps, outcomes, provenance, export and run-owned cleanup. Only this supports an execution assertion.</Card>
+      <Card title="Observed">Dated tenant-scoped source evidence and independently verified provider receipts support only the claims they actually establish. Historical test evidence remains read-only.</Card>
       <Card title="Blocked or manual" tone="amber">Provider sandbox, specialist review, real workflow and policy-dependent checks remain Manual or Blocked until independently authorized.</Card>
     </div>
     <div className="border-t border-[#24406b] pt-[2.5vh] font-body text-[2vw] leading-snug text-accent">No all-end-to-end certification is claimed. Test Center cannot promote users, authorize recipients, dispatch providers, certify vendors or establish live readiness.</div>
@@ -339,7 +339,7 @@ export function Slide21() {
       <Card title="Measure">Analytics · outcome KPIs · bottleneck simulation · alerts · audit export</Card>
       <Card title="Trust">Privacy settings · retention/deletion jobs · recovery/version controls · specialist governance</Card>
       <Card title="Set up">Client Setup · job profiles · checklist and SLA settings · organization membership</Card>
-      <Card title="Assure">Learning Guide · UAT Test Center · Demo Center · synthetic fixtures and scoped cleanup</Card>
+      <Card title="Assure">Learning Guide · restricted acceptance history · approved policy governance · current control evidence</Card>
     </div>
     <Footer value="Coverage state as of 14 September 2026 · Mapped views require run evidence for verified execution status." />
   </div>;

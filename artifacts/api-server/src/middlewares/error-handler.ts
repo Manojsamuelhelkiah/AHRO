@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { RetiredCaseCapabilityError } from "../lib/retired-case-capabilities";
 import { InputValidationError } from "../lib/validate-inputs";
 import { logger } from "../lib/logger";
 
@@ -34,6 +35,10 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
+  if (err instanceof RetiredCaseCapabilityError) {
+    res.status(410).json({ code: err.code, message: err.message });
+    return;
+  }
   if (err instanceof CustomIntentStorageUnavailableError) {
     logger.warn({ err }, "Custom-intent storage unavailable for dependent request");
     res.status(503).json({ error: err.message, code: err.code });

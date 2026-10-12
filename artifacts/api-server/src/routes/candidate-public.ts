@@ -35,6 +35,7 @@ import {
   saveReservedCandidateUpload,
 } from "../lib/onboarding/candidate-upload-reservations";
 import { isUatRunIsolatedCase } from "../lib/onboarding/synthetic-offline";
+import { isHistoricalTestRecord } from "../lib/onboarding/historical-test-record";
 import { isAuthoritativelyUatRunOwnedCase } from "../lib/onboarding/uat-isolation";
 
 const router: IRouter = Router();
@@ -160,6 +161,10 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
       eq(onbCases.id, ctx.caseId),
     ));
     if (!policyCase) return invalid(res);
+    if (isHistoricalTestRecord(policyCase) || await isAuthoritativelyUatRunOwnedCase(policyCase)) {
+      res.status(410).json({ code: "CASE_TEST_CAPABILITY_RETIRED", message: "This historical test record is read-only and non-operational." });
+      return;
+    }
     if (isUatRunIsolatedCase(policyCase) &&
       !await isAuthoritativelyUatRunOwnedCase(policyCase)) {
       return res.status(409).json({

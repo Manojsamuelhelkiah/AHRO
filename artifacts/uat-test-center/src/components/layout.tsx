@@ -6,9 +6,8 @@ import { cn } from '@/components/ui-shared';
 import { DriftNotificationBanner } from './drift-notifications';
 
 const NAV = [
-  { path: '/', label: 'Scenario catalog', icon: FlaskConical },
-  { path: '/policy-quality', label: 'Policy quality', icon: ShieldCheck },
-  { path: '/fairness', label: 'Fairness', icon: Scale },
+  { path: '/', label: 'Acceptance history', icon: ClipboardCheck },
+  { path: '/policy-quality', label: 'Policy governance', icon: ShieldCheck },
 ];
 
 function useMinutesLeft(expiresAt: string) {
@@ -100,7 +99,7 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <main className="flex-1 p-4 sm:p-6"><DriftNotificationBanner />{children}</main>
+        <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );

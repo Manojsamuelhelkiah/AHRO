@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { denyRetiredCaseCapability, retiredCaseCapabilitiesEnabled } from "./retired-case-capabilities";
 import { and, desc, eq, like, sql } from "drizzle-orm";
 import { db, onbSettings } from "@workspace/db";
 import { HrPolicyError, policyCapabilities, verifiedAuthority } from "./hr-policy-library";
@@ -55,19 +56,18 @@ export async function policyEvaluationCatalog(org: string, actor: string) {
     .filter(r => eligibleDriftBaseline(r, review.reviewId)).map(r => r.runId) as string[] : [];
   await policyCapabilities(org, actor);
   return {
-    ...provenance, cases: POLICY_BENCHMARK, canReview, review,
-    approved: review?.decision === "approved" && review.benchmarkHash === benchmarkHash(),
-    reviewConfirmation: REVIEW_CONFIRMATION, liveConfirmation: LIVE_CONFIRMATION,
+    ...provenance, cases: [], canReview: false, review,
+    approved: false,
+    reviewConfirmation: "", liveConfirmation: "",
     limits: { ...LIVE_LIMITS, liveRunsPerTenantPerDay: 3 }, runs,
-    drift: { programme, confirmation: DRIFT_CONFIRMATION, eligibleBaselineIds,
+    drift: { programme, confirmation: "", eligibleBaselineIds: [],
       maxChecks: DRIFT_MAX_CHECKS, durationDays: 7, intervalHours: 24 },
-    currentLiveEvidence: !programme?.warning && runs.some(r => r.mode === "live" && r.status === "passed" && !r.providerIsolated && r.authorizationCurrent &&
-      r.benchmarkHash === provenance.benchmarkHash && r.requestHash === provenance.requestHash && r.contractHash === provenance.contractHash &&
-      r.review?.reviewId === review?.reviewId && review?.decision === "approved"),
-    limitation: BENCHMARK_LIMITATION,
+    currentLiveEvidence: false,
+    limitation: "Historical evaluation evidence only. Execution has been retired; retained results do not establish current accuracy or readiness.",
   };
 }
 export async function reviewPolicyBenchmark(org: string, actor: string, input: unknown) {
+  denyRetiredCaseCapability();
   const body = bodyRecord(input, ["benchmarkHash", "decision", "reference", "confirmation", "expectedReviewId"]);
   if (body.benchmarkHash !== benchmarkHash()) throw new HrPolicyError("The benchmark changed; refresh and review every case again.", 409);
   if (!["approved", "rejected"].includes(String(body.decision)) || typeof body.reference !== "string" || !body.reference.trim() || body.reference.length > 500 ||
@@ -88,6 +88,7 @@ export async function reviewPolicyBenchmark(org: string, actor: string, input: u
   });
 }
 export async function runPolicyBenchmark(org: string, actor: string, input: unknown, testSelector?: BenchmarkSelector, programmeId?: string, testCheckpoint?: DriftTestCheckpoint) {
+  denyRetiredCaseCapability();
   if (testCheckpoint && (!testSelector || !programmeId)) throw new Error("Drift fault injection requires an isolated programme and fake transport.");
   const body = bodyRecord(input, ["benchmarkHash", "mode", "confirmation", "requestId"]);
   if (body.benchmarkHash !== benchmarkHash()) throw new HrPolicyError("The benchmark changed; refresh before running.", 409);
@@ -196,6 +197,7 @@ async function assertDriftAuthority(tx: any, org: string, actor: string, id: str
 }
 
 export async function configurePolicyDrift(org: string, actor: string, input: unknown, providerIsolated = false) {
+  denyRetiredCaseCapability();
   const body = bodyRecord(input, ["action", "baselineRunId", "expectedProgrammeId", "confirmation"]);
   if (!["approve", "stop"].includes(String(body.action))) throw new HrPolicyError("Invalid drift programme action.");
   return db.transaction(async tx => {
@@ -237,6 +239,7 @@ export async function configurePolicyDrift(org: string, actor: string, input: un
 
 /** Only the runtime heartbeat calls this; builds, catalog reads and publication never dispatch. */
 export async function runPolicyDriftTick(testSelector?: BenchmarkSelector, isolatedOrg?: string, testCheckpoint?: DriftTestCheckpoint) {
+  if (!retiredCaseCapabilitiesEnabled()) return; // Preserve pending receipts, never manufacture results.
   if (testSelector && !isolatedOrg) throw new Error("Isolated drift workers require their fixture tenant.");
   if (testCheckpoint && !testSelector) throw new Error("Drift fault injection requires fake transport.");
   const rows = await db.select().from(onbSettings).where(and(eq(onbSettings.key, DRIFT_KEY),

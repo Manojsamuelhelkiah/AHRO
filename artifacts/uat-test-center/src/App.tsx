@@ -12,8 +12,8 @@ import { Layout } from '@/components/layout';
 import { AdmissionHost, AdmittedBoundary, useAdmissionHost } from '@/lib/admission';
 import NotFound from '@/pages/not-found';
 import PolicyQualityPage from '@/pages/policy-quality';
-import { UatTestCenterPage } from '@/pages/uat-test-center';
-import { FairnessProgrammePage } from '@/pages/fairness-programme';
+import UatTestCenterPage from '@/pages/uat-test-center';
+import FairnessProgrammePage from '@/pages/fairness-programme';
 import { LoginPage } from '@/pages/login';
 import { SignInPage, VerifyPage } from '@/pages/auth-flow';
 

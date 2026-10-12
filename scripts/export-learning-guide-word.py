@@ -1,5 +1,6 @@
 """Convert the current portable learning guide to an editable Word document."""
 from pathlib import Path
+import sys
 import re
 from lxml import html
 from docx import Document
@@ -8,8 +9,8 @@ from docx.enum.section import WD_SECTION, WD_ORIENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-SOURCE = Path("deliverables/onboarding-control-tower-learning-guide.html")
-OUTPUT = Path("deliverables/onboarding-control-tower-learning-guide.docx")
+SOURCE = Path(sys.argv[1] if len(sys.argv) > 1 else "deliverables/onboarding-control-tower-learning-guide.html")
+OUTPUT = Path(sys.argv[2] if len(sys.argv) > 2 else "deliverables/onboarding-control-tower-learning-guide.docx")
 root = html.parse(str(SOURCE))
 doc = Document()
 doc.core_properties.title = "Onboarding Control Tower — Product Learning Guide"

@@ -232,10 +232,9 @@ describe("protected onboarding audit (isolated real database)", { skip: !hasDb }
       id: 987_654_321,
       expected: { workerName: "No-op protected fixture", scenarioKey: null },
     }];
-    const result = await executeSyntheticReset({
+    await assert.rejects(executeSyntheticReset({
       organizationId, actorId: "audit-integration-owner", expectedRevision: "any", manifest,
-    });
-    assert.equal(result.kind, "conflict");
+    }), { name: "RetiredCaseCapabilityError" });
     const [lifecycle] = await db.select().from(onbAuditLifecycles)
       .where(eq(onbAuditLifecycles.organizationId, organizationId));
     assert.equal(lifecycle.legalHoldActive, true);

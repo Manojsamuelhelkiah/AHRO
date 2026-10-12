@@ -14,7 +14,7 @@ router.post("/onboarding/uat/fairness/actions", async (req, res, next) => {
 router.get("/onboarding/uat/fairness/evidence-report", async (req, res, next) => {
   try {
     const { programme } = await getFairnessProgramme(getOrganizationId(req), req.authUserId!);
-    res.set("Content-Disposition", 'attachment; filename="synthetic-fairness-evidence.json"').json(fairnessReport(programme));
+    res.set("Content-Disposition", 'attachment; filename="historical-evaluation-evidence.json"').json(fairnessReport(programme));
   } catch (error) { if (error instanceof FairnessError) res.status(error.status).json({ error: error.message }); else next(error); }
 });
 export default router;

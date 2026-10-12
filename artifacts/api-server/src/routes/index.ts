@@ -54,6 +54,12 @@ import employeeVaultRouter, { employeeVaultSourceRouter } from "./employee-vault
 import employeeVaultEmployerRouter from "./employee-vault-employer";
 import uatAuthRouter from "./uat-auth";
 import { requireUatAdmission } from "../middlewares/uat-admission";
+import { caseRetirementFence } from "../middlewares/case-retirement";
+import { isRetiredCaseCapabilityRequest, retiredCaseCapabilityResponse } from "../lib/retired-case-capabilities";
+import { isSyntheticOfflineCase } from "../lib/onboarding/synthetic-offline";
+import { isRetiredControllerCase } from "../lib/onboarding/controller-retirement";
+import { registeredDemoProfile } from "../lib/demo-principal";
+import { isHistoricalTestRecord } from "../lib/onboarding/historical-test-record";
 
 const router: IRouter = Router();
 // Deleted namespaces must not fall through to organization-id matching.
@@ -91,6 +97,9 @@ router.use((req, res, next) => {
   });
 });
 router.use(hroRequestContext);
+router.use(requireUatAdmission);
+// Retirement precedes lifecycle-specific checks, while admission remains intact.
+router.use(caseRetirementFence);
 // Imported service requests have no onboarding execution adapter. Keep every
 // onboarding mutation fail-closed, including direct calls bypassing the UI.
 // DELETE retains the existing hold-aware deletion path.
@@ -115,7 +124,6 @@ router.use("/onboarding/cases/:caseId", async (req, res, next) => {
   next();
 });
 router.use(hroContextRouter);
-router.use(requireUatAdmission);
 router.use(offboardingRouter);
 router.use(employeeVaultEmployerRouter);
 router.use(corpusRouter);

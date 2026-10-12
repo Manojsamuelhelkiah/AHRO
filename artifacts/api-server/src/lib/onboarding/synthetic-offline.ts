@@ -1,5 +1,6 @@
 import type { OnbSyntheticProvenance } from "@workspace/db/schema";
 import { candidateEmailDeliveryDecision } from "./channel-routing";
+import { isHistoricalTestRecord } from "./historical-test-record";
 
 /**
  * A reserved, server-created marker for demo reset samples.
@@ -44,13 +45,11 @@ export function isUatRunIsolatedCase(row: SyntheticOfflineCase): boolean {
 }
 
 /**
- * This exception only permits candidate email, not activation of the sample.
- * The durable UAT run ledger must also be checked by every dispatch boundary.
+ * Compatibility identifier also used by ordinary email callers. Retired
+ * records never authorize an exception; genuine address eligibility remains.
  */
 export function sampleCandidateEmailEligible(row: SyntheticOfflineCase): boolean {
-  const coverageSample = row.syntheticProvenance === "demo-full-coverage" &&
-    row.scenarioKey?.startsWith("UAT-DEMO-COVERAGE:") === true;
-  return (!isUatRunIsolatedCase(row) || coverageSample) &&
+  return !isHistoricalTestRecord(row) && !isSyntheticOfflineCase(row) &&
     candidateEmailDeliveryDecision({ workerEmail: row.workerEmail ?? "" }).allowed;
 }
 
@@ -65,4 +64,4 @@ export function isSyntheticDemoAuthority(input: {
 }
 
 export const SYNTHETIC_OFFLINE_WARNING =
-  "Synthetic sample workflows remain offline: no non-email provider operation or readiness completion is authorized. Candidate email may be requested for a deliverable address, subject to privacy and governance checks; isolated UAT runs never send email.";
+  "Historical test record — read-only and permanently non-operational. No provider dispatch, outreach, approval authority, or readiness completion is permitted.";

@@ -1,14 +1,7 @@
-import { PageHeader } from '@/components/ui-shared';
-import { PolicyQualityPanel } from '@/components/policy-quality-panel';
-
 export default function PolicyQualityPage() {
-  return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-16">
-      <PageHeader
-        title="Policy quality"
-        subtitle="Synthetic answer-quality benchmarks for the constrained Policy Assistant. Roadmap assurance evidence, not an accuracy guarantee."
-      />
-      <PolicyQualityPanel />
-    </div>
-  );
+  return <section className="mx-auto max-w-5xl space-y-4">
+    <h1 className="text-2xl font-bold">Policy governance</h1>
+    <p>Policies still require approved sources, audience and jurisdiction checks, current specialist authority, and human review. Automated test evaluations are no longer available.</p>
+    <a href="/hr-policy-library" className="underline">Open the policy library</a>
+  </section>;
 }

@@ -1,3 +1,5 @@
+import { isHistoricalTestRecord } from "./historical-test-record";
+
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -8,10 +10,8 @@ import {
 } from "@workspace/db/schema";
 import { sendOutbound } from "./channels";
 import { candidateEmailDeliveryDecision, CandidateEmailUnavailableError } from "./channel-routing";
-import { isSyntheticOfflineCase, isUatRunIsolatedCase, sampleCandidateEmailEligible } from "./synthetic-offline";
+import { isSyntheticOfflineCase, isUatRunIsolatedCase } from "./synthetic-offline";
 import { isAuthoritativelyUatRunOwnedCase, UAT_RUN_SETTING_PREFIX } from "./uat-isolation";
-import { getUatCaseIsolation } from "./uat-isolation";
-import { isRetiredControllerCase } from "./controller-retirement";
 import { initializeCaseLogistics } from "./case-logistics";
 import { hashSecret, newSecret } from "./candidate-portal";
 import { withCaseDispatchGuard } from "./dispatch-guard";
@@ -64,7 +64,7 @@ export async function issueCandidatePortalLink(input: {
     mutate: () => withCaseDispatchGuard(
       input.caseId,
       () => issueCandidatePortalLinkUnsafe(input),
-       { operation: input.sendEmail ? "candidate-email" : undefined, onOffline: () => issueCandidatePortalLinkUnsafe(input) },
+      { onOffline: () => issueCandidatePortalLinkUnsafe(input) },
     ),
   }));
 }
@@ -90,23 +90,19 @@ async function issueCandidatePortalLinkUnsafe(input: {
     eq(onbCases.organizationId, input.organizationId),
   ));
   if (!c) return null;
-  if (isRetiredControllerCase(c)) throw new CandidateEmailUnavailableError("Historical controller delivery is retired; no candidate portal email is permitted.");
-  const isolation = await getUatCaseIsolation(c);
-  const sampleEmail = input.sendEmail && sampleCandidateEmailEligible(c) && !isolation.linkedToRun;
+  // UAT run-owned cases remain completely dispatch-offline, but an explicit
+  // no-email link is allowed so the real candidate upload/quarantine path can
+  // be exercised. Demo/reset cases remain portal-ineligible.
+  if (isHistoricalTestRecord(c)) return null;
   if (input.sendEmail) {
     const email = candidateEmailDeliveryDecision(c);
     if (!email.allowed) throw new CandidateEmailUnavailableError(email.reason!);
   }
-  // UAT run-owned cases remain completely dispatch-offline, but an explicit
-  // no-email link is allowed so the real candidate upload/quarantine path can
-  // be exercised. Demo/reset cases remain portal-ineligible.
-  if (isSyntheticOfflineCase(c) && !isUatRunIsolatedCase(c) && !sampleEmail) return null;
-  if (isolation.linkedToRun && input.sendEmail) throw new Error("UAT-isolated candidate portal links may not be emailed.");
-  if (isUatRunIsolatedCase(c) && !sampleEmail &&
+  if (isUatRunIsolatedCase(c) &&
     !await isAuthoritativelyUatRunOwnedCase(c)) {
     throw new Error("The UAT-isolated case has no durable same-organization run ownership.");
   }
-  if (isUatRunIsolatedCase(c) && input.sendEmail && !sampleEmail) {
+  if (isUatRunIsolatedCase(c) && input.sendEmail) {
     throw new Error("UAT-isolated candidate portal links may not be emailed.");
   }
   if (
@@ -121,8 +117,7 @@ async function issueCandidatePortalLinkUnsafe(input: {
   const governance = await evaluateProviderGovernanceGate(
     c,
     PROVIDER_GOVERNANCE_WORKFLOW.portal,
-     { candidatePortalEmail: sampleEmail,
-       allowIsolatedLocalOperation: isUatRunIsolatedCase(c) && !sampleEmail ? "candidate-portal-credential" : undefined },
+     { allowIsolatedLocalOperation: isUatRunIsolatedCase(c) ? "candidate-portal-credential" : undefined },
   );
   if (!governance.allowed) {
     throw new Error(governance.reason!);
@@ -157,7 +152,7 @@ async function issueCandidatePortalLinkUnsafe(input: {
   // upload/quarantine path. It must not opportunistically create Day-1
   // logistics (a separate case-derived sensitive collection write) just
   // because a bearer credential is issued.
-  const logistics = isSyntheticOfflineCase(c)
+  const logistics = isUatRunIsolatedCase(c) && !input.sendEmail
     ? null
     : await initializeCaseLogistics(input.organizationId, input.caseId);
   const token = newSecret();
@@ -167,8 +162,7 @@ async function issueCandidatePortalLinkUnsafe(input: {
     workflow: PROVIDER_GOVERNANCE_WORKFLOW.portal,
     operation: `candidate-portal-link:${input.caseId}:${input.idempotencyKey ?? "manual"}`,
     providerId: "internal-candidate-portal",
-     allowIsolatedLocalOperation: isUatRunIsolatedCase(c) && !sampleEmail ? "candidate-portal-credential" : undefined,
-     candidatePortalEmail: sampleEmail,
+     allowIsolatedLocalOperation: isUatRunIsolatedCase(c) ? "candidate-portal-credential" : undefined,
     // Re-evaluate under the organization dispatch fence immediately before
     // persisting a new bearer credential. The separate email path is guarded
     // again by channels.ts before Gmail I/O.

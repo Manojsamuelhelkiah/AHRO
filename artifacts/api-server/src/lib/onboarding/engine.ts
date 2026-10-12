@@ -58,6 +58,8 @@ import type {
 } from "@workspace/db/schema";
 import { approvalVersion, reopenApprovalInTransaction } from "./approval-version";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isHistoricalTestRecord } from "./historical-test-record";
+import { getUatCaseIsolation } from "./uat-isolation";
 import { isRetiredControllerCase } from "./controller-retirement";
 import {
   initializeOperationalRequests,
@@ -1525,7 +1527,7 @@ export function startOrchestration(caseId: number) {
         .select()
         .from(onbCases)
         .where(eq(onbCases.id, caseId));
-      if (offlineCase && (isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase))) return;
+      if (offlineCase && (isHistoricalTestRecord(offlineCase) || isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase) || (await getUatCaseIsolation(offlineCase)).isolated)) return;
       const owner = randomUUID();
       const [claimed] = await db.update(onbCases)
         .set({
@@ -1591,7 +1593,7 @@ async function resumeChecklistOrchestrationInContext(caseId: number): Promise<bo
     .select()
     .from(onbCases)
     .where(eq(onbCases.id, caseId));
-  if (offlineCase && (isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase))) return false;
+  if (offlineCase && (isHistoricalTestRecord(offlineCase) || isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase) || (await getUatCaseIsolation(offlineCase)).isolated)) return false;
   const owner = randomUUID();
   const [claimed] = await db.update(onbCases)
     .set({
@@ -1970,7 +1972,7 @@ export function resumeAfterDecision(opts: {
         .select()
         .from(onbCases)
         .where(eq(onbCases.id, opts.caseId));
-      if (offlineCase && (isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase))) return;
+      if (offlineCase && (isHistoricalTestRecord(offlineCase) || isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase) || (await getUatCaseIsolation(offlineCase)).isolated)) return;
       if (opts.ruleRef === MIGRATION_REVIEW_HOLD_RULE) {
         if (!opts.approved) return;
         // This approval is an explicit governance classification of the
@@ -2091,7 +2093,7 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
   void runCaseContextAttempt(caseId, async () => {
     try {
       const c = await getCase(caseId);
-      if (isSyntheticOfflineCase(c) || isRetiredControllerCase(c)) return;
+      if (isHistoricalTestRecord(c) || isSyntheticOfflineCase(c) || isRetiredControllerCase(c) || (await getUatCaseIsolation(c)).isolated) return;
       const sensitive = /salary|pay|compensation|visa|immigration|medical|health|legal|complaint|harass|grievance/i.test(body);
 
       if (sensitive) {

@@ -16,6 +16,7 @@ import {
 import type { OnboardingDbTransaction } from "./settings";
 import { isRetiredControllerCase } from "./controller-retirement";
 import { seedDemoFullCoverage } from "./demo-full-coverage";
+import { denyRetiredCaseCapability } from "../retired-case-capabilities";
 import {
   getSensitiveLifecycleAuthorityContextInTransaction,
 } from "./governance";
@@ -95,6 +96,7 @@ export async function grantSyntheticDemoAuthorityForCase(
   userId: string,
   caseRow: DemoAdminCase & { organizationId: string },
 ): Promise<void> {
+  denyRetiredCaseCapability();
   if (
     caseRow.organizationId !== DEMO_ORGANIZATION_ID ||
     isUatRunIsolatedCase(caseRow) ||
@@ -219,7 +221,7 @@ export async function ensureSyntheticDemoAdminAccess(userId: string): Promise<vo
       ],
     });
 
-  await seedDemoFullCoverage(DEMO_ORGANIZATION_ID, userId);
+  // Retired: login must never seed or refresh cases. Existing read grants remain scoped.
 
   const cases = await db
     .select({

@@ -37,6 +37,18 @@ function baseCase(
 }
 
 describe("onboarding outcome KPI calculations", () => {
+  test("minimized historical provenance and retired controller records never enter live outcomes", () => {
+    const response = calculateOutcomeKpis({
+      asOf, period: "All",
+      cases: [
+        baseCase(1, "2025-01-01"),
+        baseCase(2, "2025-01-01", { scenarioKey: null, syntheticProvenance: "onboarding-demo-fictional" }),
+        baseCase(3, "2025-01-01", { scenarioKey: "standard-fte" }),
+        baseCase(4, "2025-01-01", { controllerRetired: true }),
+      ],
+    });
+    assert.equal(response.caseCount, 1);
+  });
   test("uses inclusive case-created boundaries, filters region and hire type, and excludes future cases", () => {
     const response = calculateOutcomeKpis({
       asOf,

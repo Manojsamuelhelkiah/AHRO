@@ -172,6 +172,7 @@ const {
   db,
   onbAuthorityAssignments,
   onbCases,
+  accessNamedGrants,
   onbCommunications,
   onbEffectJournal,
   onbEvents,
@@ -450,6 +451,39 @@ app.use((req, _res, next) => {
 // The browser regression is allowed to inspect owned fixture state, but only
 // through this process-local route and never by replacing production API
 // responses. This also gives the test a durable provider-effect assertion.
+app.post("/api/test/historical-case", async (req, res, next) => {
+  try {
+    const userId = sessions.get(cookieValue(req, "browser_e2e_session"));
+    if (userId !== administrator) { res.status(403).end(); return; }
+    // Developer fixture only, in the verified disposable schema. No runtime
+    // seed, workflow initialization, token issuance or provider is invoked.
+    const [row] = await db.insert(onbCases).values({
+      organizationId: DEMO_ORGANIZATION_ID, workerName: "Fictional Demo Hire — Retained History",
+      workerEmail: "fictional-demo-deadbeef@example.invalid", joiningDate: "2035-01-01",
+      workerCategory: "employee", role: "History fixture", department: "Testing", geography: "US",
+      legalEntity: "Demo", managerName: "Fixture manager", recruiterName: "Fixture recruiter",
+      hireType: "external-fte", syntheticProvenance: "onboarding-demo-fictional",
+      notes: "[synthetic-offline-reset:v1]", orchestrationStatus: "paused",
+    }).returning();
+    fixtureCaseIds.add(row.id);
+    await db.insert(accessNamedGrants).values(["data.case.profile.read", "data.case.notes.read", "flow.case.read"].map(resourceKey => ({
+      organizationId: DEMO_ORGANIZATION_ID, principalType: "human", principalId: administrator,
+      scope: "case", caseId: row.id, resourceType: resourceKey.startsWith("flow") ? "flow" : "field",
+      resourceKey, source: "named", effect: "allow", createdByUserId: administrator,
+      approvedByUserId: "browser-independent-reviewer", approvedAt: new Date(),
+    })));
+    await db.insert(onbEvents).values({
+      organizationId: DEMO_ORGANIZATION_ID, caseId: row.id, agent: "onboarding", engine: "historical-evidence",
+      title: "[SIMULATED] Retained historical observation", detail: "Developer fixture of retained evidence, not a current operation.",
+    });
+    await db.insert(onbCommunications).values({
+      organizationId: DEMO_ORGANIZATION_ID, caseId: row.id, channel: "email",
+      direction: "outbound", toAddress: row.workerEmail, body: "[SIMULATED] Retained historical evidence",
+      status: "logged-only",
+    });
+    res.json({ caseId: row.id, workerName: row.workerName });
+  } catch (error) { next(error); }
+});
 app.get("/api/test/fixture-state/:caseId", async (req, res, next) => {
   try {
     const caseId = Number(req.params.caseId);

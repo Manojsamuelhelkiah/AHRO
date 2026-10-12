@@ -9,17 +9,9 @@ const VIEWPORTS = [
 ];
 
 async function assertUsableCaseControls(page: Page, label: string) {
-  await expect(page.getByRole("heading", { name: "Response-Driven Simulation" })).toBeVisible();
-  const simulate = page.getByRole("button", { name: "Simulate next exchange" });
-  await simulate.scrollIntoViewIfNeeded();
-  await expect(simulate).toBeVisible();
-  await expect(simulate).toBeEnabled();
-  const box = await simulate.boundingBox();
-  expect(box, `${label}: simulation control should have a layout box`).not.toBeNull();
-  expect(box!.x).toBeGreaterThanOrEqual(0);
-  expect(box!.y).toBeGreaterThanOrEqual(0);
-  expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-  expect(box!.y + box!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  await expect(page.getByText("Historical test record — read-only and permanently non-operational.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Simulate next exchange" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Restart simulation|Confirm readiness|Issue candidate portal/i })).toHaveCount(0);
 
   // The tab strip is intentionally horizontally scrollable on a phone. Scroll
   // each required tab into view before checking its actual clickable bounds.
@@ -87,7 +79,7 @@ for (const viewport of VIEWPORTS) {
     const longId = 'opaque-'.repeat(45);
     const observed: string[] = [];
     await page.route('**/api/context-manager/transactions?**', async route => {
-      const url = new URL(route.request().url());
+    const url = new URL(route.request().url());
       observed.push(url.search);
       await route.fulfill({ status: mode === 'denied' ? 403 : 200, json: mode === 'denied' ? { message: 'Live metadata access revoked' } : {
         available: true, operatorAvailable: true,
@@ -234,47 +226,20 @@ test("Client Setup recovers scoped legacy drafts without guessing unsupported ch
   await page.goto("/client-setup");
   await expect(page.getByRole("heading", { name: "Implementation Cockpit" })).toBeVisible();
   await expect(page.getByPlaceholder("e.g. Acme Corp")).toHaveValue(
-    "Northstar Global Services — Synthetic Demo",
+    "Northstar Global Services — Sample Workspace",
   );
   await expect(page.getByPlaceholder("e.g. Acme Corp")).not.toHaveValue("Legacy Browser Client");
   await expect(page.getByPlaceholder("e.g. Acme Corp")).not.toHaveValue("Other Tenant Secret");
 });
 
 async function createOfflineCase(page: Page) {
-  const submittedWorkerName = `Browser Regression Worker ${Date.now()}`;
-  await page.goto("/cases");
-  await expect(page.getByRole("button", { name: "New Case" })).toBeVisible();
-  await page.getByRole("button", { name: "New Case" }).click();
-  await expect(page.getByRole("heading", { name: "New Case", exact: true })).toBeVisible();
-
-  await page.locator("#workerName").fill(submittedWorkerName);
-  await page.locator("#workerEmail").fill(`browser-${Date.now()}@example.invalid`);
-  await page.locator("#role").fill("Demo Engineer");
-  await page.locator("#department").fill("Quality");
-  await page.locator("#geography").fill("US");
-  await page.locator("#legalEntity").fill("Demo Organization");
-  await page.locator("#joiningDate").fill("2035-01-01");
-  await page.locator("#managerName").fill("Demo Manager");
-  await page.locator("#recruiterName").fill("Demo Recruiter");
-  await page.locator('input[name="workCountry"]').fill("US");
-  await page.locator('select[name="workEnvironment"]').selectOption("office");
-  await page.getByRole("button", { name: "Create Offline Synthetic Case" }).click();
-
-  await expect(page).toHaveURL(/\/cases\/\d+$/);
-  await expect(page.getByText("Simulated/manual sample only.", { exact: false })).toBeVisible();
-  const caseId = Number(new URL(page.url()).pathname.split("/").pop());
-  const created = await page.evaluate(async (id) => {
-    const response = await fetch(`/api/onboarding/cases/${id}`, { credentials: "include" });
-    if (!response.ok) throw new Error(`case read failed: ${response.status}`);
+  const fixture = await page.evaluate(async () => {
+    const response = await fetch("/api/test/historical-case", { method: "POST", credentials: "include" });
+    if (!response.ok) throw new Error(`isolated history fixture failed: ${response.status}`);
     return response.json();
-  }, caseId);
-  expect(created.workerName).toMatch(/^Fictional Demo Hire /);
-  expect(created.workerName).not.toBe(submittedWorkerName);
-  expect(created.workerEmail).toMatch(/^fictional-demo-[a-f0-9]+@example\.invalid$/);
-  return {
-    caseId,
-    workerName: created.workerName as string,
-  };
+  });
+  await page.goto(`/cases/${fixture.caseId}`);
+  return fixture as { caseId: number; workerName: string };
 }
 
 async function assertNoExternalRequests(page: Page, requests: string[]) {
@@ -302,7 +267,7 @@ async function assertNoExternalRequests(page: Page, requests: string[]) {
   });
 }
 
-test("Demo Administrator creates and durably simulates one offline case", async ({
+test("shared Demo can read restricted historical evidence but cannot progress or operate it", async ({
   browser,
   page,
 }) => {
@@ -321,45 +286,11 @@ test("Demo Administrator creates and durably simulates one offline case", async 
 
   await signInDemo(page, ADMIN_EMAIL);
   const fixture = await createOfflineCase(page);
-  await expect(page.getByText("Restricted for offline samples")).toBeVisible();
-  await expect(page.getByText("Could not load holds", { exact: false })).toHaveCount(0);
 
-  for (const viewport of VIEWPORTS) {
-    await page.setViewportSize(viewport);
-    await page.reload();
-    await assertUsableCaseControls(page, viewport.label);
-  }
-
-  const simulate = page.getByRole("button", { name: "Simulate next exchange" });
-  await simulate.click();
-  await expect(page.getByText("Simulated Outbound", { exact: false })).toHaveCount(1);
-  await expect(page.getByText("Simulated Inbound", { exact: false })).toHaveCount(1);
-
-  await page.reload();
-  await expect(page.getByText(fixture.workerName, { exact: false })).toBeVisible();
-  await expect(page.getByText("Simulated Outbound", { exact: false })).toHaveCount(1);
-  await expect(page.getByText("Simulated Inbound", { exact: false })).toHaveCount(1);
-  await expect(page.getByText("Response-Driven Simulation")).toBeVisible();
-
-  await page.getByRole("button", { name: "Communications", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Communication History" })).toBeVisible();
-  await expect(page.getByText("[SIMULATED]", { exact: false }).first()).toBeVisible();
-
-  await page.getByRole("button", { name: "Activity", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Operational Timeline" })).toBeVisible();
-  await expect(page.getByText("[SIMULATED]", { exact: false }).first()).toBeVisible();
-
-  // Confirm the same persisted case through the harness's DB-backed
-  // observation endpoint. The create/simulation/read requests above all hit
-  // the real API router; this endpoint only counts owned durable effects.
-  await assertNoExternalRequests(page, externalRequests);
-  expect(privacyHoldRequests, "offline case pages must not request privacy holds").toEqual([]);
-  expect(
-    browserErrors.filter((message) => /privacy|hold|403/i.test(message)),
-    "offline case pages must not log privacy authorization errors",
-  ).toEqual([]);
-  expect(fixture.caseId).toBeGreaterThan(0);
-
+  const status = await page.evaluate(async id => {
+    const response = await fetch(`/api/onboarding/cases/${id}/simulation/simulate-next`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: "{}" });
+    return response.status;
+  }, fixture.caseId);
   const reviewer = await browser.newContext({ viewport: VIEWPORTS[0] });
   const reviewerPage = await reviewer.newPage();
   const reviewerExternalRequests: string[] = [];
@@ -391,6 +322,11 @@ test("Demo Administrator creates and durably simulates one offline case", async 
 test("retired URLs and stale outreach requests are unavailable", async ({ page }) => {
   await signInDemo(page, ADMIN_EMAIL);
   const fixture = await createOfflineCase(page);
+
+  const status = await page.evaluate(async id => {
+    const response = await fetch(`/api/onboarding/cases/${id}/simulation/simulate-next`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: "{}" });
+    return response.status;
+  }, fixture.caseId);
   const results = await page.evaluate(async (caseId) => {
     const requests = [
       ["GET", "/api/onboarding/demo-controller"],
@@ -400,6 +336,11 @@ test("retired URLs and stale outreach requests are unavailable", async ({ page }
       ["POST", "/api/organizations/demo-controller-setup/complete"],
       ["PUT", "/api/onboarding/demo/volunteers"],
       ["POST", `/api/onboarding/cases/${caseId}/simulation/send-email`],
+      ["POST", "/api/onboarding/cases"],
+      ["POST", "/api/onboarding/batch-intake/commit"],
+      ["POST", "/api/onboarding/standard-intake/events"],
+      ["POST", `/api/onboarding/cases/${caseId}/simulation/next`],
+      ["POST", `/api/onboarding/cases/${caseId}/simulation/restart`],
     ];
     return Promise.all(requests.map(async ([method, path]) => {
       const response = await fetch(path, { method, credentials: "include",
@@ -408,7 +349,7 @@ test("retired URLs and stale outreach requests are unavailable", async ({ page }
       return response.status;
     }));
   }, fixture.caseId);
-  expect(results).toEqual(results.map(() => 404));
+  expect(results).toEqual([404, 404, 404, 404, 404, 404, 410, 410, 410, 410, 410, 410]);
   await page.goto("/demo-controller");
   await expect(page.getByRole("heading", { name: /404|not found/i })).toBeVisible();
   await expect(page.getByRole("link", { name: "Demo Center", exact: true })).toHaveCount(0);

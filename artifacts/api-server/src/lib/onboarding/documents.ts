@@ -1,7 +1,10 @@
+import { isHistoricalTestRecord } from "./historical-test-record";
+
 import { db } from "@workspace/db";
 import { onbCases, onbDocuments } from "@workspace/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { getUatCaseIsolation } from "./uat-isolation";
 import { sensitiveClassForDocument } from "./sensitive-access";
 import { SensitiveLifecycleConflictError } from "./sensitive-lifecycle";
 import { ConnectorDispatchRejectedError } from "./connector-adapters";
@@ -118,7 +121,7 @@ export async function backfillDocumentPacks(scope?: {
   const { dispatchDocumentPackRecovery } = await import("./workstream-connectors");
   let insertedDocuments = 0;
   for (const c of missing) {
-    if (isSyntheticOfflineCase(c)) continue;
+    if (isHistoricalTestRecord(c) || isSyntheticOfflineCase(c) || (await getUatCaseIsolation(c)).isolated) continue;
     try {
       await dispatchDocumentPackRecovery(c);
       const documents = await db.select({ id: onbDocuments.id }).from(onbDocuments).where(

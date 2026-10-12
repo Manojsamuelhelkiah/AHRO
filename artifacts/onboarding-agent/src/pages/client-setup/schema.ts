@@ -206,7 +206,7 @@ export const initialDraft: ClientSetupDraft = {
 };
 
 export const demoDraft: ClientSetupDraft = {
-  clientName: 'Northstar Global Services — Synthetic Demo',
+  clientName: 'Northstar Global Services — Sample Workspace',
   sector: 'Technology',
   employees: 12500,
   countries: 18,
@@ -237,7 +237,7 @@ export const demoDraft: ClientSetupDraft = {
     { id: 'demo-communications', key: 'communications', name: 'Microsoft Teams', vendor: 'Microsoft', mode: 'direct-integration', ownerEmail: 'people.comms@example.com' },
     { id: 'demo-bgv', key: 'bgv', name: 'HireRight', vendor: 'HireRight', mode: 'email-watch', ownerEmail: 'screening@example.com' },
   ],
-  notes: 'Synthetic demonstration profile. Every person, address, volume, and system mapping is fictional and can be edited.',
+  notes: 'Illustrative implementation assumptions only. These editable estimates and mappings do not create cases, authorize delivery, or establish provider execution.',
 };
 
 export function resolveInitialDraft(

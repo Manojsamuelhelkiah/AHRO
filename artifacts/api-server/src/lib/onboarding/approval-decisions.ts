@@ -9,6 +9,8 @@ import {
   onbSettings,
 } from "@workspace/db/schema";
 import { sendAdministrativeEmail } from "./channels";
+import { isHistoricalTestRecord } from "./historical-test-record";
+import { getUatCaseIsolation } from "./uat-isolation";
 import {
   HR_ALERT_EMAIL_KEY,
   HR_APPROVER_EMAIL_KEY,
@@ -358,6 +360,10 @@ export async function decideApproval(opts: {
     )).for("update");
     if (!currentCase) {
       return { outcome: "not-found" } as const;
+    }
+    if (isHistoricalTestRecord(currentCase) ||
+        (await getUatCaseIsolation(currentCase)).isolated) {
+      return { outcome: "unauthorized", reason: "Historical test records are read-only and cannot gain approval authority." } as const;
     }
     await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, {
       organizationId: opts.organizationId, caseId: ownership.caseId,

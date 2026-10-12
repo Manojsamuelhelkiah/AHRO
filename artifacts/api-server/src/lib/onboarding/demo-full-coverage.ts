@@ -13,6 +13,7 @@ import {
 import { getScenario } from "./scenarios";
 import { SYNTHETIC_OFFLINE_MARKER, SYNTHETIC_OFFLINE_WARNING } from "./synthetic-offline";
 import { withSensitiveLifecycleFence } from "./sensitive-lifecycle";
+import { denyRetiredCaseCapability } from "../retired-case-capabilities";
 
 /**
  * This intentionally begins with the existing UAT-reserved prefix. Every
@@ -98,6 +99,7 @@ export async function seedDemoFullCoverage(
   organizationId: string,
   actorId: string | null,
 ): Promise<DemoFullCoverageResult> {
+  denyRetiredCaseCapability();
   return withSensitiveLifecycleFence(organizationId, async () => {
     const logisticsDefault = await getDay1LogisticsDefault(organizationId);
     return db.transaction(async (tx) => {

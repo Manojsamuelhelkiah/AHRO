@@ -1,3 +1,5 @@
+import { denyRetiredCaseCapability } from "../retired-case-capabilities";
+
 import { db } from "@workspace/db";
 import {
   onbCases,
@@ -418,6 +420,7 @@ export async function simulateVendorEmail(opts: {
   system: string;
   outcome: "completed" | "exception";
 }): Promise<{ ok: boolean; message: string }> {
+  denyRetiredCaseCapability();
   const [check] = await db
     .select()
     .from(onbSystemChecks)

@@ -23,11 +23,11 @@ html = (ROOT / "deliverables" / FILES["html"]).read_text()
 assert 'name="viewport"' in html and "<script" not in html
 for row in controls:
     assert row.id in html
-    assert escape(row.business_use_case) in html, f"Missing HTML use case: {row.id}"
+    assert escape(row.mechanism) in html, f"Missing HTML control: {row.id}"
     stored = next(control for group in data["groups"] for control in group["controls"] if control["id"] == row.id)
-    assert stored["business_use_case"] == row.business_use_case, f"Missing JSON use case: {row.id}"
-assert html.count("<b>Business use case:</b>") == 50
-assert len({row.business_use_case for row in controls}) == 50
+    assert stored["mechanism"] == row.mechanism
+    assert "business_use_case" not in stored
+assert "Business use case:" not in html
 for kind in ("inventory", "html"):
     assert (ROOT / "deliverables" / FILES[kind]).read_bytes() == (
         ROOT / "artifacts" / "onboarding-agent" / "public" / FILES[kind]
@@ -44,8 +44,8 @@ for kind in ("business", "technical", "inventory"):
             normalized = re.sub(r"\s+", " ", text)
             for row in controls:
                 assert row.id in text, f"Missing control {row.id}"
-                assert row.business_use_case in normalized, f"Missing PDF use case: {row.id}"
-            assert text.count("Business use case:") == 50
+                assert row.mechanism in normalized, f"Missing PDF control: {row.id}"
+            assert "Business use case:" not in text
             for id, *_ in METRICS:
                 assert id in text, f"Missing metric {id}"
             for term in ("MAP-05", "DEP-06", "Nearby test pointers", "No live metric values"):

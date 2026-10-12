@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { denyRetiredCaseCapability } from "../retired-case-capabilities";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   db,
@@ -996,6 +997,7 @@ export async function executeSyntheticReset(input: {
   | { kind: "completed"; envelope: SyntheticResetEnvelope }
   | { kind: "conflict"; envelope: SyntheticResetEnvelope }
 > {
+  denyRetiredCaseCapability();
   const manifest = input.manifest ?? DEFAULT_SYNTHETIC_RESET_MANIFEST;
   const entries = manifestFor(input.organizationId, manifest);
   if (entries.length === 0) {

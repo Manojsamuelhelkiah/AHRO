@@ -1,4 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { retiredCaseCapabilityResponse, isRetiredCaseCapabilityRequest, denyRetiredCaseCapability } from "../lib/retired-case-capabilities";
+import { isHistoricalTestRecord } from "../lib/onboarding/historical-test-record";
+import { isAuthoritativelyUatRunOwnedCase } from "../lib/onboarding/uat-isolation";
 import { randomUUID } from "node:crypto";
 import { decideApproval, getApprovalHistory } from "../lib/onboarding/approval-decisions";
 import { runConnectedReadinessTick } from "../lib/onboarding/connected-readiness-automation";
@@ -321,6 +324,13 @@ import {
 import { readHroBatchRequest, policyWithoutBatchIntake } from "../lib/onboarding/hro-batch-templates";
 
 const router: IRouter = Router();
+router.use((req, res, next) => {
+  if (isRetiredCaseCapabilityRequest(req.method, req.path)) {
+    retiredCaseCapabilityResponse(req, res, next);
+    return;
+  }
+  next();
+});
 const malwareScanCanRetry = (state: string | null | undefined) => !!state && malwareScanRetryable(state);
 const RESTRICTED_WORKFORCE_CONTEXT_MESSAGE =
   "This workforce-context correction cannot be saved here. No specialist handoff is available here; no changes were made.";
@@ -386,7 +396,8 @@ function caseGovernanceAccessFromEffective(access: EffectiveAccess): CaseGoverna
 
 async function caseGovernanceAccessForRequest(
   req: Request,
-  row: Pick<typeof onbCases.$inferSelect, "organizationId" | "id">,
+  row: Pick<typeof onbCases.$inferSelect, "organizationId" | "id"> &
+    Partial<Pick<typeof onbCases.$inferSelect, "scenarioKey" | "syntheticProvenance" | "controllerRetired" | "notes">>,
 ): Promise<CaseGovernanceAccess> {
   if (!req.authUserId) return NO_CASE_GOVERNANCE_ACCESS;
   const access = await resolveEffectiveAccess({
@@ -396,7 +407,12 @@ async function caseGovernanceAccessForRequest(
     caseId: row.id,
     purpose: "onboarding-case-api",
   });
-  return caseGovernanceAccessFromEffective(access);
+  const result = caseGovernanceAccessFromEffective(access);
+  if (isHistoricalTestRecord(row) || await isAuthoritativelyUatRunOwnedCase(row)) {
+    return { ...result, profileEdit: false, notesEdit: false, flowEdit: false,
+      readinessEdit: false, documentsEdit: false, documentReviewEdit: false };
+  }
+  return result;
 }
 
 function caseFlowReadRequired(res: Response, access: CaseGovernanceAccess): boolean {
@@ -784,7 +800,7 @@ async function serializeCase(
   const profileSensitiveAccess = canReadProfile ? sensitiveAccess : NO_SENSITIVE_ACCESS;
   return {
     id: row.id,
-    controllerRetired: isRetiredControllerCase(row),
+    controllerRetired: isHistoricalTestRecord(row) || await isAuthoritativelyUatRunOwnedCase(row),
     caseFamily: canReadProfile ? intakeRequest?.family ?? null : null,
     requestType: canReadProfile ? intakeRequest?.requestType ?? null : null,
     batchIntake: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) ? intakeRequest : null,
@@ -917,7 +933,10 @@ async function insertCaseAndStart(
   },
 ) {
   if (options?.syntheticOffline && !options.syntheticProvenance) {
-    throw new Error("Synthetic offline case creation requires explicit server-owned provenance.");
+    denyRetiredCaseCapability();
+  }
+  if (options?.syntheticOffline) {
+    denyRetiredCaseCapability();
   }
   if (!options?.syntheticOffline && options?.syntheticProvenance) {
     throw new Error("Synthetic case provenance is valid only for synthetic offline creation.");
@@ -1226,6 +1245,10 @@ router.post("/onboarding/cases", async (req, res, next) => {
   try {
     const organizationId = getOrganizationId(req);
     const demoProfile = await registeredDemoProfile(req.authUserId!);
+    if (demoProfile) {
+      retiredCaseCapabilityResponse(req, res, next);
+      return;
+    }
     if (demoProfile === "reviewer") {
       res.status(403).json({
         message: "Shared reviewer accounts cannot create cases. Use the Demo Administrator profile for fictional offline samples.",
@@ -4586,6 +4609,7 @@ router.get("/onboarding/approvals", async (req, res, next) => {
         notes: onbCases.notes,
         scenarioKey: onbCases.scenarioKey,
         syntheticProvenance: onbCases.syntheticProvenance,
+        controllerRetired: onbCases.controllerRetired,
         candidateEmailAuthorizedAt: onbCases.candidateEmailAuthorizedAt,
         candidateEmailAuthorizedBy: onbCases.candidateEmailAuthorizedBy,
       })
@@ -4596,6 +4620,9 @@ router.get("/onboarding/approvals", async (req, res, next) => {
     const demoProfile = await registeredDemoProfile(req.authUserId!);
     const rowsWithAccess = await Promise.all(rows.map(async (row) => ({
       ...row,
+      historicalCase: isHistoricalTestRecord(row) || await isAuthoritativelyUatRunOwnedCase({
+        organizationId: getOrganizationId(req), id: row.approval.caseId,
+      }),
       caseAccess: await caseGovernanceAccessForRequest(req, {
         organizationId: getOrganizationId(req),
         id: row.approval.caseId,
@@ -4609,7 +4636,9 @@ router.get("/onboarding/approvals", async (req, res, next) => {
       candidateEmailAuthorizedAt,
       candidateEmailAuthorizedBy,
       caseAccess,
+      historicalCase,
     }) =>
+      !historicalCase &&
       caseAccess.flowRead &&
       (!isDay1ReadinessApproval(approval) || caseAccess.readinessRead) &&
       (!demoProfile ||
@@ -5901,11 +5930,13 @@ async function excludeUatAggregateCases<T extends {
   id: number;
   organizationId: string;
   scenarioKey?: string | null;
+  syntheticProvenance?: OnbSyntheticProvenance | null;
+  notes?: string | null;
 }>(rows: T[]): Promise<T[]> {
   const isolated = await Promise.all(rows.map(async (row) =>
     (await getUatCaseIsolation(row)).isolated,
   ));
-  return rows.filter((_row, index) => !isolated[index]);
+  return rows.filter((row, index) => !isolated[index] && !isHistoricalTestRecord(row));
 }
 
 async function loadOutcomeKpis(req: Request) {

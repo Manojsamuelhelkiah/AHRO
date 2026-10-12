@@ -1293,7 +1293,7 @@ test("ordinary members cannot forge heartbeat/startup reasons, and admin reconci
   assert.equal(result.authority?.canManage, true);
 });
 
-test("ordinary-tenant vendor-email simulation is never trusted and never live-sends", async () => {
+test("retired vendor-email injection cannot create notifications or alter provider evidence", async () => {
   const caseId = await createCase(orgA, { candidateAuthorized: true });
   await configureCase(orgA, caseId);
   const [check] = await db.insert(onbSystemChecks).values({
@@ -1315,21 +1315,16 @@ test("ordinary-tenant vendor-email simulation is never trusted and never live-se
       outcome: "exception",
     }),
   });
-  assert.equal(response.status, 200);
-  const responseBody = await response.json() as { ok?: boolean; message?: string };
-  assert.equal(responseBody.ok, true);
-  assert.match(responseBody.message ?? "", /escalated/i);
+  assert.equal(response.status, 410);
+  const responseBody = await response.json() as { code: string };
+  assert.equal(responseBody.code, "CASE_TEST_CAPABILITY_RETIRED");
 
   const [updatedCheck] = await db.select().from(onbSystemChecks).where(eq(onbSystemChecks.id, check.id));
-  assert.equal(updatedCheck.status, "overdue");
+  assert.equal(updatedCheck.status, "pending");
   const result = await getBgvNotifications({ organizationId: orgA, caseId, role: "owner" });
-  const cycle = publicCycle(result);
-  assert.equal(cycle.sourceProvenance, "simulated");
-  assert.deepEqual(cycle.classifications, ["discrepancy", "review-required"]);
+  assert.equal(result.cycles.length, 0);
   const rows = await communicationRows(caseId);
-  assert.ok(rows.length > 0);
-  assert.ok(rows.every((row) => row.status === "simulated"));
-  assert.ok(rows.every((row) => row.externalMessageId === null));
+  assert.equal(rows.length, 0);
   assert.equal(
     (await db.select().from(onbEffectJournal).where(eq(onbEffectJournal.caseId, caseId))).length,
     0,

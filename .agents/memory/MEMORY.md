@@ -81,3 +81,4 @@
 - [Separate UAT admission](uat-admission-boundary.md) — reuse existing accounts but require fresh UAT authentication; neither demo tickets nor login grant domain authority.
 - [Administrator viewing agreement](administrator-viewing-agreement.md) — active, verified Super Admin may read client records; professional authority and employee-owned consent remain separate.
 - [Offboarding specification boundary](offboarding-specification-boundary.md) — the user will supply closure section 4.6 later; operational preparation must not imply finalization.
+- [Permanent case-test retirement](product-feature-retirement.md) — retired launch/evaluation actions must not return; preserve history, offline fences, genuine operations and commercial modeling.

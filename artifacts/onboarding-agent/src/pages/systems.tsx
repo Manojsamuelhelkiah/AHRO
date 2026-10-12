@@ -342,7 +342,7 @@ function EmailWatchPanel({ watch, checks, onChanged }: { watch: any, checks: any
             </div>
           )}
 
-          {checks.length > 0 && (
+          {false && checks.length > 0 && (
             <div className="pt-6 mt-6 border-t border-[var(--border)] space-y-4">
               <Label className="text-[var(--text-xs)] font-semibold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-2">
                 <FlaskConical className="w-4 h-4 text-[var(--primary)]" /> Demo: simulate a vendor status email

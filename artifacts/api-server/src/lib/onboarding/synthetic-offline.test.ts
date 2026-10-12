@@ -18,14 +18,16 @@ test("clearing mutable notes cannot reactivate a reserved UAT scenario", () => {
   assert.equal(isSyntheticOfflineCase(minimizedUatCase), true);
 });
 
-test("sample email exception depends on a deliverable address and never removes the offline workflow fence", () => {
+test("historical email exceptions stay retired even for deliverable addresses and coverage provenance", () => {
   const sample = { notes: SYNTHETIC_OFFLINE_MARKER, syntheticProvenance: "synthetic-reset" as const, workerEmail: "candidate@mailhost.com" };
-  assert.equal(sampleCandidateEmailEligible(sample), true);
+  assert.equal(sampleCandidateEmailEligible(sample), false);
   assert.equal(isSyntheticOfflineCase(sample), true);
   assert.equal(sampleCandidateEmailEligible({ ...sample, workerEmail: "sample@hro.invalid" }), false);
   assert.equal(sampleCandidateEmailEligible({ ...sample, scenarioKey: "UAT-REAL-RUN" }), false);
   assert.equal(sampleCandidateEmailEligible({ ...sample, scenarioKey: "UAT-DEMO-COVERAGE:standard-fte" }), false);
-  assert.equal(sampleCandidateEmailEligible({ ...sample, syntheticProvenance: "demo-full-coverage", scenarioKey: "UAT-DEMO-COVERAGE:standard-fte" }), true);
+  assert.equal(sampleCandidateEmailEligible({ ...sample, syntheticProvenance: "demo-full-coverage", scenarioKey: "UAT-DEMO-COVERAGE:standard-fte" }), false);
+  assert.equal(sampleCandidateEmailEligible({ workerEmail: "candidate@fake-provider.mailhost.com", notes: null }), true,
+    "the compatibility helper must preserve ordinary authenticated email eligibility");
 });
 
 test("synthetic demo authority requires the exact tenant, source, and server marker", () => {

@@ -12,6 +12,7 @@ import {
 } from "@workspace/db/schema";
 import { isNonEmployee } from "./external-systems";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isHistoricalTestRecord } from "./historical-test-record";
 import {
   listOnboardingAgents,
   resolveOnboardingAgent,
@@ -560,7 +561,7 @@ async function lockAndLoad(
     )
     .for("update");
   if (!caseRow) throw new OperationalRequestNotFoundError();
-  if (isSyntheticOfflineCase(caseRow)) {
+  if (isHistoricalTestRecord(caseRow) || isSyntheticOfflineCase(caseRow)) {
     throw new OperationalRequestOfflineError();
   }
   const [stored] = await tx
@@ -1225,6 +1226,8 @@ export async function getOperationalRequests(
       id: onbCases.id,
       notes: onbCases.notes,
       syntheticProvenance: onbCases.syntheticProvenance,
+      scenarioKey: onbCases.scenarioKey,
+      controllerRetired: onbCases.controllerRetired,
     })
     .from(onbCases)
     .where(
@@ -1243,7 +1246,7 @@ export async function getOperationalRequests(
   return publicEnvelope(
     caseId,
     parseState(stored?.value ?? null),
-    isSyntheticOfflineCase(caseRow),
+    isHistoricalTestRecord(caseRow) || isSyntheticOfflineCase(caseRow),
   );
 }
 

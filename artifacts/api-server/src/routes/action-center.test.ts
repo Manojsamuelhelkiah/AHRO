@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Request } from "express";
 import express from "express";
+import { RetiredCaseCapabilityError } from "../lib/retired-case-capabilities";
 import type { Server } from "node:http";
 import { after, before, describe, test } from "node:test";
 import { and, eq, inArray } from "drizzle-orm";
@@ -726,6 +727,10 @@ before(async () => {
   app.use(createTenantContextMiddleware(lookupMembership));
   app.use(actionCenterRouter);
   app.use((error: unknown, _req: Request, res: express.Response, _next: express.NextFunction) => {
+    if (error instanceof RetiredCaseCapabilityError) {
+      res.status(410).json({ code: error.code, message: error.message });
+      return;
+    }
     res.status(500).json({ message: error instanceof Error ? error.message : String(error) });
   });
   server = app.listen(0, "127.0.0.1");
@@ -858,19 +863,15 @@ describe("Action Center focused regression suite", { concurrency: false }, () =>
   });
 
 describe("Action Center routing, tenant scope, and identity CAS", () => {
-  test("Demo Administrator sees and mutates only server-marked synthetic cases while Demo Reviewer remains blocked", async () => {
+  test("historical cases stay outside Demo operational queues and all Demo mutations remain retired", async () => {
     const projected = await request(
-      "/onboarding/action-center?scope=all&limit=200&safetyCritical=true",
-      {},
-      {
-      userId: demoAdministrator,
-      organizationId: DEMO_ORGANIZATION_ID,
-      },
+      "/onboarding/action-center?scope=all&limit=200&safetyCritical=true", {},
+      { userId: demoAdministrator, organizationId: DEMO_ORGANIZATION_ID },
     );
     assert.equal(projected.response.status, 200);
     const snapshot = bodyRecord(projected.body);
-    assert.equal(bodyRecord(snapshot.capabilities).canAct, true);
-    assert.equal(bodyRecord(snapshot.capabilities).canRecordCallOutcome, true);
+    assert.equal(bodyRecord(snapshot.capabilities).canAct, false);
+    assert.equal(bodyRecord(snapshot.capabilities).canRecordCallOutcome, false);
     assert.equal(bodyRecord(bodyRecord(snapshot.capabilities).aiCall).available, false);
     assert.equal(
       Number(bodyRecord(snapshot.counts).openWorkItems),
@@ -908,19 +909,19 @@ describe("Action Center routing, tenant scope, and identity CAS", () => {
         item.caseId === syntheticDemoCaseId &&
         bodyRecord(item.capabilities).canAct === true,
     );
-    assert.ok(actionableOpportunity, "the synthetic projection must expose an actionable item");
-    const projectedActionVersion = Number(actionableOpportunity.actionVersion);
-
+    assert.equal(actionableOpportunity, undefined, "history must never expose an actionable opportunity");
+    assert.equal(projectedCaseIds.size, 0, "historical cases must stay outside operational queues");
     const call = await request("/onboarding/action-center/actions/manual-call-outcome", {
       method: "POST",
       body: JSON.stringify({
         requestId: `demo-admin-call-${suffix}`,
-        caseId: actionableOpportunity.caseId,
+        caseId: syntheticDemoCaseId,
         outcome: "no-answer",
         selfReported: true,
       }),
     }, { userId: demoAdministrator, organizationId: DEMO_ORGANIZATION_ID });
-    assert.equal(call.response.status, 200);
+    assert.equal(call.response.status, 410);
+    assert.match(String(bodyRecord(call.body).message), /retired/i);
 
     const reminder = await request("/onboarding/action-center/actions/remind-document", {
       method: "POST",
@@ -938,12 +939,12 @@ describe("Action Center routing, tenant scope, and identity CAS", () => {
       method: "POST",
       body: JSON.stringify({
         requestId: `demo-admin-assign-${suffix}`,
-        caseId: actionableOpportunity.caseId,
+        caseId: syntheticDemoCaseId,
         owner: "documentation",
-        expectedVersion: projectedActionVersion + 1,
+        expectedVersion: 0,
       }),
     }, { userId: demoAdministrator, organizationId: DEMO_ORGANIZATION_ID });
-    assert.equal(assign.response.status, 200);
+    assert.equal(assign.response.status, 410);
 
     const ordinaryCaseAttempt = await request("/onboarding/action-center/actions/manual-call-outcome", {
       method: "POST",
@@ -954,8 +955,8 @@ describe("Action Center routing, tenant scope, and identity CAS", () => {
         selfReported: true,
       }),
     }, { userId: demoAdministrator, organizationId: DEMO_ORGANIZATION_ID });
-    assert.equal(ordinaryCaseAttempt.response.status, 403);
-    assert.match(String(bodyRecord(ordinaryCaseAttempt.body).message), /server-marked synthetic/i);
+    assert.equal(ordinaryCaseAttempt.response.status, 410);
+    assert.match(String(bodyRecord(ordinaryCaseAttempt.body).message), /retired/i);
 
     const liveAttempt = await request("/onboarding/action-center/actions/remind-document", {
       method: "POST",
@@ -1456,7 +1457,7 @@ describe("Action Center append-only mutations", () => {
     assert.deepEqual(reassignReplayBody.action, bodyRecord(reassigned.body).action);
     assert.equal(reassignReplayBody.actionVersion, bodyRecord(reassigned.body).actionVersion);
 
-    const projected = await getActionCenter(orgA, "active");
+    const projected = await getActionCenter(orgA, "all");
     const workItem = projected.workItems.find((item) => item.id === workItemId);
     assert.equal(workItem?.owner, "compliance");
     assert.equal(workItem?.assignee, "Compliance queue");
@@ -1505,9 +1506,7 @@ describe("Action Center append-only mutations", () => {
     const offlineFollowup = (pausedRecord.documentFollowups as JsonRecord[]).find(
       (row) => row.caseId === caseIds[1],
     );
-    assert.equal(bodyRecord(bodyRecord(offlineFollowup).case).pausedOffline, true);
-    assert.equal(bodyRecord(bodyRecord(offlineFollowup).case).canAct, false);
-    assert.equal(bodyRecord(bodyRecord(offlineFollowup).capabilities).canRemind, false);
+    assert.equal(offlineFollowup, undefined, "history is not an active document follow-up");
 
     const mixedOnlineCaseId = await createCase(orgB, {
       name: `Action Center Mixed Online ${suffix}`,
@@ -1526,9 +1525,7 @@ describe("Action Center append-only mutations", () => {
     const mixedOnline = (mixedRecord.documentFollowups as JsonRecord[]).find(
       (row) => row.caseId === mixedOnlineCaseId,
     );
-    assert.equal(bodyRecord(bodyRecord(mixedOffline).case).pausedOffline, true);
-    assert.equal(bodyRecord(bodyRecord(mixedOffline).case).canAct, false);
-    assert.equal(bodyRecord(bodyRecord(mixedOffline).capabilities).canRemind, false);
+    assert.equal(mixedOffline, undefined, "mixing in genuine work must not reactivate history");
     assert.equal(bodyRecord(bodyRecord(mixedOnline).case).pausedOffline, false);
     assert.equal(bodyRecord(bodyRecord(mixedOnline).case).canAct, true);
     assert.equal(mixedOnline?.capabilities.canRemind, true);
@@ -1545,7 +1542,7 @@ describe("Action Center append-only mutations", () => {
         outcome: "no-answer",
         selfReported: true,
       }),
-      ActionCenterOfflineError,
+      RetiredCaseCapabilityError,
     );
     await assert.rejects(
       recordWorkItem({
@@ -1559,7 +1556,7 @@ describe("Action Center append-only mutations", () => {
         owner: "hr",
         expectedVersion: 0,
       }),
-      ActionCenterOfflineError,
+      RetiredCaseCapabilityError,
     );
     const routeAttempt = await request("/onboarding/action-center/actions/manual-call-outcome", {
       method: "POST",
@@ -1570,7 +1567,7 @@ describe("Action Center append-only mutations", () => {
         selfReported: true,
       }),
     }, { userId: ownerB, organizationId: orgB });
-    assert.equal(routeAttempt.response.status, 409);
+    assert.equal(routeAttempt.response.status, 410);
     const after = await db.select().from(onbActionCenterActions).where(eq(
       onbActionCenterActions.organizationId,
       orgB,
@@ -1722,7 +1719,13 @@ describe("Action Center reminder boundary and projection delivery labels", () =>
         documentId: correctionDocumentId,
         mode: "live",
       });
-      assert.equal(sent.action.status, "sent");
+      assert.equal(sent.action.status, "sent", JSON.stringify(await db.select({
+        status: onbCommunications.status,
+        failureReason: onbCommunications.failureReason,
+      }).from(onbCommunications).where(and(
+        eq(onbCommunications.organizationId, orgA),
+        eq(onbCommunications.caseId, caseIds[0]!),
+      ))));
       assert.equal(providerCalls, 1);
       const [afterSent] = await db.select().from(onbDocuments).where(eq(
         onbDocuments.id,

@@ -1,5 +1,5 @@
-import { isSeparationOrLegacyExit } from "./separation-isolation";
 import { randomUUID } from "node:crypto";
+import { isSeparationOrLegacyExit } from "./separation-isolation";
 import { and, asc, desc, eq, lte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -29,6 +29,8 @@ import type { OnboardingDbTransaction } from "./settings";
 import { isValidEmail } from "./settings";
 import { sendAdministrativeEmail } from "./channels";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isHistoricalTestRecord } from "./historical-test-record";
+import { getUatCaseIsolation } from "./uat-isolation";
 import { isRetiredControllerCase } from "./controller-retirement";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
@@ -111,7 +113,7 @@ async function reopenGateCIfNeeded(
       eq(onbCases.id, caseId),
       eq(onbCases.organizationId, organizationId),
     )).for("update");
-    if (!c || isRetiredControllerCase(c) || (c.lifecycleStage !== "complete" && c.lifecycleStage !== "day1-review")) return;
+    if (!c || isHistoricalTestRecord(c) || isRetiredControllerCase(c) || (await getUatCaseIsolation(c)).isolated || (c.lifecycleStage !== "complete" && c.lifecycleStage !== "day1-review")) return;
     await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, { organizationId, caseId });
     // Re-read every source under the case lock. The view used to schedule the
     // tick may be stale while a source webhook/attestation is racing it.
@@ -580,7 +582,7 @@ export async function claimReadinessSlaOutbox(
       eq(onbCases.organizationId, candidate.organizationId),
       eq(onbCases.id, candidate.caseId),
     )).for("update");
-    if (c && (isSyntheticOfflineCase(c) || isRetiredControllerCase(c))) return null;
+    if (c && (isHistoricalTestRecord(c) || isSyntheticOfflineCase(c) || isRetiredControllerCase(c) || (await getUatCaseIsolation(c)).isolated)) return null;
     const [row] = c
       ? await tx.select().from(onbReadinessSlaOutbox).where(and(
           eq(onbReadinessSlaOutbox.organizationId, candidate.organizationId),
@@ -829,7 +831,7 @@ export async function runReadinessSlaTick(options: TickOptions = {}): Promise<Ti
   // historical completed cases without a snapshot, so they are never silently
   // enrolled by this sweep.
   const cases = (await db.select().from(onbCases))
-    .filter((caseRow) => !isSyntheticOfflineCase(caseRow) && !isRetiredControllerCase(caseRow) && !isSeparationOrLegacyExit(caseRow));
+    .filter((caseRow) => !isHistoricalTestRecord(caseRow) && !isSyntheticOfflineCase(caseRow) && !isRetiredControllerCase(caseRow) && !isSeparationOrLegacyExit(caseRow));
   const result: TickResult = {
     cases: cases.length,
     quarantined: 0,

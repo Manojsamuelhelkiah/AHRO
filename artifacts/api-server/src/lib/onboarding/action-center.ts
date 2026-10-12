@@ -17,6 +17,9 @@ import {
 import { documentNeedsCorrection, sendDocumentReminder, type DocumentReminderMode } from "./document-validation";
 import { reminderEligible } from "./document-validation-policy";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isHistoricalTestRecord } from "./historical-test-record";
+import { getUatCaseIsolation } from "./uat-isolation";
+import { denyRetiredCaseCapability } from "../retired-case-capabilities";
 import { externalProviderDispatchDenied } from "./provider-policy";
 import { isChecklistAdministrator } from "./checklist";
 import { sensitiveClassForDocument, withSensitiveAuthorityFence } from "./sensitive-access";
@@ -248,6 +251,9 @@ async function reserveAction(input: {
       .where(and(eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId)))
       .for("update");
     if (!ownedCase) throw new ActionCenterNotFoundError("Case not found.");
+    if (input.access === "synthetic-demo-simulation" || isHistoricalTestRecord(ownedCase) || (await getUatCaseIsolation(ownedCase)).isolated) {
+      denyRetiredCaseCapability();
+    }
     if (input.access === "synthetic-demo-simulation") {
       if (
         input.organizationId !== DEMO_ORGANIZATION_ID ||
@@ -399,7 +405,7 @@ export async function recordManualCallOutcome(input: {
   )).limit(1);
   // Preserve not-found/offline error semantics and the Demo simulation path;
   // neither can persist an ordinary sensitive online case mutation.
-  if (!caseRow || isSyntheticOfflineCase(caseRow) || input.access === "synthetic-demo-simulation") {
+  if (!caseRow || isHistoricalTestRecord(caseRow) || isSyntheticOfflineCase(caseRow) || input.access === "synthetic-demo-simulation") {
     return persist();
   }
   return withSensitiveAuthorityFence({
@@ -669,6 +675,7 @@ async function recordDocumentReminderUnsafe(input: {
       eq(onbDocuments.organizationId, input.organizationId),
     ));
   if (!candidate) throw new ActionCenterNotFoundError("Case or document not found.");
+  if (isHistoricalTestRecord(candidate.c) || (await getUatCaseIsolation(candidate.c)).isolated) denyRetiredCaseCapability();
   if (isSyntheticOfflineCase(candidate.c)) throw new ActionCenterOfflineError();
   const [latestUpload] = await db.select({ validationState: onbCandidateUploads.validationState })
     .from(onbCandidateUploads)
@@ -822,13 +829,16 @@ export async function getActionCenter(
         .where(eq(onbCandidateUploads.organizationId, organizationId))
         .orderBy(desc(onbCandidateUploads.id)),
     ]);
+  const isolation = await Promise.all(cases.map(async row => ({
+    row, historical: isHistoricalTestRecord(row) || (await getUatCaseIsolation(row)).isolated,
+  })));
   const visibleCases = access === "synthetic-demo-simulation"
-    ? cases.filter((row) => isSyntheticOfflineCase(row))
-    : cases;
+    ? []
+    : isolation.filter(item => !item.historical).map(item => item.row);
   const canActOnCase = (row: typeof onbCases.$inferSelect): boolean =>
     access === "synthetic-demo-simulation"
       ? isSyntheticOfflineCase(row)
-      : !isSyntheticOfflineCase(row);
+      : !isHistoricalTestRecord(row) && !isSyntheticOfflineCase(row);
   const filteredCaseIds = new Set(visibleCases.filter((row) => {
     if (filters.workforce) {
       const label = row.workforceClassification?.label ?? "unclassified";
@@ -1160,7 +1170,8 @@ export async function getActionCenter(
       ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit)
     : [];
   const active = showActive;
-   const pausedOffline = visibleCases.length > 0 && visibleCases.every((row) => isSyntheticOfflineCase(row));
+  const pausedOffline = access === "synthetic-demo-simulation"
+    || (visibleCases.length === 0 && isolation.some(item => item.historical));
   // The envelope-level capability is fail-closed for mixed tenants. Each
   // case/item carries its own capability so a capable UI can still act on
   // online rows without ever treating an offline row as actionable.

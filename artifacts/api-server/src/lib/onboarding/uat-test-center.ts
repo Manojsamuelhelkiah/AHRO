@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import { denyRetiredCaseCapability } from "../retired-case-capabilities";
+import { getProductLearningCatalog } from "./product-learning-catalog";
 import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { onbCandidateLinks, onbCases, onbEvents, onbSettings, type OnbWorkforceContext } from "@workspace/db/schema";
@@ -316,7 +318,7 @@ export async function getUatCatalog(organizationId: string) {
     .orderBy(desc(onbSettings.updatedAt));
   return {
     catalogVersion: UAT_CATALOG_VERSION, baselineRevision: UAT_BASELINE_REVISION, syntheticOnly: true,
-    scenarios: UAT_SCENARIOS,
+    scenarios: [],
     runs: rows.map((row) => parse(row.value)).filter((run): run is UatRun => Boolean(run)).map((run) => ({
       runId: run.runId, scenarioId: run.scenarioId, status: run.status, version: run.version, createdAt: run.createdAt, updatedAt: run.updatedAt,
     })),
@@ -325,18 +327,11 @@ export async function getUatCatalog(organizationId: string) {
 
 /** Tenant-neutral canonical catalog; never mixes run evidence or bearer URLs. */
 export function getLearningCatalog() {
-  return {
-    catalogVersion: UAT_CATALOG_VERSION,
-    baselineRevision: UAT_BASELINE_REVISION,
-    scenarios: UAT_SCENARIOS,
-    guideSections: GUIDE_SECTIONS,
-    features: PRODUCT_FEATURES,
-    requirements: REQUIREMENTS,
-    denominators: { features: FEATURE_COVERAGE, requirements: REQUIREMENT_COVERAGE },
-  };
+  return getProductLearningCatalog();
 }
 
 export async function createUatRun(organizationId: string, actor: string, input: { scenarioId: string; mode?: "simulated"; requestId?: string | null }, actorRole = "tenant-member") {
+  denyRetiredCaseCapability();
   const selected = scenario(input.scenarioId);
   if (!selected) throw err("UatScenarioNotFound", "Unknown UAT scenario.");
   if (input.mode !== undefined && input.mode !== "simulated") {
@@ -420,6 +415,7 @@ export async function applyUatAction(organizationId: string, actor: string, runI
   stepId?: string | null; result?: Result | null; note?: string | null; system?: System | null; operation?: Operation | null;
   state?: string | null; hours?: number | null; eventKey?: string | null; fixtureId?: string | null; scannerState?: "clean" | "pending" | "failed" | "quarantined" | null;
 }, input?: { publicBase?: string; actorRole?: string }) {
+  denyRetiredCaseCapability();
   if ((action as { kind: string }).kind === "dispatch-approved-demo-email") {
     throw err("UatActionInvalid", "This historical action is retired and cannot be replayed.");
   }
@@ -598,6 +594,7 @@ export async function applyUatAction(organizationId: string, actor: string, runI
 }
 
 export function fixturePack(run: Pick<UatRun, "runId" | "scenarioId" | "fixtureSeed">): string {
+  denyRetiredCaseCapability();
   return [
     "ONBOARDING UAT SYNTHETIC FIXTURE PACK v1", "NOT A GENUINE HR, IDENTITY, BANK, TAX, OR EMPLOYMENT RECORD", "",
     `Run: ${run.runId}`, `Scenario: ${run.scenarioId}`, `Fixture seed: ${run.fixtureSeed}`, "",
@@ -617,7 +614,7 @@ export function fixturePack(run: Pick<UatRun, "runId" | "scenarioId" | "fixtureS
 export function evidenceReport(run: ReturnType<typeof publicRun>) {
   return {
     reportVersion: "onboarding-uat-evidence.v1",
-    statement: "This is a redacted non-authoritative UAT report. Passed simulated steps do not certify vendors, authorize live cases, or establish genuine readiness. Blocked/manual/provider-dependent results remain gaps.",
+    statement: "Restricted historical acceptance evidence. This report is read-only and non-operational. Stored observations do not certify vendors, authorize live cases, or establish genuine readiness. Blocked/manual/provider-dependent results remain gaps.",
     run,
   };
 }

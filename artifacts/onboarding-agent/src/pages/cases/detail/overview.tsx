@@ -55,7 +55,7 @@ function OfflinePrivacyRestricted() {
       </div>
       <p className="text-sm font-medium text-[var(--text-normal)]">Restricted for offline samples</p>
       <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-        Privacy holds and organization retention controls are intentionally unavailable in this fictional, offline case.
+        This historical test record is read-only and permanently non-operational. Sensitive retention and existing holds still apply.
       </p>
     </div>
   );

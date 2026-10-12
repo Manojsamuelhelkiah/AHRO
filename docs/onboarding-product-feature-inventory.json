@@ -1,26 +1,25 @@
 {
-  "catalogVersion": "2026.09.15",
+  "catalogVersion": "2026.10.12",
   "baseline": "BRD Employee Onboarding (AHRO), Draft for Review, 13-Aug-2026; conflicting version labels retained",
   "generatedBy": "scripts/generate-uat-learning-deliverables.mjs",
-  "coverageRule": "Reference coverage is a scenario mapping, not an executed assertion, passing result, or live/provider approval.",
-  "executionAssertionStatus": "not-executed: execution evidence belongs in a Test Center run, not this static inventory.",
+  "coverageRule": "Historical test records are restricted, read-only and permanently non-operational. They cannot dispatch, gain authority, satisfy readiness gates or enter real outcome metrics. Static mappings are not executed assertions, source authentication, vendor certification or evidence of live readiness.",
+  "executionAssertionStatus": "not-executed",
   "denominators": {
     "featureCoverage": {
-      "denominator": 42,
-      "referenceMapped": 42,
-      "withGuide": 42,
-      "withScenario": 42,
+      "denominator": 37,
+      "referenceMapped": 37,
+      "withGuide": 35,
+      "withScenario": 0,
       "executedAssertions": 0,
-      "blocked": 2,
-      "manual": 34
+      "blocked": 0,
+      "manual": 37
     },
     "requirementCoverage": {
       "denominator": 81,
       "referenceMapped": 81,
-      "withScenario": 81,
       "executedAssertions": 0,
       "unavailableOrPolicyDependent": 28,
-      "providerSandboxBlocked": 13
+      "providerSandboxBlocked": 0
     }
   },
   "features": [
@@ -35,9 +34,7 @@
         "organization member"
       ],
       "guideTopic": "navigation",
-      "scenarioIds": [
-        "UAT-CASE-02"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Live cards are observed data; empty/loading/error state must be recorded.",
       "referenceCoverage": "mapped",
@@ -54,9 +51,7 @@
         "organization member"
       ],
       "guideTopic": "lifecycle",
-      "scenarioIds": [
-        "UAT-CASE-02"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Search results are organization-scoped.",
       "referenceCoverage": "mapped",
@@ -73,9 +68,7 @@
         "HR coordinator"
       ],
       "guideTopic": "lifecycle",
-      "scenarioIds": [
-        "UAT-STD-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Record form validation and duplicate protection.",
       "referenceCoverage": "mapped",
@@ -94,10 +87,7 @@
         "HR coordinator"
       ],
       "guideTopic": "variants",
-      "scenarioIds": [
-        "UAT-FLT-01",
-        "UAT-BATCH-02"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Batch support does not make individual exceptions disappear.",
       "referenceCoverage": "mapped",
@@ -115,10 +105,7 @@
         "hiring manager"
       ],
       "guideTopic": "lifecycle",
-      "scenarioIds": [
-        "UAT-STD-01",
-        "UAT-CASE-02"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Status labels require supporting workstream evidence.",
       "referenceCoverage": "mapped",
@@ -136,10 +123,7 @@
         "HR reviewer"
       ],
       "guideTopic": "lifecycle",
-      "scenarioIds": [
-        "UAT-STD-01",
-        "UAT-CONFIG-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Mandatory gate behavior is observed; reopening is auditable.",
       "referenceCoverage": "mapped",
@@ -157,10 +141,7 @@
         "HR reviewer"
       ],
       "guideTopic": "candidate",
-      "scenarioIds": [
-        "UAT-STD-01",
-        "UAT-DOC-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Local validation never proves authenticity or clearance.",
       "referenceCoverage": "mapped",
@@ -177,10 +158,7 @@
         "candidate"
       ],
       "guideTopic": "candidate",
-      "scenarioIds": [
-        "UAT-STD-01",
-        "UAT-DOC-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Candidate access is separate from control-tower membership.",
       "referenceCoverage": "mapped",
@@ -199,11 +177,9 @@
         "system operator"
       ],
       "guideTopic": "candidate",
-      "scenarioIds": [
-        "UAT-DOC-01"
-      ],
-      "verification": "implemented-simulated",
-      "availabilityNote": "Unavailable scanner remains unavailable; injected result is simulated.",
+      "scenarioIds": [],
+      "verification": "manual",
+      "availabilityNote": "Unavailable scanning and quarantine remain fail-closed. Only current independently verified scanner evidence can clear a gate.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
     },
@@ -220,10 +196,8 @@
         "QA coordinator"
       ],
       "guideTopic": "communications",
-      "scenarioIds": [
-        "UAT-EMAIL-01"
-      ],
-      "verification": "blocked",
+      "scenarioIds": [],
+      "verification": "manual",
       "availabilityNote": "Real email requires existing approved-mailbox controls.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
@@ -240,10 +214,7 @@
         "HR reviewer"
       ],
       "guideTopic": "lifecycle",
-      "scenarioIds": [
-        "UAT-STD-01",
-        "UAT-CASE-02"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Explanations aid review and do not supersede audit.",
       "referenceCoverage": "mapped",
@@ -261,10 +232,7 @@
         "HR reviewer"
       ],
       "guideTopic": "handoffs",
-      "scenarioIds": [
-        "UAT-STD-01",
-        "UAT-SEC-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Assignment does not grant specialist decision authority.",
       "referenceCoverage": "mapped",
@@ -281,9 +249,7 @@
         "transfer operator"
       ],
       "guideTopic": "transfers",
-      "scenarioIds": [
-        "UAT-XFR-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Transfer basis remains legally governed.",
       "referenceCoverage": "mapped",
@@ -300,9 +266,7 @@
         "transfer operator"
       ],
       "guideTopic": "transfers",
-      "scenarioIds": [
-        "UAT-XFR-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "CSV mapping/versions are implemented; legal migration approval is not implied.",
       "referenceCoverage": "mapped",
@@ -320,10 +284,7 @@
         "transfer operator"
       ],
       "guideTopic": "transfers",
-      "scenarioIds": [
-        "UAT-XFR-01",
-        "UAT-SEC-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Role membership is distinct from verified specialist authority.",
       "referenceCoverage": "mapped",
@@ -341,9 +302,7 @@
         "transfer operator"
       ],
       "guideTopic": "transfers",
-      "scenarioIds": [
-        "UAT-XFR-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "A Go decision needs observed completed evidence.",
       "referenceCoverage": "mapped",
@@ -361,10 +320,7 @@
         "analytics reviewer"
       ],
       "guideTopic": "transfers",
-      "scenarioIds": [
-        "UAT-XFR-01",
-        "UAT-ANL-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Metrics are not legal or payroll certification.",
       "referenceCoverage": "mapped",
@@ -381,9 +337,7 @@
         "organization member"
       ],
       "guideTopic": "ai",
-      "scenarioIds": [
-        "UAT-AI-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Agent status and outputs remain reviewable.",
       "referenceCoverage": "mapped",
@@ -401,9 +355,7 @@
         "owner/admin"
       ],
       "guideTopic": "ai",
-      "scenarioIds": [
-        "UAT-AI-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Drafts are advisory and use normal approval boundaries.",
       "referenceCoverage": "mapped",
@@ -420,9 +372,7 @@
         "organization member"
       ],
       "guideTopic": "policy",
-      "scenarioIds": [
-        "UAT-POLICY-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Citations/limitations must be observed for the query.",
       "referenceCoverage": "mapped",
@@ -440,9 +390,7 @@
         "verified specialist"
       ],
       "guideTopic": "policy",
-      "scenarioIds": [
-        "UAT-POLICY-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Publication/expiry actions are governed.",
       "referenceCoverage": "mapped",
@@ -460,9 +408,7 @@
         "owner/admin"
       ],
       "guideTopic": "policy",
-      "scenarioIds": [
-        "UAT-POLICY-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Pending/rejected/stale authority cannot publish.",
       "referenceCoverage": "mapped",
@@ -480,9 +426,7 @@
         "HR coordinator"
       ],
       "guideTopic": "ai",
-      "scenarioIds": [
-        "UAT-AI-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "A guardrail result is not a policy approval.",
       "referenceCoverage": "mapped",
@@ -500,11 +444,8 @@
         "owner/admin"
       ],
       "guideTopic": "systems",
-      "scenarioIds": [
-        "UAT-OPS-01",
-        "UAT-DOC-01"
-      ],
-      "verification": "blocked",
+      "scenarioIds": [],
+      "verification": "manual",
       "availabilityNote": "Configured status must be observed; no vendor sandbox is claimed.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
@@ -520,11 +461,9 @@
         "analytics reviewer"
       ],
       "guideTopic": "analytics",
-      "scenarioIds": [
-        "UAT-ANL-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
-      "availabilityNote": "Synthetic runs are excluded from historical KPI claims.",
+      "availabilityNote": "Historical test records never enter live outcome metrics. Historical business outcomes require dated source evidence.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
     },
@@ -540,10 +479,8 @@
         "analytics reviewer"
       ],
       "guideTopic": "analytics",
-      "scenarioIds": [
-        "UAT-ANL-01"
-      ],
-      "verification": "implemented-simulated",
+      "scenarioIds": [],
+      "verification": "manual",
       "availabilityNote": "Simulation inputs/assumptions are not observed facts.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
@@ -559,9 +496,7 @@
         "owner/admin"
       ],
       "guideTopic": "administration",
-      "scenarioIds": [
-        "UAT-SETTINGS-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Configuration scope requires authorized observation.",
       "referenceCoverage": "mapped",
@@ -578,9 +513,7 @@
         "owner/admin"
       ],
       "guideTopic": "administration",
-      "scenarioIds": [
-        "UAT-SETTINGS-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Files are governed inputs, not executable instructions.",
       "referenceCoverage": "mapped",
@@ -597,9 +530,7 @@
         "owner/admin"
       ],
       "guideTopic": "administration",
-      "scenarioIds": [
-        "UAT-SEC-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Membership changes do not imply specialist authority.",
       "referenceCoverage": "mapped",
@@ -617,9 +548,7 @@
         "owner/admin"
       ],
       "guideTopic": "audit",
-      "scenarioIds": [
-        "UAT-ARCH-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Audit evidence requires an authorized observed fixture.",
       "referenceCoverage": "mapped",
@@ -637,10 +566,7 @@
         "owner/admin"
       ],
       "guideTopic": "audit",
-      "scenarioIds": [
-        "UAT-ARCH-01",
-        "UAT-SEC-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Only actually offered actions are tested; no destructive reset.",
       "referenceCoverage": "mapped",
@@ -660,11 +586,7 @@
         "owner/admin"
       ],
       "guideTopic": "handoffs",
-      "scenarioIds": [
-        "UAT-XFR-01",
-        "UAT-POLICY-01",
-        "UAT-SEC-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Authority is tenant-specific and must be independently evidenced.",
       "referenceCoverage": "mapped",
@@ -681,9 +603,7 @@
         "owner/admin"
       ],
       "guideTopic": "administration",
-      "scenarioIds": [
-        "UAT-CONFIG-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "New cases receive a saved snapshot; existing cases do not silently rewrite.",
       "referenceCoverage": "mapped",
@@ -700,10 +620,7 @@
         "owner/admin"
       ],
       "guideTopic": "administration",
-      "scenarioIds": [
-        "UAT-CONFIG-01",
-        "UAT-SETTINGS-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Matching and precedence require observed configuration.",
       "referenceCoverage": "mapped",
@@ -720,10 +637,7 @@
         "owner/admin"
       ],
       "guideTopic": "administration",
-      "scenarioIds": [
-        "UAT-SETTINGS-01",
-        "UAT-FLT-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Legal/policy defaults cannot be invented.",
       "referenceCoverage": "mapped",
@@ -742,110 +656,9 @@
         "hiring manager"
       ],
       "guideTopic": "variants",
-      "scenarioIds": [
-        "UAT-SETTINGS-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
       "availabilityNote": "Enabled schedule and human completion must be observed.",
-      "referenceCoverage": "mapped",
-      "executionAssertion": "not-executed"
-    },
-    {
-      "id": "PFC-037",
-      "name": "Synthetic reset configuration",
-      "source": "product capability",
-      "entryPoints": [
-        "/settings"
-      ],
-      "roles": [
-        "owner/admin"
-      ],
-      "guideTopic": "administration",
-      "scenarioIds": [
-        "UAT-DEMO-01",
-        "UAT-SETTINGS-01"
-      ],
-      "verification": "manual",
-      "availabilityNote": "Scope/confirmation are reviewed; no live data reset.",
-      "referenceCoverage": "mapped",
-      "executionAssertion": "not-executed"
-    },
-    {
-      "id": "PFC-040",
-      "name": "UAT catalog selection and role instructions",
-      "source": "product capability",
-      "entryPoints": [
-        "/uat/"
-      ],
-      "roles": [
-        "organization member"
-      ],
-      "guideTopic": "test-center",
-      "scenarioIds": [
-        "UAT-UAT-01"
-      ],
-      "verification": "implemented-simulated",
-      "availabilityNote": "Run creation is isolated and non-authoritative.",
-      "referenceCoverage": "mapped",
-      "executionAssertion": "not-executed"
-    },
-    {
-      "id": "PFC-041",
-      "name": "UAT fixture download and synthetic-document manifest",
-      "source": "product capability",
-      "entryPoints": [
-        "/uat/"
-      ],
-      "roles": [
-        "organization member"
-      ],
-      "guideTopic": "test-center",
-      "scenarioIds": [
-        "UAT-UAT-01",
-        "UAT-DOC-01"
-      ],
-      "verification": "implemented-simulated",
-      "availabilityNote": "Fixtures are harmless and visibly fictional.",
-      "referenceCoverage": "mapped",
-      "executionAssertion": "not-executed"
-    },
-    {
-      "id": "PFC-042",
-      "name": "UAT execution, pause/resume and observed evidence",
-      "source": "product capability",
-      "entryPoints": [
-        "/uat/"
-      ],
-      "roles": [
-        "test coordinator"
-      ],
-      "guideTopic": "test-center",
-      "scenarioIds": [
-        "UAT-UAT-01"
-      ],
-      "verification": "implemented-simulated",
-      "availabilityNote": "Recorded human evidence does not fabricate backend evidence.",
-      "referenceCoverage": "mapped",
-      "executionAssertion": "not-executed"
-    },
-    {
-      "id": "PFC-043",
-      "name": "UAT run clock, normalized exchanges and evidence export",
-      "source": "product capability",
-      "entryPoints": [
-        "/uat/"
-      ],
-      "roles": [
-        "test coordinator",
-        "system operator"
-      ],
-      "guideTopic": "test-center",
-      "scenarioIds": [
-        "UAT-UAT-01",
-        "UAT-OPS-01"
-      ],
-      "verification": "implemented-simulated",
-      "availabilityNote": "Clock/exchanges never dispatch providers or change live deadlines.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
     },
@@ -860,11 +673,9 @@
         "organization member"
       ],
       "guideTopic": "navigation",
-      "scenarioIds": [
-        "UAT-UAT-01"
-      ],
+      "scenarioIds": [],
       "verification": "manual",
-      "availabilityNote": "Guide export content/version should be observed.",
+      "availabilityNote": "The guide describes current authorized operations and retained evidence; catalog coverage is not proof of execution.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
     }
@@ -872,98 +683,185 @@
   "guideSections": [
     {
       "id": "navigation",
-      "title": "Start here: roles, navigation and evidence",
+      "title": "Navigation and operational queues",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/"
+      ],
+      "summary": "Use the Control Tower for authorized operational work. Historical test records are separate, read-only and non-operational.",
+      "instructions": [
+        "Select your authorized workspace.",
+        "Review current operational queues and ownership.",
+        "Use Cases history for retained records, never as evidence of live work."
+      ],
+      "evidence": [
+        "Current workspace and scoped access",
+        "Dated operational events"
+      ],
+      "exceptions": [
+        "Shared demo identities cannot create cases or acquire real workflow authority."
+      ],
       "featureIds": [
         "PFC-001",
-        "PFC-002",
         "PFC-044"
       ],
-      "scenarioIds": [
-        "UAT-CASE-02",
-        "UAT-UAT-01"
-      ]
+      "scenarioIds": []
     },
     {
       "id": "lifecycle",
-      "title": "Standard and lateral lifecycle: Gateway A/B/C",
+      "title": "Intake and onboarding gates",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/cases"
+      ],
+      "summary": "Ordinary authenticated intake uses real case facts and explicit governance grants.",
+      "instructions": [
+        "Create a case only with current case-flow and profile-edit access.",
+        "Confirm offer acceptance through its dedicated evidence-backed gate.",
+        "Resolve mandatory workstreams before requesting final human readiness review."
+      ],
+      "evidence": [
+        "Approved policy snapshot",
+        "Source evidence and approval version",
+        "Current scoped human decision"
+      ],
+      "exceptions": [
+        "General intake does not collect free-form candidate notes or medical details.",
+        "A score or status label never substitutes for authority or safety gates."
+      ],
       "featureIds": [
+        "PFC-002",
         "PFC-003",
         "PFC-005",
         "PFC-006",
-        "PFC-007",
         "PFC-011"
       ],
-      "scenarioIds": [
-        "UAT-STD-01",
-        "UAT-CASE-02"
-      ]
+      "scenarioIds": []
     },
     {
       "id": "candidate",
-      "title": "Candidate portal, documents and confidentiality",
+      "title": "Candidate documents and Employee Vault",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/cases"
+      ],
+      "summary": "Private uploads, scanning, authenticity checks and consent are distinct controls.",
+      "instructions": [
+        "Issue candidate access only through authorized ordinary workflows.",
+        "Keep quarantined or uncertain evidence blocked.",
+        "Apply all-required evidence and fresh consent checks to Vault reuse."
+      ],
+      "evidence": [
+        "Private file references",
+        "Current scanner and source-verification receipts",
+        "Consent and reuse scope"
+      ],
+      "exceptions": [
+        "Local file checks do not prove identity or source authenticity.",
+        "Retained test portals cannot accept new uploads.",
+        "Privacy withdrawal remains independent of new collection approval."
+      ],
       "featureIds": [
         "PFC-007",
         "PFC-008",
         "PFC-009"
       ],
-      "scenarioIds": [
-        "UAT-STD-01",
-        "UAT-DOC-01"
-      ]
-    },
-    {
-      "id": "communications",
-      "title": "Communications, monitoring and recovery",
-      "featureIds": [
-        "PFC-010"
-      ],
-      "scenarioIds": [
-        "UAT-EMAIL-01",
-        "UAT-OPS-01"
-      ]
+      "scenarioIds": []
     },
     {
       "id": "handoffs",
-      "title": "Work items, approvals and human ownership",
+      "title": "Human decisions and specialist handoffs",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/approvals"
+      ],
+      "summary": "Membership, assignment and mailbox personas are not professional authority.",
+      "instructions": [
+        "Review the exact case and evidence revision.",
+        "Check current specialist role, jurisdiction and scope.",
+        "Record the accountable decision without inventing external completion."
+      ],
+      "evidence": [
+        "Scoped authority",
+        "Versioned approval",
+        "Protected audit receipt"
+      ],
+      "exceptions": [
+        "Stale decisions and historical test records cannot authorize operations."
+      ],
       "featureIds": [
         "PFC-012",
         "PFC-032"
       ],
-      "scenarioIds": [
-        "UAT-STD-01",
-        "UAT-SEC-01"
-      ]
+      "scenarioIds": []
     },
     {
       "id": "variants",
-      "title": "Case variants and early tenure",
+      "title": "Workforce context, frontline release and early tenure",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/settings"
+      ],
+      "summary": "Approved country-specific policies govern context and safety requirements.",
+      "instructions": [
+        "Confirm work country and approved policy revision.",
+        "Keep medical, safety and BGV gates independent of weighted readiness.",
+        "Record actual start and dated human follow-ups under current authority."
+      ],
+      "evidence": [
+        "Policy adoption",
+        "Independent release evidence",
+        "Actual-start revision"
+      ],
+      "exceptions": [
+        "Unapproved starter policies are proposals, not runtime authority.",
+        "Do not infer historical success from current checklists."
+      ],
       "featureIds": [
         "PFC-004",
-        "PFC-034",
-        "PFC-035",
         "PFC-036"
       ],
-      "scenarioIds": [
-        "UAT-BATCH-02",
-        "UAT-SETTINGS-01"
-      ]
-    },
-    {
-      "id": "frontline",
-      "title": "Frontline / blue-collar safety pathway",
-      "featureIds": [
-        "PFC-004",
-        "PFC-006",
-        "PFC-035"
-      ],
-      "scenarioIds": [
-        "UAT-FLT-01",
-        "UAT-DOC-01"
-      ]
+      "scenarioIds": []
     },
     {
       "id": "transfers",
-      "title": "M&A / TUPE / transfer pathway",
+      "title": "Workforce transfers",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/workforce-transfers"
+      ],
+      "summary": "Transfers require country-specific approval, source-attested execution and evidence-fenced cutover.",
+      "instructions": [
+        "Review population, legal basis and required objections.",
+        "Reconcile source and target evidence.",
+        "Obtain current independent cutover sign-offs."
+      ],
+      "evidence": [
+        "Approved country policy",
+        "Source-attested completion",
+        "Generation-bound sign-off"
+      ],
+      "exceptions": [
+        "A Go label is not payroll or legal certification."
+      ],
       "featureIds": [
         "PFC-013",
         "PFC-014",
@@ -971,62 +869,184 @@
         "PFC-016",
         "PFC-017"
       ],
-      "scenarioIds": [
-        "UAT-XFR-01"
-      ]
-    },
-    {
-      "id": "systems",
-      "title": "Systems, provider evidence and readiness",
-      "featureIds": [
-        "PFC-024",
-        "PFC-025",
-        "PFC-026"
-      ],
-      "scenarioIds": [
-        "UAT-OPS-01",
-        "UAT-STD-01"
-      ]
+      "scenarioIds": []
     },
     {
       "id": "ai",
-      "title": "AI agents, workflow drafting and guardrails",
+      "title": "AI-supported work and guardrails",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/agents"
+      ],
+      "summary": "Generated plans are advisory; explanations describe recorded evidence rather than hidden reasoning.",
+      "instructions": [
+        "Review drafts before adoption.",
+        "Verify citations and limitations.",
+        "Escalate uncertain or adverse evidence to accountable humans."
+      ],
+      "evidence": [
+        "Approved source context",
+        "Recorded limitations",
+        "Reviewed action proposal"
+      ],
+      "exceptions": [
+        "AI output never grants authority or proves an external effect."
+      ],
       "featureIds": [
         "PFC-018",
         "PFC-019",
         "PFC-023"
       ],
-      "scenarioIds": [
-        "UAT-AI-01"
-      ]
+      "scenarioIds": []
     },
     {
       "id": "policy",
-      "title": "Cited policy, library, review and expiry",
+      "title": "Policy library and grounded answers",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/hr-policy-library"
+      ],
+      "summary": "Source extracts, case evidence and policy decisions remain separate.",
+      "instructions": [
+        "Maintain drafts under scoped access.",
+        "Obtain required review before publication.",
+        "Check audience, jurisdiction, dates and source context at disclosure."
+      ],
+      "evidence": [
+        "Versioned source",
+        "Approved extract",
+        "Current publication review"
+      ],
+      "exceptions": [
+        "Retired evaluations cannot provide a current accuracy or fairness claim."
+      ],
       "featureIds": [
         "PFC-020",
         "PFC-021",
-        "PFC-022",
-        "PFC-032"
+        "PFC-022"
       ],
-      "scenarioIds": [
-        "UAT-POLICY-01"
-      ]
+      "scenarioIds": []
+    },
+    {
+      "id": "systems",
+      "title": "Provider systems and authorized channel checks",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/systems"
+      ],
+      "summary": "Separately authorized operational tests remain available; configuration alone does not prove provider execution.",
+      "instructions": [
+        "Review connector mode and approved estate.",
+        "Use explicit, authorized operational channel checks only.",
+        "Reconcile uncertain effects without automatic non-idempotent redispatch."
+      ],
+      "evidence": [
+        "Verified provider receipt",
+        "Stable effect-journal payload",
+        "Current recipient authorization"
+      ],
+      "exceptions": [
+        "Historical test records remain permanently denied dispatch.",
+        "No simulated integration is represented as genuine external work."
+      ],
+      "featureIds": [
+        "PFC-024"
+      ],
+      "scenarioIds": []
+    },
+    {
+      "id": "communications",
+      "title": "Communications and monitored replies",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/systems"
+      ],
+      "summary": "Verified transport, tenant attribution, recipient authorization and responder authority are independent.",
+      "instructions": [
+        "Check the exact case-bound reply reference.",
+        "Quarantine ambiguous attribution.",
+        "Review durable delivery status and unknown outcomes."
+      ],
+      "evidence": [
+        "Provider message id",
+        "Verified transport evidence",
+        "Case-bound correlation"
+      ],
+      "exceptions": [
+        "A shared mailbox identity alone cannot authorize a state change."
+      ],
+      "featureIds": [
+        "PFC-010"
+      ],
+      "scenarioIds": []
     },
     {
       "id": "analytics",
-      "title": "Analytics, bottlenecks and outcomes",
+      "title": "Operational outcomes and commercial assumptions",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/analytics"
+      ],
+      "summary": "Live metrics exclude historical test records. Commercial what-if estimates remain available with stated assumptions.",
+      "instructions": [
+        "Check cohort, dates, source provenance and denominator.",
+        "Distinguish observed outcomes from estimates.",
+        "Do not treat aggregate what-if means as causal forecasts or case-level SLA rates."
+      ],
+      "evidence": [
+        "Dated source evidence",
+        "Eligible real cohort",
+        "Explicit modeling assumptions"
+      ],
+      "exceptions": [
+        "Historical test activity is not business performance or readiness."
+      ],
       "featureIds": [
         "PFC-025",
         "PFC-026"
       ],
-      "scenarioIds": [
-        "UAT-ANL-01"
-      ]
+      "scenarioIds": []
     },
     {
       "id": "administration",
-      "title": "Client setup, profiles, SLA, privacy and membership",
+      "title": "Governance, privacy, retention and audit",
+      "roles": [
+        "authorized organization member",
+        "current scoped reviewer"
+      ],
+      "entryPoints": [
+        "/settings"
+      ],
+      "summary": "Sensitive access, legal holds, retention, independent audit readiness and release checks remain mandatory.",
+      "instructions": [
+        "Use scoped access reports and current authority.",
+        "Review approved lifecycle policies and legal holds.",
+        "Verify independent audit receipts before regulated release."
+      ],
+      "evidence": [
+        "Approved retention policy",
+        "Legal hold",
+        "Independent provider-verified audit receipt"
+      ],
+      "exceptions": [
+        "Tenant administration is not specialist authority.",
+        "Restricted history and protected effect journals are retained; retirement does not purge records."
+      ],
       "featureIds": [
         "PFC-027",
         "PFC-028",
@@ -1035,49 +1055,7 @@
         "PFC-034",
         "PFC-035"
       ],
-      "scenarioIds": [
-        "UAT-CONFIG-01",
-        "UAT-SETTINGS-01",
-        "UAT-SEC-01"
-      ]
-    },
-    {
-      "id": "audit",
-      "title": "Audit, archive, export and recovery",
-      "featureIds": [
-        "PFC-030",
-        "PFC-031",
-        "PFC-032"
-      ],
-      "scenarioIds": [
-        "UAT-ARCH-01",
-        "UAT-SEC-01"
-      ]
-    },
-    {
-      "id": "demo",
-      "title": "Fictional offline samples",
-      "featureIds": [
-        "PFC-037"
-      ],
-      "scenarioIds": [
-        "UAT-DEMO-01"
-      ]
-    },
-    {
-      "id": "test-center",
-      "title": "UAT Test Center: run, evidence and safe cleanup",
-      "featureIds": [
-        "PFC-040",
-        "PFC-041",
-        "PFC-042",
-        "PFC-043"
-      ],
-      "scenarioIds": [
-        "UAT-UAT-01",
-        "UAT-OPS-01",
-        "UAT-SEC-01"
-      ]
+      "scenarioIds": []
     }
   ]
 }

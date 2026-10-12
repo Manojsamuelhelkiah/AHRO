@@ -682,7 +682,7 @@ paths:
     get:
       operationId: getHrPolicyEvaluation
       tags: [hrPolicyLibrary]
-      summary: Get synthetic answer key, business review and regression history
+      summary: Read restricted historical evaluation evidence
       responses:
         "200":
           description: Tenant-scoped synthetic benchmark evidence, not an accuracy guarantee
@@ -691,12 +691,15 @@ paths:
   /policies/evaluation/review:
     post:
       operationId: reviewHrPolicyEvaluation
+      deprecated: true
+      description: Retired. Authenticated requests return 410 without mutation.
       tags: [hrPolicyLibrary]
-      summary: Record verified HR compliance review of an exact synthetic answer key
+      summary: Retired evaluation review endpoint
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyEvaluationReviewInput" } } }
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Business review recorded
           content: { application/json: { schema: { type: object, required: [review], properties: { review: { $ref: "#/components/schemas/HrPolicyEvaluationReview" } } } } }
@@ -706,12 +709,15 @@ paths:
   /policies/evaluation/drift:
     post:
       operationId: configureHrPolicyDrift
+      deprecated: true
+      description: Retired. Authenticated requests return 410; scheduled execution is disabled.
       tags: [hrPolicyLibrary]
-      summary: Separately approve bounded scheduled synthetic drift checks or stop consent
+      summary: Retired evaluation scheduling endpoint
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyDriftInput" } } }
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Durable reviewer consent recorded without provider spending
           content: { application/json: { schema: { type: object, required: [programme], properties: { programme: { $ref: "#/components/schemas/HrPolicyDriftProgramme" } } } } }
@@ -721,12 +727,15 @@ paths:
   /policies/evaluation/runs:
     post:
       operationId: runHrPolicyEvaluation
+      deprecated: true
+      description: Retired. Authenticated requests return 410 without model or provider calls.
       tags: [hrPolicyLibrary]
-      summary: Run offline replay or explicitly authorized bounded real-model evaluation
+      summary: Retired evaluation execution endpoint
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyEvaluationRunInput" } } }
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Synthetic run evidence
           content: { application/json: { schema: { type: object, required: [run], properties: { run: { $ref: "#/components/schemas/HrPolicyEvaluationRun" } } } } }
@@ -2126,14 +2135,17 @@ paths:
   /onboarding/uat/runs:
     post:
       operationId: createOnboardingUatRun
+      deprecated: true
+      description: Retired. Authenticated requests return 410 without creating records.
       tags: [onboardingUat]
-      summary: Create a tenant-scoped synthetic UAT run
+      summary: Retired acceptance-run creation endpoint
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/OnboardingUatRunInput" }
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "201":
           description: Created synthetic UAT run
           content:
@@ -2165,15 +2177,17 @@ paths:
         schema: { type: string, format: uuid }
     post:
       operationId: applyOnboardingUatRunAction
+      deprecated: true
+      description: Retired. Authenticated requests return 410 without progression or fixture execution.
       tags: [onboardingUat]
-      summary: Record a guided action, run-scoped exchange, or scoped clock advance
-      description: Simulation remains non-authoritative. The only live-email action delegates to an existing Demo Organization run with its already pinned approved volunteer, explicit confirmation, and existing monitoring; it never accepts a recipient address.
+      summary: Retired acceptance-run mutation endpoint
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/OnboardingUatRunAction" }
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Updated UAT run
           content:
@@ -2188,9 +2202,12 @@ paths:
         schema: { type: string, format: uuid }
     get:
       operationId: downloadOnboardingUatFixturePack
+      deprecated: true
+      description: Retired. Authenticated requests return 410; fixtures are not distributed.
       tags: [onboardingUat]
-      summary: Download a harmless synthetic fixture manifest
+      summary: Retired fixture-distribution endpoint
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Plain text, upload-ready fixture instructions
           content: { text/plain: { schema: { type: string } } }
@@ -3494,9 +3511,12 @@ paths:
   /onboarding/scenarios:
     get:
       operationId: listOnboardingScenarios
+      deprecated: true
+      description: Retired. Authenticated requests return 410.
       tags: [onboarding]
-      summary: List the demo scenarios (worked examples from the SME spec)
+      summary: Retired fictional-case catalog endpoint
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Scenario list
           content:
@@ -3526,13 +3546,12 @@ paths:
   /onboarding/synthetic-reset:
     get:
       operationId: previewOnboardingSyntheticReset
+      deprecated: true
+      description: Retired. Authenticated requests return 410; no reset is performed.
       tags: [onboarding]
-      summary: Preview the one-off, current-organization synthetic-case reset
-      description: >
-        Owner/admin only. Reads the explicit legacy manifest for the current
-        organization and never mutates another workspace. A ready preview is
-        required before the exact confirmation POST.
+      summary: Retired case-reset inspection endpoint
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Synthetic reset inventory and blockers
           content:
@@ -3543,13 +3562,10 @@ paths:
           description: Organization owner or admin required
     post:
       operationId: confirmOnboardingSyntheticReset
+      deprecated: true
+      description: Retired. Authenticated requests return 410; existing records are preserved.
       tags: [onboarding]
-      summary: Confirm the one-off synthetic-case reset
-      description: >
-        Owner/admin only. The exact phrase is required. This atomically
-        removes only the explicit legacy manifest rows, retains known effect
-        journal history, preserves private object-storage bytes, and inserts
-        six paused offline samples.
+      summary: Retired case-reset mutation endpoint
       requestBody:
         required: true
         content:
@@ -3557,6 +3573,7 @@ paths:
             schema:
               $ref: "#/components/schemas/OnbSyntheticResetRequest"
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Completed reset inventory
           content:
@@ -3576,8 +3593,10 @@ paths:
   /onboarding/scenarios/{key}/run:
     post:
       operationId: runOnboardingScenario
+      deprecated: true
+      description: Retired. Authenticated requests return 410 without creation or dispatch.
       tags: [onboarding]
-      summary: Launch a demo scenario — creates the case and starts orchestration asynchronously
+      summary: Retired fictional-case launch endpoint
       parameters:
         - name: key
           in: path
@@ -3585,8 +3604,9 @@ paths:
           schema:
             type: string
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "201":
-          description: Created case (orchestration runs in the background; poll the case and its events)
+          description: Legacy compatibility schema; this retired operation never returns a created case
           content:
             application/json:
               schema:
@@ -6065,8 +6085,10 @@ paths:
   /onboarding/systems/email-watch/simulate:
     post:
       operationId: simulateOnboardingWatchEmail
+      deprecated: true
+      description: Retired. Authenticated requests return 410; genuine provider callbacks remain available.
       tags: [onboarding]
-      summary: Demo helper — inject a synthetic vendor status email through the same parse-and-apply path as a real watched email
+      summary: Retired fictional vendor-status injection endpoint
       requestBody:
         required: true
         content:
@@ -6074,6 +6096,7 @@ paths:
             schema:
               $ref: "#/components/schemas/OnbWatchEmailSimulate"
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Result
           content:
@@ -6192,15 +6215,10 @@ paths:
   /onboarding/cases/{caseId}/simulation/simulate-next:
     post:
       operationId: simulateNextOnboardingCaseExchange
+      deprecated: true
       tags: [onboarding]
-      summary: Persist one bounded randomized simulation exchange
-      description: >
-        Advances exactly one simulated exchange through offer, documents, BGV,
-        payroll, access, readiness, and final simulated HR review. The sampled
-        outcome is server-owned; requestId retries replay the original sampled
-        result. expectedGenerationId and expectedVersion prevent stale writes.
-        No real recipient, readiness mutation, provider call, or outbound
-        delivery is performed.
+      summary: Retired case-progression endpoint
+      description: Authenticated requests return 410 without changing historical records.
       parameters:
         - name: caseId
           in: path
@@ -6213,6 +6231,7 @@ paths:
             schema:
               $ref: "#/components/schemas/SimulateNextOnboardingCaseExchangeInput"
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Updated simulation state and the persisted exchange
           content:
@@ -6242,17 +6261,10 @@ paths:
   /onboarding/cases/{caseId}/simulation/restart:
     post:
       operationId: restartOnboardingCaseSimulation
+      deprecated: true
       tags: [onboarding]
-      summary: Explicitly restart an eligible synthetic case simulation
-      description: >
-        Retires the current response-driven simulation generation and starts a
-        new generation at offer with version 0. The prior simulated exchanges
-        remain in the append-only Communications and case timeline audit
-        history. The operation is available only to the current registered Demo
-        Administrator for an eligible server-marked synthetic case outside UAT.
-        Generation and version preconditions fence stale requests, and requestId
-        retries replay the restart result. No case, provider, UAT, recipient, or
-        authoritative readiness state is changed.
+      summary: Retired case-restart endpoint
+      description: Authenticated requests return 410 without changing historical records.
       parameters:
         - name: caseId
           in: path
@@ -6265,6 +6277,7 @@ paths:
             schema:
               $ref: "#/components/schemas/RestartOnboardingCaseSimulationBody"
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: New simulation generation at version 0
           content:
@@ -6771,7 +6784,7 @@ paths:
       tags: [onboardingUat]
       responses:
         "200":
-          description: Governed synthetic fairness programme and live reviewer capabilities
+          description: Restricted historical evaluation evidence; execution and review mutations are retired
           content:
             application/json:
               schema:
@@ -6779,6 +6792,8 @@ paths:
   /onboarding/uat/fairness/actions:
     post:
       operationId: applyFairnessAction
+      deprecated: true
+      description: Retired. Authenticated requests return 410 without evaluation or model spending.
       tags: [onboardingUat]
       requestBody:
         required: true
@@ -6787,6 +6802,7 @@ paths:
             schema:
               $ref: "#/components/schemas/FairnessProgrammeAction"
       responses:
+        "410": { $ref: "#/components/responses/RetiredCapability" }
         "200":
           description: Updated programme; version conflicts and missing authority fail explicitly
           content:
@@ -6799,13 +6815,24 @@ paths:
       tags: [onboardingUat]
       responses:
         "200":
-          description: Synthetic observations, immutable provenance, coverage, limitations and unresolved differences
+          description: Restricted historical observations, immutable provenance, limitations and unresolved differences
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties: true
 components:
+  responses:
+    RetiredCapability:
+      description: Authenticated capability retirement. No mutation or provider execution occurs; retained records remain restricted and read-only.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, message]
+            properties:
+              code: { type: string, enum: [CASE_TEST_CAPABILITY_RETIRED] }
+              message: { type: string }
   securitySchemes:
     bearerAuth:
       type: http

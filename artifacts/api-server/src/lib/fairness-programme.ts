@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { denyRetiredCaseCapability } from "./retired-case-capabilities";
 import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, onbSettings, organizationMembershipsTable, onbGovernanceAuthorityAssignments } from "@workspace/db";
@@ -156,8 +157,8 @@ export async function getFairnessProgramme(organizationId: string, userId: strin
     let scopeApproved = false, criteriaApproved = false;
     try { currentScope(state); await liveReviews(tx, organizationId, state.scopeReviews); scopeApproved = !!state.scope; } catch (error) { if (!(error instanceof FairnessError)) throw error; }
     try { currentCriteria(state); await liveReviews(tx, organizationId, state.criteriaReviews); criteriaApproved = scopeApproved && !!state.criteria.length; } catch (error) { if (!(error instanceof FairnessError)) throw error; }
-    return { programme: state, catalog: { version: FAIRNESS_CATALOG_VERSION, scope: FAIRNESS_SCOPE, pairs: FAIRNESS_PAIRS, limitations: FAIRNESS_LIMITATIONS, identity: POLICY_SELECTION_IDENTITY },
-      capabilities: { canDefine: ["owner", "admin"].includes(membership.role), reviewerRoles, scopeApproved, criteriaApproved } };
+    return { programme: state, catalog: { version: FAIRNESS_CATALOG_VERSION, scope: "Historical evidence only", pairs: [], limitations: FAIRNESS_LIMITATIONS, identity: POLICY_SELECTION_IDENTITY },
+      capabilities: { canDefine: false, reviewerRoles: [], scopeApproved: false, criteriaApproved: false } };
   });
 }
 export function validateCriteria(pairIds: string[], criteria: Criterion[]) {
@@ -166,6 +167,7 @@ export function validateCriteria(pairIds: string[], criteria: Criterion[]) {
 }
 export async function applyFairnessAction(organizationId: string, userId: string, input: unknown,
   dependencies?: { selector: FairnessSelector }) {
+  denyRetiredCaseCapability();
   const parsed = fairnessActionSchema.safeParse(input);
   if (!parsed.success) throw new FairnessError("Invalid fairness action. Only fixed synthetic fixtures are accepted; real-data and tool inputs are forbidden.", 400);
   const action = parsed.data;

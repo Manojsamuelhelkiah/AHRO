@@ -22,3 +22,15 @@ The same ordering failure can affect referenced string `maxLength` constraints, 
 **Why:** Schema consumers may load generated source directly rather than a server bundle, so a bundled server and a previously passing typecheck do not prove that every consumer can import it safely after regeneration or formatting.
 
 **How to apply:** Smoke-import the generated Zod source with the same source loader used by browser regression after code generation. Do not fix ordering by hand in generated files.
+
+## Validate the contract before generation
+
+Parse OpenAPI YAML before running Orval, especially after adding deprecation or
+retirement responses to operations with existing descriptions.
+
+**Why:** Duplicate YAML keys can fail parsing after Orval has already cleaned
+generated consumer directories, leaving the workspace temporarily without
+generated modules. Fix the source and regenerate; do not hand-edit consumers.
+
+**How to apply:** Run the existing YAML parser as a cheap preflight, then generate
+all consumers from the current contract, including concurrent changes.

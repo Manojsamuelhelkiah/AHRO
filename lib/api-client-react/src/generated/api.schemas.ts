@@ -10586,6 +10586,8 @@ export interface StandardOperationsView {
   manualFulfillment: StandardOperationsViewManualFulfillmentItem[];
 }
 
+export type RetiredCapabilityResponseCode = typeof RetiredCapabilityResponseCode[keyof typeof RetiredCapabilityResponseCode];
+
 export type GetGovernanceAuthorityOptions200MembersItemRole = typeof GetGovernanceAuthorityOptions200MembersItemRole[keyof typeof GetGovernanceAuthorityOptions200MembersItemRole];
 
 
@@ -11171,3 +11173,12 @@ export type ListSensitiveLifecycleDeletionJobs200 = {
 
 export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
 
+
+export const RetiredCapabilityResponseCode = {
+  CASE_TEST_CAPABILITY_RETIRED: 'CASE_TEST_CAPABILITY_RETIRED',
+} as const;
+
+export type RetiredCapabilityResponse = {
+  code: RetiredCapabilityResponseCode;
+  message: string;
+};
