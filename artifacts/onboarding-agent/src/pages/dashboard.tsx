@@ -68,7 +68,7 @@ export function DashboardPage() {
     return { active, completed, blocked, humanReview, atRisk, autonomousPct, autonomousSplit };
   }, [cases, approvals, approvalsQ.isSuccess]);
 
-  const gateMetrics = useMemo(() => {
+  const stageMetrics = useMemo(() => {
     const active = cases.filter(isActive);
     const agg = {
       a: { pending: 0, 'human-review': 0, blocked: 0 },
@@ -129,7 +129,7 @@ export function DashboardPage() {
       {casesQ.isError ? (
         <SectionError label="Operational metrics unavailable" onRetry={() => casesQ.refetch()} />
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div aria-label="Dashboard summary" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           <KpiCard loading={kpisLoading} title="Active Cases" value={metrics.active.length} context="Across all HRO domains" icon={Layers} tone="indigo" />
           <KpiCard
             loading={kpisLoading}
@@ -163,6 +163,9 @@ export function DashboardPage() {
             icon={AlertOctagon}
             tone={metrics.blocked.length > 0 ? 'red' : 'green'}
           />
+          <StageSummaryCard loading={casesQ.isLoading} title="Offer Intake" metrics={stageMetrics.a} />
+          <StageSummaryCard loading={casesQ.isLoading} title="Background Checks" metrics={stageMetrics.b} />
+          <StageSummaryCard loading={casesQ.isLoading} title="Day-1 Readiness" metrics={stageMetrics.c} />
         </div>
       )}
 
@@ -189,26 +192,6 @@ export function DashboardPage() {
             </>
           )}
         </div>
-        )}
-      </section>
-
-      {/* Gateways */}
-      <section aria-labelledby="gateways-heading">
-        <SectionHeading id="gateways-heading" title="Onboarding Gateways" subtitle="Active cases moving through preboarding control points." />
-        {casesQ.isError ? (
-          <div className="mt-3"><SectionError label="Gateways unavailable" onRetry={() => casesQ.refetch()} /></div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-            {casesQ.isLoading ? (
-              Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} height={100} />)
-            ) : (
-              <>
-                <GatewayCard title="Gateway A: Offer & Intake" metrics={gateMetrics.a} />
-                <GatewayCard title="Gateway B: Background Checks" metrics={gateMetrics.b} />
-                <GatewayCard title="Gateway C: Day-1 Readiness" metrics={gateMetrics.c} />
-              </>
-            )}
-          </div>
         )}
       </section>
 
@@ -477,24 +460,28 @@ function AgentCard({ name, state, stateDescription, workload }: { name: string; 
   );
 }
 
-function GatewayCard({ title, metrics }: { title: string; metrics: { pending: number; 'human-review': number; blocked: number; } }) {
+function StageSummaryCard({ title, metrics, loading }: { title: string; metrics: { pending: number; 'human-review': number; blocked: number; }; loading?: boolean }) {
   return (
-    <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="shadow-sm flex flex-col gap-3">
-      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</div>
-      <div className="flex gap-4">
+    <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="min-w-0 shadow-sm hover:border-[var(--border-strong)] transition-colors flex flex-col gap-3">
+      <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-secondary)', fontWeight: 700 }}>{title}</div>
+      {loading ? (
+        <div role="status" aria-label={`${title} loading`} className="animate-pulse rounded" style={{ height: '44px', backgroundColor: 'var(--surface-alt)' }} />
+      ) : (
+      <div className="grid grid-cols-3 gap-2">
         <div className="flex flex-col">
           <span style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--primary)' }}>{metrics.pending}</span>
-          <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', fontWeight: 600 }}>Pending</span>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>Pending</span>
         </div>
         <div className="flex flex-col">
           <span style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--status-amber)' }}>{metrics['human-review']}</span>
-          <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', fontWeight: 600 }}>Review</span>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>Review</span>
         </div>
         <div className="flex flex-col">
           <span style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--status-red)' }}>{metrics.blocked}</span>
-          <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', fontWeight: 600 }}>Blocked</span>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>Blocked</span>
         </div>
       </div>
+      )}
     </Card>
   );
 }
