@@ -69,6 +69,7 @@ import {
 } from "./decision-authority";
 import { evaluateStoredCaseGovernanceGate } from "./governance-runtime";
 import { withCaseDerivedLifecycleWrite } from "./sensitive-lifecycle";
+import { isSeparationOrLegacyExit } from "./separation-isolation";
 type CaseRow = typeof onbCases.$inferSelect;
 
 export function checkpointSkipsPlanApproval(checkpoint: string | null | undefined): boolean {
@@ -243,6 +244,7 @@ async function getCase(caseId: number): Promise<CaseRow> {
     scope ? eq(onbCases.organizationId, scope.organizationId) : undefined,
   ));
   if (!row) throw new Error(`case ${caseId} not found`);
+  if (isSeparationOrLegacyExit(row)) throw new Error("Separation and legacy exit requests cannot enter onboarding orchestration.");
   return row;
 }
 
@@ -1336,6 +1338,7 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${tenant.organizationId}))`);
     const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
     if (!c) return false;
+    if (isSeparationOrLegacyExit(c)) return false;
     if (isRetiredControllerCase(c)) return false;
     // Enrollment is additive: a legacy complete case must not be replayed by
     // the approval recovery worker merely because it has an old approved row.
@@ -1776,7 +1779,7 @@ export async function reconcileDecidedApprovals(
   const claimed = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${tenant.organizationId}))`);
     const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
-    if (!c || c.orchestrationStatus !== "waiting-approval") return null;
+    if (!c || isSeparationOrLegacyExit(c) || c.orchestrationStatus !== "waiting-approval") return null;
     const legacyNullCheckpoint = c.orchestrationCheckpoint === null;
     let resumeAction =
       c.orchestrationCheckpoint === "waiting:plan"

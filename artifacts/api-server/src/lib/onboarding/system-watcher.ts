@@ -1,3 +1,4 @@
+import { onboardingCaseCandidateSql } from "./separation-isolation";
 import { db } from "@workspace/db";
 import { runPolicyDriftTick } from "../hr-policy-evaluation";
 import { randomUUID } from "node:crypto";
@@ -990,6 +991,7 @@ export async function recoverUntrackedCaseSystems(
             and coalesce(${onbCases.orchestrationStatus}, '') <> 'checklist-blocked'
             and not exists (select 1 from ${onbSystemChecks} sc where sc.case_id = ${onbCases.id} and sc.organization_id = ${onbCases.organizationId})`,
         ordinaryCaseSql(onbCases.organizationId, onbCases.id),
+        onboardingCaseCandidateSql(),
         onlyCaseId === undefined ? undefined : eq(onbCases.id, onlyCaseId),
       ),
     );
@@ -1023,6 +1025,7 @@ export async function recoverUntrackedCaseSystems(
         // Repeat the UAT exclusion in the claim itself so a durable UAT run
         // written after selection cannot increment orchestration tokens.
         ordinaryCaseSql(onbCases.organizationId, onbCases.id),
+        onboardingCaseCandidateSql(),
         or(
           sql`${onbCases.orchestrationClaimOwner} is null`,
           sql`${onbCases.orchestrationClaimUntil} <= now()`,
@@ -1213,6 +1216,7 @@ export async function recoverConfirmedOfferAcceptanceOrchestrations(): Promise<v
     eq(onbCases.offerAcceptanceComplete, true),
     eq(onbCases.orchestrationStatus, "idle"),
     eq(onbCases.orchestrationCheckpoint, "offer-accepted"),
+    onboardingCaseCandidateSql(),
   ));
   if (rows.length === 0) return;
   const { startOrchestration } = await import("./engine");

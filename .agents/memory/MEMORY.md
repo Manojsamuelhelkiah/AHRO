@@ -80,3 +80,4 @@
 - [Reviewer notification boundaries](reviewer-notification-boundaries.md) — private in-app drift alerts first; external delivery needs separate verified binding and never grants model spending.
 - [Separate UAT admission](uat-admission-boundary.md) — reuse existing accounts but require fresh UAT authentication; neither demo tickets nor login grant domain authority.
 - [Administrator viewing agreement](administrator-viewing-agreement.md) — active, verified Super Admin may read client records; professional authority and employee-owned consent remain separate.
+- [Offboarding specification boundary](offboarding-specification-boundary.md) — the user will supply closure section 4.6 later; operational preparation must not imply finalization.

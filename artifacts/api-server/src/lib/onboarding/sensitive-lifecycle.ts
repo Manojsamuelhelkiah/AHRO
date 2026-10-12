@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isSeparationOrLegacyExit } from "./separation-isolation";
 import { withHroOrganizationContext, withHroCaseContext } from "../hro-context/manager";
 import { currentHroContext } from "../hro-context/core";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -364,6 +365,7 @@ export async function assertCaseDerivedLifecycleWriteAllowedInTransaction(
       eq(onbCases.id, input.caseId),
   )).for("update");
   if (!caseRow) throw new SensitiveLifecycleValidationError("Case-derived sensitive write requires a current tenant case.");
+  if (isSeparationOrLegacyExit(caseRow)) throw new SensitiveLifecycleConflictError("Separation and historical exit requests require the dedicated separation lifecycle.");
   const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
     organizationId: input.organizationId,
     jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),

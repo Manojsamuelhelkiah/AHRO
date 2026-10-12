@@ -9,6 +9,8 @@ import { HRO_BATCH_TEMPLATES, findHroTemplate, validateHroRows, canonicalIntakeH
 import { parseHroSpreadsheet, hroUploadMultipart } from "../lib/onboarding/hro-batch-files";
 import catalogRouter from "./onboarding-batch-catalog";
 import { evaluateCaseDerivedLifecycleGateInTransaction, withSensitiveLifecycleFence } from "../lib/onboarding/sensitive-lifecycle";
+import { createSeparations } from "../lib/offboarding/service";
+import { SeparationError } from "../lib/offboarding/model";
 
 const router: IRouter = Router();
 const upload = hroUploadMultipart;
@@ -83,6 +85,20 @@ router.post("/onboarding/batch-upload", async (req, res, next) => {
   if (!validated.valid) { res.status(400).json({ message: "Fix the template validation errors before creating any cases.", issues: validated.issues }); return; }
   if (typeof name !== "string" || !name.trim() || name.trim().length > 120 || /[\u0000-\u001f]/.test(name)) { res.status(400).json({ message: "Enter a batch name of 1–120 plain-text characters." }); return; }
   const definition = findHroTemplate(templateId)!;
+  if (definition.id === "offboarding-separation") {
+    try {
+      const results = await createSeparations(getOrganizationId(req), req.authUserId!, {
+        entries: validated.rows.map(row => ({ sourceReference: row.request_id, facts: {
+          employeeId: row.employee_id, workerName: row.worker_name, exitType: row.separation_type, exitReason: row.exit_reason,
+          lastWorkingDay: row.last_working_date, terminationDate: row.termination_date, timeZone: row.time_zone,
+          role: row.role, department: row.department, country: row.work_country, legalEntity: row.legal_entity, workerCategory: row.worker_category, manager: row.manager_name,
+        } })),
+      }, "batch");
+      // Existing uploader consumes this envelope; no onboarding batch-release record is created.
+      res.status(201).json({ batchId: `separation:${canonicalIntakeHash(validated.rows)}`, name: name.trim(), retry: results.every(r => r.status === "deduplicated"), results: results.map((r, i) => ({ personKey: validated.rows[i].request_id, caseId: r.caseId, status: r.status === "deduplicated" ? "reconciled" : "created", profileId: "offboarding-review-pending", profileVersion: 0 })), lifecycle: "separation" });
+    } catch (error) { if (error instanceof SeparationError) res.status(error.status).json({ message: error.message }); else next(error); }
+    return;
+  }
   const people = validated.rows.map(row => personForRequest(definition, row)).sort((a, b) => a.personKey.localeCompare(b.personKey));
   res.locals.hroBatchPeople = people;
   req.body = { name: name.trim(), idempotencyKey: `hro:${canonicalIntakeHash({ name: name.trim(), people })}`, people };

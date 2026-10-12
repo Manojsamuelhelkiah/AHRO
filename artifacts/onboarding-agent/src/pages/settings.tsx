@@ -996,7 +996,8 @@ const AUTHORITY_SCOPE_OPTIONS = [
   'hr-compliance-approve', 'legal-approve', 'occupational-health-approve',
   'site-fulfillment-approve', 'payroll-approve', 'fraud-control-approve', 'manager-approve',
   'application-owner-approve', 'security-approve', 'it-security-approve',
-  'authority-administration', 'safety-approve'
+  'authority-administration', 'safety-approve',
+  'hrbp-approve', 'hr-ethics-approve', 'delivery-head-approve', 'finance-approve'
 ];
 
 type AuthorityState = {

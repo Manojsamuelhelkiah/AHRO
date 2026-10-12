@@ -5,6 +5,403 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface SeparationFacts {
+  employeeId: string;
+  workerName: string;
+  exitType: string;
+  exitReason: string;
+  lastWorkingDay: string;
+  terminationDate: string;
+  timeZone: string;
+  role: string;
+  department: string;
+  country: string;
+  legalEntity: string;
+  workerCategory: string;
+  manager: string;
+}
+
+export interface SeparationPublicFacts {
+  employeeId: string;
+  workerName: string;
+  lastWorkingDay: string;
+  terminationDate: string;
+  timeZone: string;
+  role: string;
+  department: string;
+  country: string;
+  legalEntity: string;
+  workerCategory: string;
+  manager: string;
+}
+
+export interface SeparationIntake {
+  sourceReference: string;
+  facts: SeparationFacts;
+}
+
+export interface SeparationBatch {
+  entries: SeparationIntake[];
+}
+
+export interface SeparationIntakeResult {
+  caseId: number;
+  status: string;
+  conflict: boolean;
+}
+
+export type SeparationSummaryLifecycle = typeof SeparationSummaryLifecycle[keyof typeof SeparationSummaryLifecycle];
+
+
+export const SeparationSummaryLifecycle = {
+  separation: 'separation',
+} as const;
+
+export interface SeparationSummary {
+  id: number;
+  version: number;
+  generation: number;
+  status: string;
+  facts: SeparationPublicFacts;
+  closureBlocker: string;
+  lifecycle: SeparationSummaryLifecycle;
+}
+
+export type SeparationReceiptProvenance = typeof SeparationReceiptProvenance[keyof typeof SeparationReceiptProvenance];
+
+
+export const SeparationReceiptProvenance = {
+  'human-source-attested': 'human-source-attested',
+} as const;
+
+export interface SeparationReceipt {
+  actor: string;
+  authorityId: string;
+  authorityRevision: number;
+  scope: string;
+  reference: string;
+  generation: number;
+  recordedAt: string;
+  provenance: SeparationReceiptProvenance;
+}
+
+export interface SeparationFlags {
+  privileged: boolean;
+  highRisk: boolean;
+  clientFacing: boolean;
+  peopleManager: boolean;
+  statutory: boolean;
+}
+
+export type SeparationTaskStatus = typeof SeparationTaskStatus[keyof typeof SeparationTaskStatus];
+
+
+export const SeparationTaskStatus = {
+  pending: 'pending',
+  blocked: 'blocked',
+  uncertain: 'uncertain',
+  verified: 'verified',
+} as const;
+
+export type SeparationTaskDetails = { [key: string]: unknown };
+
+export interface SeparationTask {
+  id: string;
+  activity: string;
+  label: string;
+  stream: string;
+  scope: string;
+  /** @nullable */
+  owner: string | null;
+  prerequisites: string[];
+  /** @nullable */
+  dueAt: string | null;
+  /** @nullable */
+  notBeforeAt: string | null;
+  status: SeparationTaskStatus;
+  evidence?: SeparationReceipt | null;
+  details: SeparationTaskDetails;
+  executionMode: string;
+  blockers: string[];
+}
+
+export interface SeparationSource {
+  channel: string;
+  sourceReference: string;
+  provenance: string;
+  actor: string;
+  facts: SeparationFacts;
+}
+
+export type SeparationDetailStateGatewayA = typeof SeparationDetailStateGatewayA[keyof typeof SeparationDetailStateGatewayA];
+
+
+export const SeparationDetailStateGatewayA = {
+  pending: 'pending',
+  clear: 'clear',
+  restricted: 'restricted',
+} as const;
+
+export type SeparationDetailStateSettlementVersionsItem = { [key: string]: unknown };
+
+export type SeparationDetailState = {
+  gatewayA: SeparationDetailStateGatewayA;
+  /** @nullable */
+  classification?: string | null;
+  /** @nullable */
+  urgency: string | null;
+  flags?: SeparationFlags | null;
+  sensitiveTriggers: string[];
+  conflict: boolean;
+  holds: string[];
+  /** @nullable */
+  policyId?: string | null;
+  /** @nullable */
+  policyVersion?: number | null;
+  policyCurrent: boolean;
+  restrictedManual?: boolean;
+  tasks: SeparationTask[];
+  decisions: SeparationReceipt[];
+  settlementVersions: SeparationDetailStateSettlementVersionsItem[];
+  /** @nullable */
+  pauseReason?: string | null;
+};
+
+export type SeparationCheckpointState = { [key: string]: unknown };
+
+/**
+ * Private revision history. Only current all-sensitive-field readers with the corresponding verified specialist authorities can read source facts and opaque state.
+ */
+export interface SeparationCheckpoint {
+  version: number;
+  generation: number;
+  status: string;
+  actor: string;
+  action: string;
+  recordedAt: string;
+  facts: SeparationFacts;
+  state: SeparationCheckpointState;
+}
+
+export type SeparationSettlementReviewItems = {
+  basePay?: number;
+  assetRecovery?: number;
+  relocationRecovery?: number;
+  noticeAdjustment?: number;
+  statutory?: number;
+  equity?: number;
+  other?: number;
+};
+
+/**
+ * Payroll-authorized fixed numeric projection. Does not disclose opaque calculation references, legal findings or narratives.
+ */
+export interface SeparationSettlementReview {
+  revision: number;
+  currency: string;
+  items: SeparationSettlementReviewItems;
+  recordedAt: string;
+  authorityCurrent: boolean;
+}
+
+export type SeparationDetail = SeparationSummary & ({
+  privateVisible: boolean;
+  privateFacts?: SeparationFacts | null;
+  sources: SeparationSource[];
+  history: SeparationCheckpoint[];
+  settlementReview: SeparationSettlementReview[];
+  finalizationAvailable: false;
+  gatewayC: string;
+  activity12: string;
+  state: SeparationDetailState;
+});
+
+/**
+ * Disabled future interface only. Disclosure requires an approved closure specification, reviewed cohort suppression and privacy policy; no threshold or eligibility is inferred now.
+ */
+export const SeparationFutureAnalyticsContractValue = {
+  enabled: false,
+  closureSpecificationApprovedRequired: true,
+  cohortSuppressionReviewRequired: true,
+  privacyReviewRequired: true,
+} as const;
+export type SeparationFutureAnalyticsContract = typeof SeparationFutureAnalyticsContractValue;
+
+export type SeparationActionAction = typeof SeparationActionAction[keyof typeof SeparationActionAction];
+
+
+export const SeparationActionAction = {
+  screen: 'screen',
+  'hrbp-reconcile': 'hrbp-reconcile',
+  classify: 'classify',
+  'adopt-policy': 'adopt-policy',
+  'emergency-security-plan': 'emergency-security-plan',
+  pause: 'pause',
+  'sensitive-flag': 'sensitive-flag',
+  'context-change': 'context-change',
+  'legal-hold': 'legal-hold',
+  'hrbp-disposition': 'hrbp-disposition',
+  'settlement-version': 'settlement-version',
+  assign: 'assign',
+  'task-evidence': 'task-evidence',
+  'task-blocked': 'task-blocked',
+  finalize: 'finalize',
+} as const;
+
+export type SeparationActionUrgency = typeof SeparationActionUrgency[keyof typeof SeparationActionUrgency];
+
+
+export const SeparationActionUrgency = {
+  Standard: 'Standard',
+  Elevated: 'Elevated',
+  High: 'High',
+} as const;
+
+export type SeparationActionDisposition = typeof SeparationActionDisposition[keyof typeof SeparationActionDisposition];
+
+
+export const SeparationActionDisposition = {
+  cancel: 'cancel',
+  'convert-to-transfer': 'convert-to-transfer',
+  resume: 'resume',
+} as const;
+
+export type SeparationActionItems = {[key: string]: number};
+
+export type SeparationActionProvenance = typeof SeparationActionProvenance[keyof typeof SeparationActionProvenance];
+
+
+export const SeparationActionProvenance = {
+  'human-source-attested': 'human-source-attested',
+} as const;
+
+export type SeparationActionDetails = { [key: string]: unknown };
+
+export interface SeparationAction {
+  action: SeparationActionAction;
+  expectedVersion: number;
+  reference: string;
+  sensitiveTriggers?: string[];
+  facts?: SeparationFacts;
+  confirmed?: boolean;
+  classification?: string;
+  urgency?: SeparationActionUrgency;
+  flags?: SeparationFlags;
+  policyId?: string;
+  policyVersion?: number;
+  disposition?: SeparationActionDisposition;
+  items?: SeparationActionItems;
+  currency?: string;
+  rulesReference?: string;
+  taskId?: string;
+  owner?: string;
+  uncertain?: boolean;
+  provenance?: SeparationActionProvenance;
+  simulated?: boolean;
+  details?: SeparationActionDetails;
+}
+
+export interface SeparationActionResult {
+  caseId: number;
+  version: number;
+  status: string;
+  closureBlocker: string;
+}
+
+export type SeparationPolicyObligationsItem = {
+  id: string;
+  label: string;
+  stream: string;
+  scope: string;
+  prerequisites: string[];
+  dueOffsetDays: number;
+};
+
+export interface SeparationPolicy {
+  country: string;
+  role: string;
+  workerCategory: string;
+  timeZone: string;
+  endOfLwd: string;
+  rulesReference: string;
+  retentionReference: string;
+  obligations: SeparationPolicyObligationsItem[];
+  defaultAssets: string[];
+}
+
+export interface SeparationPolicyRecord {
+  id: string;
+  version: number;
+  policy: SeparationPolicy;
+  status: string;
+  approval?: SeparationReceipt;
+  createdBy: string;
+}
+
+export interface SeparationPolicyProposal {
+  id?: string;
+  expectedVersion: number;
+  policy: SeparationPolicy;
+}
+
+export type SeparationPolicyDecisionDecision = typeof SeparationPolicyDecisionDecision[keyof typeof SeparationPolicyDecisionDecision];
+
+
+export const SeparationPolicyDecisionDecision = {
+  approve: 'approve',
+  withdraw: 'withdraw',
+} as const;
+
+export interface SeparationPolicyDecision {
+  decision: SeparationPolicyDecisionDecision;
+  reference: string;
+}
+
+export interface SeparationMailboxConfiguration {
+  allowedSenders: string[];
+  reference: string;
+}
+
+export interface SeparationMailboxIngress {
+  id: string;
+  token: string;
+  allowedSenders: string[];
+  enabled: number;
+}
+
+export type SeparationMailboxReadinessChannel = { [key: string]: unknown };
+
+export type SeparationMailboxReadinessMonitor = { [key: string]: unknown };
+
+export interface SeparationMailboxReadiness {
+  configurations: SeparationMailboxIngress[];
+  channel: SeparationMailboxReadinessChannel;
+  monitor: SeparationMailboxReadinessMonitor;
+  attachmentPolicy: string;
+  provenance: string;
+}
+
+export type SeparationMailboxRequestFields = {[key: string]: string};
+
+export type SeparationMailboxRequestAttachmentsItem = { [key: string]: unknown };
+
+export interface SeparationMailboxRequest {
+  id: string;
+  sender: string;
+  fields: SeparationMailboxRequestFields;
+  status: string;
+  /** @nullable */
+  caseId?: number | null;
+  providerMessageId: string;
+  attachments: SeparationMailboxRequestAttachmentsItem[];
+  missingFields: string[];
+}
+
+export interface SeparationMailboxConversion {
+  facts: SeparationFacts;
+  attachmentsReviewed?: boolean;
+}
+
 export interface UatSignInChallenge {
   expiresAt: string;
 }

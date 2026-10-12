@@ -378,6 +378,17 @@ try {
 const app = express();
 app.use(cookieParser());
 app.use(express.json());
+const { seedOffboardingBrowserFixture } = await import("./offboarding-browser-fixture.mjs");
+const offboardingFixture = await seedOffboardingBrowserFixture(dbPackage, suffix);
+app.post("/api/test/offboarding-session", (req, res) => {
+  const profile = req.body?.profile;
+  const user = { "offboarding-operator": offboardingFixture.actor, "offboarding-legal": offboardingFixture.legal, "offboarding-viewer": offboardingFixture.viewer }[profile];
+  if (!user) { res.status(403).json({ message: "Unknown isolated offboarding fixture" }); return; }
+  const session = `${suffix}.${randomUUID()}`;
+  sessions.set(session, user);
+  res.cookie("browser_e2e_session", session, { httpOnly: true, sameSite: "lax", secure: false, path: "/" });
+  res.json({ profile, organizationId: offboardingFixture.org, userId: user, providerBoundary: "deny-external-providers" });
+});
 
 app.get("/api/test/ready", (_req, res) => {
   res.json({ ready: true, providerBoundary: "deny-external-providers" });

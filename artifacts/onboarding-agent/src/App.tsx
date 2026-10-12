@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { pinOrganizationIdForPage } from '@workspace/api-client-react';
-import { ClerkProvider, SignIn, SignUp, Show } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -42,6 +41,12 @@ import { HrPolicyLibraryDetailPage } from './pages/hr-policy-library/detail';
 import { AuditPage } from './pages/audit';
 import { PolicyReviewPage } from './pages/policy-review';
 import { LearningGuidePage } from './pages/learning-guide';
+import { ClerkProvider, SignIn, SignUp, Show, useUser } from '@clerk/react';
+import { SeparationsListPage } from './pages/cases/separations/list';
+import { SeparationNewPage } from './pages/cases/separations/new';
+import { SeparationIntakePage } from './pages/cases/separations/intake';
+import { SeparationPoliciesPage } from './pages/cases/separations/policies';
+import { SeparationDetailPage } from './pages/cases/separations/detail';
 
 const queryClient = new QueryClient();
 
@@ -174,11 +179,12 @@ function HomeRoute() {
 }
 
 function Protected({ children }: { children: ReactNode }) {
+  const { user } = useUser();
   return (
     <>
       <Show when="signed-in">
         <OrganizationBootstrapGate>
-          <AppShell>{children}</AppShell>
+          <AppShell key={user?.id ?? 'signed-out'}>{children}</AppShell>
         </OrganizationBootstrapGate>
       </Show>
       <Show when="signed-out">
@@ -340,6 +346,11 @@ function Router() {
       <Route path="/cases">
         <Protected><CasesPage /></Protected>
       </Route>
+      <Route path="/cases/separations"><Protected><SeparationsListPage /></Protected></Route>
+      <Route path="/cases/separations/new"><Protected><SeparationNewPage /></Protected></Route>
+      <Route path="/cases/separations/intake"><Protected><SeparationIntakePage /></Protected></Route>
+      <Route path="/cases/separations/policies"><Protected><SeparationPoliciesPage /></Protected></Route>
+      <Route path="/cases/separations/:caseId"><Protected><SeparationDetailPage /></Protected></Route>
       <Route path="/cases/:id">
         <Protected><CaseDetailPage /></Protected>
       </Route>

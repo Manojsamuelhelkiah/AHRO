@@ -22,7 +22,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { customFetch } from '@workspace/api-client-react';
 import { useListLifecycleHolds } from '../../hooks/use-privacy-api';
-import { Link } from 'wouter';
+import { Link, Redirect } from 'wouter';
 import { Presentation, AlertTriangle } from 'lucide-react';
 
 import { useUser } from '@clerk/react';
@@ -233,6 +233,8 @@ export function CaseDetailPage() {
   }
 
   if (!c) return <div className="p-8 text-center text-[var(--status-red)] font-bold">Case not found.</div>;
+
+  if (c.hireType === 'separation') return <Redirect to={`/cases/separations/${caseId}`} />;
 
   const uatCoverageSample = isDemoCoverageCase(c);
 

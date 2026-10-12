@@ -395,6 +395,7 @@ export function CasesPage() {
             <FlaskConical className="h-4 w-4" />
             {isSeeding ? 'Adding Demo samples…' : !isDevelopmentDemo ? 'Demo samples only' : missingSyntheticKeys.length === 0 ? 'Demo set ready' : `Add Demo set (${missingSyntheticKeys.length})`}
           </Button>
+          <Link href="/cases/separations"><Button variant="outline" className="gap-2" data-testid="link-separations">Separations</Button></Link>
           <Button onClick={() => setShowNew(!showNew)} className="gap-2">
             <Plus className="h-4 w-4" /> New Case
           </Button>

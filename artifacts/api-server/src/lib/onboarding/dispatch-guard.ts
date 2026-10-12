@@ -5,6 +5,7 @@ import { db, onbCases, onbEffectJournal } from "@workspace/db";
 import { isSyntheticOfflineCase, isUatRunIsolatedCase, sampleCandidateEmailEligible } from "./synthetic-offline";
 import { isRetiredControllerCase } from "./controller-retirement";
 import { getUatCaseIsolation } from "./uat-isolation";
+import { isSeparationOrLegacyExit } from "./separation-isolation";
 
 type DispatchGuardContext = {
   caseId: number;
@@ -129,6 +130,7 @@ export async function withCaseDispatchGuard<T>(
     .from(onbCases)
     .where(eq(onbCases.id, caseId));
   if (!candidate) return undefined;
+  if (isSeparationOrLegacyExit(candidate)) return undefined;
   if (isRetiredControllerCase(candidate)) return undefined;
   // Run ownership is an independent fence for a damaged/migrated case whose
   // scenario key is unavailable. Do not create the guard/effect marker.
@@ -155,6 +157,7 @@ export async function withCaseDispatchGuard<T>(
       ))
       .for("key share");
     if (!caseRow) return { kind: "missing" as const };
+    if (isSeparationOrLegacyExit(caseRow)) return { kind: "missing" as const };
     if (isRetiredControllerCase(caseRow)) return { kind: "missing" as const };
     if ((isUatRunIsolatedCase(caseRow) || isSyntheticOfflineCase(caseRow)) &&
       !(options.operation === "candidate-email" && sampleCandidateEmailEligible(caseRow))) {

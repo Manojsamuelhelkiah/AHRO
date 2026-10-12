@@ -13,6 +13,8 @@ import workbookRouter from "./workbook";
 import sensitivityRouter from "./sensitivity";
 import slideDeckRouter from "./slide-deck";
 import onboardingRouter from "./onboarding";
+import offboardingRouter from "./offboarding";
+import { isSeparationOrLegacyExit } from "../lib/onboarding/separation-isolation";
 import onboardingCaseSimulationRouter from "./onboarding-case-simulation";
 import onboardingChecklistProfileDraftRouter from "./onboarding-checklist-profile-draft";
 import onboardingBatchIntakeRouter from "./onboarding-batch-intake";
@@ -93,10 +95,15 @@ router.use(hroRequestContext);
 // onboarding mutation fail-closed, including direct calls bypassing the UI.
 // DELETE retains the existing hold-aware deletion path.
 router.use("/onboarding/cases/:caseId", async (req, res, next) => {
-  if (["GET", "HEAD", "OPTIONS", "DELETE"].includes(req.method)) { next(); return; }
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) { next(); return; }
   const caseId = Number(req.params.caseId);
   if (!Number.isSafeInteger(caseId) || caseId < 1) { next(); return; }
-  const [record] = await db.select({ hireType: onbCases.hireType }).from(onbCases).where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, req.organizationId!))).limit(1);
+  const [record] = await db.select({ hireType: onbCases.hireType, processPolicySnapshot: onbCases.processPolicySnapshot }).from(onbCases).where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, req.organizationId!))).limit(1);
+  if (record && isSeparationOrLegacyExit(record)) {
+    res.status(409).json({ message: "Separation cases require the dedicated offboarding lifecycle. Final closure blocked: section 4.6 requirements pending. Historical exit-labelled records remain review-only." });
+    return;
+  }
+  if (req.method === "DELETE") { next(); return; }
   if (record?.hireType === "service-request") {
     const access = await db.transaction(tx => resolveEffectiveAccessInTransaction(tx, {
       organizationId: req.organizationId!, principalType: "human", principalId: req.authUserId!, caseId, purpose: "held-service-request-mutation",
@@ -109,6 +116,7 @@ router.use("/onboarding/cases/:caseId", async (req, res, next) => {
 });
 router.use(hroContextRouter);
 router.use(requireUatAdmission);
+router.use(offboardingRouter);
 router.use(employeeVaultEmployerRouter);
 router.use(corpusRouter);
 router.use(scenariosRouter);

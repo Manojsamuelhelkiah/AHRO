@@ -169,7 +169,13 @@ export type OnbAuthorityScope =
   | "application-owner-approve"
   | "security-approve"
   | "it-security-approve"
+  | "hrbp-approve"
+  | "hr-ethics-approve"
+  | "delivery-head-approve"
+  | "finance-approve"
   | "authority-administration";
+
+export type OffboardingAuthorityScope = "hrbp-approve" | "hr-ethics-approve" | "delivery-head-approve" | "finance-approve";
 export type OnbSyntheticProvenance =
   | "onboarding-demo-fictional"
   | "synthetic-reset"
@@ -249,6 +255,7 @@ export const onbCases = pgTable("onb_cases", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   unique("onb_cases_organization_id_id_unique").on(t.organizationId, t.id),
+  check("onb_separation_envelope_no_completion", sql`${t.hireType} <> 'separation' OR (${t.lifecycleStage} LIKE 'separation-%' AND ${t.orchestrationStatus} = 'separation-only' AND ${t.offerAcceptanceComplete} = false)`),
   check("onb_cases_synthetic_provenance_check", sql`
     ${t.syntheticProvenance} is null or ${t.syntheticProvenance} in (
       'onboarding-demo-fictional',
@@ -912,6 +919,10 @@ export const onbAuthorityAssignments = pgTable("onb_authority_assignments", {
 ]);
 
 export type OnbAuthorityRole =
+  | "hrbp"
+  | "hr-ethics"
+  | "delivery-head"
+  | "finance"
   | "hr-compliance"
   | "legal"
   | "occupational-health"

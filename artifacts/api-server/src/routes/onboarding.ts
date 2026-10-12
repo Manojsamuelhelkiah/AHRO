@@ -1241,6 +1241,10 @@ router.post("/onboarding/cases", async (req, res, next) => {
       return;
     }
     const body = CreateOnboardingCaseBody.parse(req.body);
+    if (["separation", "offboarding"].includes(body.hireType.toLowerCase().trim())) {
+      res.status(409).json({ message: "Use controlled Separation intake. Exit requests cannot enter onboarding automation; final closure is unavailable pending section 4.6." });
+      return;
+    }
     if (demoProfile === "administrator") {
       const fictionalId = randomUUID().replace(/-/g, "").slice(0, 10);
       const joiningDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);

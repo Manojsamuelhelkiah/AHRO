@@ -27,6 +27,7 @@ import {
 } from "./synthetic-offline";
 
 export const AUTHORITY_SCOPES: readonly OnbAuthorityScope[] = [
+  "hrbp-approve", "hr-ethics-approve", "delivery-head-approve", "finance-approve",
   "hr-compliance-approve",
   "legal-approve",
   "occupational-health-approve",
@@ -42,6 +43,7 @@ export const AUTHORITY_SCOPES: readonly OnbAuthorityScope[] = [
 ] as const;
 
 export const AUTHORITY_ROLES: readonly OnbAuthorityRole[] = [
+  "hrbp", "hr-ethics", "delivery-head", "finance",
   "hr-compliance",
   "legal",
   "occupational-health",
@@ -60,6 +62,10 @@ export const AUTHORITY_ROLES: readonly OnbAuthorityRole[] = [
  * immutable least-privilege matrix, rather than trusting a client scopes
  * array or a historical assignment row. */
 export const ROLE_SCOPE_MATRIX: Readonly<Record<OnbAuthorityRole, readonly OnbAuthorityScope[]>> = {
+  hrbp: ["hrbp-approve"],
+  "hr-ethics": ["hr-ethics-approve"],
+  "delivery-head": ["delivery-head-approve"],
+  finance: ["finance-approve"],
   "hr-compliance": ["hr-compliance-approve"],
   legal: ["legal-approve"],
   "occupational-health": ["occupational-health-approve"],

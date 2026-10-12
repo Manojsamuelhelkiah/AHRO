@@ -44,6 +44,7 @@ export function validTemplateRow(definition: IntakeTemplate, id = "REQ-001") {
     field.key === "template_id" ? definition.id :
       field.key === "template_version" ? String(definition.version) :
         field.key === "request_id" ? id :
+          field.key === "time_zone" ? "America/New_York" :
           field.kind === "email" ? "fixture@example.invalid" :
             field.kind === "country" ? "US" :
               field.kind === "date" ? "2031-01-10" :
@@ -56,7 +57,7 @@ test("catalogue covers all twelve real case families with distinct versioned sch
   assert.equal(new Set(HRO_BATCH_TEMPLATES.map(item => item.id)).size, 14);
   for (const definition of HRO_BATCH_TEMPLATES) {
     const row = validTemplateRow(definition);
-    assert.equal(validateHroRows(definition.id, 1, [row]).valid, true, definition.id);
+    assert.equal(validateHroRows(definition.id, definition.version, [row]).valid, true, definition.id);
     const request = hroRequestForRow(definition, row);
     assert.equal(readHroBatchRequest({ batchIntake: request })?.family, definition.family);
     assert.equal(request.executionMode, definition.hireType ? "onboarding-review" : "specialist-review-only");

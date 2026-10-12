@@ -11,7 +11,7 @@ import React, { createContext, useContext, useMemo, useState, type ReactNode } f
  * HttpOnly, test-only session cookie and the real tenant/profile guards.
  */
 
-type DemoProfile = "administrator" | "reviewer";
+type DemoProfile = "administrator" | "reviewer" | "offboarding-operator" | "offboarding-legal" | "offboarding-viewer";
 type TestUser = {
   id: string;
   firstName: string;
@@ -31,6 +31,9 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const STORAGE_KEY = "onboarding-e2e-demo-profile";
 
 const PROFILE_DETAILS: Record<DemoProfile, Omit<TestUser, "id">> = {
+  "offboarding-operator": { firstName: "Separation", lastName: "Test Operator", fullName: "Isolated Separation Test Operator", primaryEmailAddress: { emailAddress: "operator@example.invalid" }, emailAddresses: [{ emailAddress: "operator@example.invalid" }] },
+  "offboarding-legal": { firstName: "Separation", lastName: "Test Legal", fullName: "Isolated Separation Test Legal", primaryEmailAddress: { emailAddress: "legal@example.invalid" }, emailAddresses: [{ emailAddress: "legal@example.invalid" }] },
+  "offboarding-viewer": { firstName: "Separation", lastName: "Test Viewer", fullName: "Isolated Separation Test Viewer", primaryEmailAddress: { emailAddress: "viewer@example.invalid" }, emailAddresses: [{ emailAddress: "viewer@example.invalid" }] },
   administrator: {
     firstName: "Demo",
     lastName: "Administrator",
@@ -50,7 +53,7 @@ const PROFILE_DETAILS: Record<DemoProfile, Omit<TestUser, "id">> = {
 function profileFromStorage(): DemoProfile | null {
   if (typeof window === "undefined") return null;
   const profile = window.localStorage.getItem(STORAGE_KEY);
-  return profile === "administrator" || profile === "reviewer" ? profile : null;
+  return profile && profile in PROFILE_DETAILS ? profile as DemoProfile : null;
 }
 
 function userFor(profile: DemoProfile | null): TestUser | null {

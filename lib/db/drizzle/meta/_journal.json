@@ -904,6 +904,20 @@
       "when": 1791763200002,
       "tag": "0107_access_user_group_starters",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1791849600000,
+      "tag": "0107_controlled_offboarding",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1791849600001,
+      "tag": "0108_offboarding_private_checkpoints",
+      "breakpoints": true
     }
   ]
 }

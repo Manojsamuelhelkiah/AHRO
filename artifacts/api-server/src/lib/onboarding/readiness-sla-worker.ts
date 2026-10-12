@@ -1,3 +1,4 @@
+import { isSeparationOrLegacyExit } from "./separation-isolation";
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, lte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -828,7 +829,7 @@ export async function runReadinessSlaTick(options: TickOptions = {}): Promise<Ti
   // historical completed cases without a snapshot, so they are never silently
   // enrolled by this sweep.
   const cases = (await db.select().from(onbCases))
-    .filter((caseRow) => !isSyntheticOfflineCase(caseRow) && !isRetiredControllerCase(caseRow));
+    .filter((caseRow) => !isSyntheticOfflineCase(caseRow) && !isRetiredControllerCase(caseRow) && !isSeparationOrLegacyExit(caseRow));
   const result: TickResult = {
     cases: cases.length,
     quarantined: 0,

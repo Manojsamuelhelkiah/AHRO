@@ -305,6 +305,21 @@ import type {
   SensitiveLifecycleShorteningPreview,
   SensitivityRequest,
   SensitivityResult,
+  SeparationAction,
+  SeparationActionResult,
+  SeparationBatch,
+  SeparationDetail,
+  SeparationIntake,
+  SeparationIntakeResult,
+  SeparationMailboxConfiguration,
+  SeparationMailboxConversion,
+  SeparationMailboxIngress,
+  SeparationMailboxReadiness,
+  SeparationMailboxRequest,
+  SeparationPolicyDecision,
+  SeparationPolicyProposal,
+  SeparationPolicyRecord,
+  SeparationSummary,
   SetSensitiveLifecycleHoldBody,
   SimulateNextOnboardingCaseExchangeInput,
   StandardIntakeBatchInput,
@@ -402,6 +417,887 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListSeparationCasesUrl = () => {
+
+
+
+
+  return `/api/offboarding/cases`
+}
+
+export const listSeparationCases = async ( options?: RequestInit): Promise<SeparationSummary[]> => {
+
+  return customFetch<SeparationSummary[]>(getListSeparationCasesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSeparationCasesQueryKey = () => {
+    return [
+    `/api/offboarding/cases`
+    ] as const;
+    }
+
+
+export const getListSeparationCasesQueryOptions = <TData = Awaited<ReturnType<typeof listSeparationCases>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSeparationCases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSeparationCasesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSeparationCases>>> = ({ signal }) => listSeparationCases({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSeparationCases>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSeparationCasesQueryResult = NonNullable<Awaited<ReturnType<typeof listSeparationCases>>>
+export type ListSeparationCasesQueryError = ErrorType<unknown>
+
+
+
+export function useListSeparationCases<TData = Awaited<ReturnType<typeof listSeparationCases>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSeparationCases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSeparationCasesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateSeparationCaseUrl = () => {
+
+
+
+
+  return `/api/offboarding/cases`
+}
+
+export const createSeparationCase = async (separationIntake: SeparationIntake, options?: RequestInit): Promise<SeparationIntakeResult[]> => {
+
+  return customFetch<SeparationIntakeResult[]>(getCreateSeparationCaseUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(separationIntake)
+  }
+);}
+
+
+
+
+
+export const getCreateSeparationCaseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSeparationCase>>, TError,{data: BodyType<SeparationIntake>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSeparationCase>>, TError,{data: BodyType<SeparationIntake>}, TContext> => {
+
+const mutationKey = ['createSeparationCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSeparationCase>>, {data: BodyType<SeparationIntake>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSeparationCase(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSeparationCaseMutationResult = NonNullable<Awaited<ReturnType<typeof createSeparationCase>>>
+    export type CreateSeparationCaseMutationBody = BodyType<SeparationIntake>
+    export type CreateSeparationCaseMutationError = ErrorType<unknown>
+
+    export const useCreateSeparationCase = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSeparationCase>>, TError,{data: BodyType<SeparationIntake>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSeparationCase>>,
+        TError,
+        {data: BodyType<SeparationIntake>},
+        TContext
+      > => {
+      return useMutation(getCreateSeparationCaseMutationOptions(options));
+    }
+
+export const getCreateSeparationBatchUrl = () => {
+
+
+
+
+  return `/api/offboarding/batch`
+}
+
+export const createSeparationBatch = async (separationBatch: SeparationBatch, options?: RequestInit): Promise<SeparationIntakeResult[]> => {
+
+  return customFetch<SeparationIntakeResult[]>(getCreateSeparationBatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(separationBatch)
+  }
+);}
+
+
+
+
+
+export const getCreateSeparationBatchMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSeparationBatch>>, TError,{data: BodyType<SeparationBatch>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSeparationBatch>>, TError,{data: BodyType<SeparationBatch>}, TContext> => {
+
+const mutationKey = ['createSeparationBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSeparationBatch>>, {data: BodyType<SeparationBatch>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSeparationBatch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSeparationBatchMutationResult = NonNullable<Awaited<ReturnType<typeof createSeparationBatch>>>
+    export type CreateSeparationBatchMutationBody = BodyType<SeparationBatch>
+    export type CreateSeparationBatchMutationError = ErrorType<unknown>
+
+    export const useCreateSeparationBatch = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSeparationBatch>>, TError,{data: BodyType<SeparationBatch>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSeparationBatch>>,
+        TError,
+        {data: BodyType<SeparationBatch>},
+        TContext
+      > => {
+      return useMutation(getCreateSeparationBatchMutationOptions(options));
+    }
+
+export const getGetSeparationCaseUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/offboarding/cases/${caseId}`
+}
+
+export const getSeparationCase = async (caseId: number, options?: RequestInit): Promise<SeparationDetail> => {
+
+  return customFetch<SeparationDetail>(getGetSeparationCaseUrl(caseId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSeparationCaseQueryKey = (caseId: number,) => {
+    return [
+    `/api/offboarding/cases/${caseId}`
+    ] as const;
+    }
+
+
+export const getGetSeparationCaseQueryOptions = <TData = Awaited<ReturnType<typeof getSeparationCase>>, TError = ErrorType<unknown>>(caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSeparationCase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSeparationCaseQueryKey(caseId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSeparationCase>>> = ({ signal }) => getSeparationCase(caseId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSeparationCase>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSeparationCaseQueryResult = NonNullable<Awaited<ReturnType<typeof getSeparationCase>>>
+export type GetSeparationCaseQueryError = ErrorType<unknown>
+
+
+
+export function useGetSeparationCase<TData = Awaited<ReturnType<typeof getSeparationCase>>, TError = ErrorType<unknown>>(
+ caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSeparationCase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSeparationCaseQueryOptions(caseId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getApplySeparationActionUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/offboarding/cases/${caseId}/actions`
+}
+
+export const applySeparationAction = async (caseId: number,
+    separationAction: SeparationAction, options?: RequestInit): Promise<SeparationActionResult> => {
+
+  return customFetch<SeparationActionResult>(getApplySeparationActionUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(separationAction)
+  }
+);}
+
+
+
+
+
+export const getApplySeparationActionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applySeparationAction>>, TError,{caseId: number;data: BodyType<SeparationAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applySeparationAction>>, TError,{caseId: number;data: BodyType<SeparationAction>}, TContext> => {
+
+const mutationKey = ['applySeparationAction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applySeparationAction>>, {caseId: number;data: BodyType<SeparationAction>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  applySeparationAction(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplySeparationActionMutationResult = NonNullable<Awaited<ReturnType<typeof applySeparationAction>>>
+    export type ApplySeparationActionMutationBody = BodyType<SeparationAction>
+    export type ApplySeparationActionMutationError = ErrorType<unknown>
+
+    export const useApplySeparationAction = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applySeparationAction>>, TError,{caseId: number;data: BodyType<SeparationAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applySeparationAction>>,
+        TError,
+        {caseId: number;data: BodyType<SeparationAction>},
+        TContext
+      > => {
+      return useMutation(getApplySeparationActionMutationOptions(options));
+    }
+
+export const getListSeparationPoliciesUrl = () => {
+
+
+
+
+  return `/api/offboarding/policies`
+}
+
+export const listSeparationPolicies = async ( options?: RequestInit): Promise<SeparationPolicyRecord[]> => {
+
+  return customFetch<SeparationPolicyRecord[]>(getListSeparationPoliciesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSeparationPoliciesQueryKey = () => {
+    return [
+    `/api/offboarding/policies`
+    ] as const;
+    }
+
+
+export const getListSeparationPoliciesQueryOptions = <TData = Awaited<ReturnType<typeof listSeparationPolicies>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSeparationPolicies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSeparationPoliciesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSeparationPolicies>>> = ({ signal }) => listSeparationPolicies({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSeparationPolicies>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSeparationPoliciesQueryResult = NonNullable<Awaited<ReturnType<typeof listSeparationPolicies>>>
+export type ListSeparationPoliciesQueryError = ErrorType<unknown>
+
+
+
+export function useListSeparationPolicies<TData = Awaited<ReturnType<typeof listSeparationPolicies>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSeparationPolicies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSeparationPoliciesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getProposeSeparationPolicyUrl = () => {
+
+
+
+
+  return `/api/offboarding/policies`
+}
+
+export const proposeSeparationPolicy = async (separationPolicyProposal: SeparationPolicyProposal, options?: RequestInit): Promise<SeparationPolicyRecord> => {
+
+  return customFetch<SeparationPolicyRecord>(getProposeSeparationPolicyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(separationPolicyProposal)
+  }
+);}
+
+
+
+
+
+export const getProposeSeparationPolicyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof proposeSeparationPolicy>>, TError,{data: BodyType<SeparationPolicyProposal>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof proposeSeparationPolicy>>, TError,{data: BodyType<SeparationPolicyProposal>}, TContext> => {
+
+const mutationKey = ['proposeSeparationPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof proposeSeparationPolicy>>, {data: BodyType<SeparationPolicyProposal>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  proposeSeparationPolicy(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ProposeSeparationPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof proposeSeparationPolicy>>>
+    export type ProposeSeparationPolicyMutationBody = BodyType<SeparationPolicyProposal>
+    export type ProposeSeparationPolicyMutationError = ErrorType<unknown>
+
+    export const useProposeSeparationPolicy = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof proposeSeparationPolicy>>, TError,{data: BodyType<SeparationPolicyProposal>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof proposeSeparationPolicy>>,
+        TError,
+        {data: BodyType<SeparationPolicyProposal>},
+        TContext
+      > => {
+      return useMutation(getProposeSeparationPolicyMutationOptions(options));
+    }
+
+export const getDecideSeparationPolicyUrl = (policyId: string,
+    version: number,) => {
+
+
+
+
+  return `/api/offboarding/policies/${policyId}/${version}/decision`
+}
+
+export const decideSeparationPolicy = async (policyId: string,
+    version: number,
+    separationPolicyDecision: SeparationPolicyDecision, options?: RequestInit): Promise<SeparationPolicyRecord> => {
+
+  return customFetch<SeparationPolicyRecord>(getDecideSeparationPolicyUrl(policyId,version),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(separationPolicyDecision)
+  }
+);}
+
+
+
+
+
+export const getDecideSeparationPolicyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideSeparationPolicy>>, TError,{policyId: string;version: number;data: BodyType<SeparationPolicyDecision>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideSeparationPolicy>>, TError,{policyId: string;version: number;data: BodyType<SeparationPolicyDecision>}, TContext> => {
+
+const mutationKey = ['decideSeparationPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideSeparationPolicy>>, {policyId: string;version: number;data: BodyType<SeparationPolicyDecision>}> = (props) => {
+          const {policyId,version,data} = props ?? {};
+
+          return  decideSeparationPolicy(policyId,version,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideSeparationPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof decideSeparationPolicy>>>
+    export type DecideSeparationPolicyMutationBody = BodyType<SeparationPolicyDecision>
+    export type DecideSeparationPolicyMutationError = ErrorType<unknown>
+
+    export const useDecideSeparationPolicy = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideSeparationPolicy>>, TError,{policyId: string;version: number;data: BodyType<SeparationPolicyDecision>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideSeparationPolicy>>,
+        TError,
+        {policyId: string;version: number;data: BodyType<SeparationPolicyDecision>},
+        TContext
+      > => {
+      return useMutation(getDecideSeparationPolicyMutationOptions(options));
+    }
+
+export const getGetSeparationMailboxUrl = () => {
+
+
+
+
+  return `/api/offboarding/mailbox`
+}
+
+export const getSeparationMailbox = async ( options?: RequestInit): Promise<SeparationMailboxReadiness> => {
+
+  return customFetch<SeparationMailboxReadiness>(getGetSeparationMailboxUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSeparationMailboxQueryKey = () => {
+    return [
+    `/api/offboarding/mailbox`
+    ] as const;
+    }
+
+
+export const getGetSeparationMailboxQueryOptions = <TData = Awaited<ReturnType<typeof getSeparationMailbox>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSeparationMailbox>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSeparationMailboxQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSeparationMailbox>>> = ({ signal }) => getSeparationMailbox({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSeparationMailbox>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSeparationMailboxQueryResult = NonNullable<Awaited<ReturnType<typeof getSeparationMailbox>>>
+export type GetSeparationMailboxQueryError = ErrorType<unknown>
+
+
+
+export function useGetSeparationMailbox<TData = Awaited<ReturnType<typeof getSeparationMailbox>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSeparationMailbox>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSeparationMailboxQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getConfigureSeparationMailboxUrl = () => {
+
+
+
+
+  return `/api/offboarding/mailbox`
+}
+
+export const configureSeparationMailbox = async (separationMailboxConfiguration: SeparationMailboxConfiguration, options?: RequestInit): Promise<SeparationMailboxIngress> => {
+
+  return customFetch<SeparationMailboxIngress>(getConfigureSeparationMailboxUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(separationMailboxConfiguration)
+  }
+);}
+
+
+
+
+
+export const getConfigureSeparationMailboxMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof configureSeparationMailbox>>, TError,{data: BodyType<SeparationMailboxConfiguration>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof configureSeparationMailbox>>, TError,{data: BodyType<SeparationMailboxConfiguration>}, TContext> => {
+
+const mutationKey = ['configureSeparationMailbox'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof configureSeparationMailbox>>, {data: BodyType<SeparationMailboxConfiguration>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  configureSeparationMailbox(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfigureSeparationMailboxMutationResult = NonNullable<Awaited<ReturnType<typeof configureSeparationMailbox>>>
+    export type ConfigureSeparationMailboxMutationBody = BodyType<SeparationMailboxConfiguration>
+    export type ConfigureSeparationMailboxMutationError = ErrorType<unknown>
+
+    export const useConfigureSeparationMailbox = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof configureSeparationMailbox>>, TError,{data: BodyType<SeparationMailboxConfiguration>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof configureSeparationMailbox>>,
+        TError,
+        {data: BodyType<SeparationMailboxConfiguration>},
+        TContext
+      > => {
+      return useMutation(getConfigureSeparationMailboxMutationOptions(options));
+    }
+
+export const getListSeparationMailboxRequestsUrl = () => {
+
+
+
+
+  return `/api/offboarding/mailbox/requests`
+}
+
+export const listSeparationMailboxRequests = async ( options?: RequestInit): Promise<SeparationMailboxRequest[]> => {
+
+  return customFetch<SeparationMailboxRequest[]>(getListSeparationMailboxRequestsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSeparationMailboxRequestsQueryKey = () => {
+    return [
+    `/api/offboarding/mailbox/requests`
+    ] as const;
+    }
+
+
+export const getListSeparationMailboxRequestsQueryOptions = <TData = Awaited<ReturnType<typeof listSeparationMailboxRequests>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSeparationMailboxRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSeparationMailboxRequestsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSeparationMailboxRequests>>> = ({ signal }) => listSeparationMailboxRequests({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSeparationMailboxRequests>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSeparationMailboxRequestsQueryResult = NonNullable<Awaited<ReturnType<typeof listSeparationMailboxRequests>>>
+export type ListSeparationMailboxRequestsQueryError = ErrorType<unknown>
+
+
+
+export function useListSeparationMailboxRequests<TData = Awaited<ReturnType<typeof listSeparationMailboxRequests>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSeparationMailboxRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSeparationMailboxRequestsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getConvertSeparationMailboxRequestUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/offboarding/mailbox/requests/${requestId}/convert`
+}
+
+export const convertSeparationMailboxRequest = async (requestId: string,
+    separationMailboxConversion: SeparationMailboxConversion, options?: RequestInit): Promise<SeparationIntakeResult> => {
+
+  return customFetch<SeparationIntakeResult>(getConvertSeparationMailboxRequestUrl(requestId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(separationMailboxConversion)
+  }
+);}
+
+
+
+
+
+export const getConvertSeparationMailboxRequestMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof convertSeparationMailboxRequest>>, TError,{requestId: string;data: BodyType<SeparationMailboxConversion>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof convertSeparationMailboxRequest>>, TError,{requestId: string;data: BodyType<SeparationMailboxConversion>}, TContext> => {
+
+const mutationKey = ['convertSeparationMailboxRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof convertSeparationMailboxRequest>>, {requestId: string;data: BodyType<SeparationMailboxConversion>}> = (props) => {
+          const {requestId,data} = props ?? {};
+
+          return  convertSeparationMailboxRequest(requestId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConvertSeparationMailboxRequestMutationResult = NonNullable<Awaited<ReturnType<typeof convertSeparationMailboxRequest>>>
+    export type ConvertSeparationMailboxRequestMutationBody = BodyType<SeparationMailboxConversion>
+    export type ConvertSeparationMailboxRequestMutationError = ErrorType<unknown>
+
+    export const useConvertSeparationMailboxRequest = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof convertSeparationMailboxRequest>>, TError,{requestId: string;data: BodyType<SeparationMailboxConversion>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof convertSeparationMailboxRequest>>,
+        TError,
+        {requestId: string;data: BodyType<SeparationMailboxConversion>},
+        TContext
+      > => {
+      return useMutation(getConvertSeparationMailboxRequestMutationOptions(options));
+    }
+
+export const getAdmitSeparationSourceEventUrl = (channel: 'manager-request' | 'security-request' | 'compliance-request' | 'hris',) => {
+
+
+
+
+  return `/api/offboarding/source-events/${channel}`
+}
+
+export const admitSeparationSourceEvent = async (channel: 'manager-request' | 'security-request' | 'compliance-request' | 'hris',
+    separationIntake: SeparationIntake, options?: RequestInit): Promise<SeparationIntakeResult[]> => {
+
+  return customFetch<SeparationIntakeResult[]>(getAdmitSeparationSourceEventUrl(channel),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(separationIntake)
+  }
+);}
+
+
+
+
+
+export const getAdmitSeparationSourceEventMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof admitSeparationSourceEvent>>, TError,{channel: 'manager-request' | 'security-request' | 'compliance-request' | 'hris';data: BodyType<SeparationIntake>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof admitSeparationSourceEvent>>, TError,{channel: 'manager-request' | 'security-request' | 'compliance-request' | 'hris';data: BodyType<SeparationIntake>}, TContext> => {
+
+const mutationKey = ['admitSeparationSourceEvent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof admitSeparationSourceEvent>>, {channel: 'manager-request' | 'security-request' | 'compliance-request' | 'hris';data: BodyType<SeparationIntake>}> = (props) => {
+          const {channel,data} = props ?? {};
+
+          return  admitSeparationSourceEvent(channel,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdmitSeparationSourceEventMutationResult = NonNullable<Awaited<ReturnType<typeof admitSeparationSourceEvent>>>
+    export type AdmitSeparationSourceEventMutationBody = BodyType<SeparationIntake>
+    export type AdmitSeparationSourceEventMutationError = ErrorType<void>
+
+    export const useAdmitSeparationSourceEvent = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof admitSeparationSourceEvent>>, TError,{channel: 'manager-request' | 'security-request' | 'compliance-request' | 'hris';data: BodyType<SeparationIntake>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof admitSeparationSourceEvent>>,
+        TError,
+        {channel: 'manager-request' | 'security-request' | 'compliance-request' | 'hris';data: BodyType<SeparationIntake>},
+        TContext
+      > => {
+      return useMutation(getAdmitSeparationSourceEventMutationOptions(options));
+    }
 
 export const getGetGovernanceAuthorityOptionsUrl = () => {
 

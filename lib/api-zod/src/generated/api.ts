@@ -8,6 +8,548 @@
 import * as zod from 'zod';
 
 
+export const ListSeparationCasesResponseItem = zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "generation": zod.number(),
+  "status": zod.string(),
+  "facts": zod.object({
+  "employeeId": zod.string(),
+  "workerName": zod.string(),
+  "lastWorkingDay": zod.string(),
+  "terminationDate": zod.string(),
+  "timeZone": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "country": zod.string(),
+  "legalEntity": zod.string(),
+  "workerCategory": zod.string(),
+  "manager": zod.string()
+}),
+  "closureBlocker": zod.string(),
+  "lifecycle": zod.enum(['separation'])
+})
+export const ListSeparationCasesResponse = zod.array(ListSeparationCasesResponseItem)
+
+
+export const CreateSeparationCaseBody = zod.object({
+  "sourceReference": zod.string(),
+  "facts": zod.object({
+  "employeeId": zod.string(),
+  "workerName": zod.string(),
+  "exitType": zod.string(),
+  "exitReason": zod.string(),
+  "lastWorkingDay": zod.coerce.date(),
+  "terminationDate": zod.coerce.date(),
+  "timeZone": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "country": zod.string(),
+  "legalEntity": zod.string(),
+  "workerCategory": zod.string(),
+  "manager": zod.string()
+})
+})
+
+export const CreateSeparationCaseResponseItem = zod.object({
+  "caseId": zod.number(),
+  "status": zod.string(),
+  "conflict": zod.boolean()
+})
+export const CreateSeparationCaseResponse = zod.array(CreateSeparationCaseResponseItem)
+
+
+export const CreateSeparationBatchBody = zod.object({
+  "entries": zod.array(zod.object({
+  "sourceReference": zod.string(),
+  "facts": zod.object({
+  "employeeId": zod.string(),
+  "workerName": zod.string(),
+  "exitType": zod.string(),
+  "exitReason": zod.string(),
+  "lastWorkingDay": zod.coerce.date(),
+  "terminationDate": zod.coerce.date(),
+  "timeZone": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "country": zod.string(),
+  "legalEntity": zod.string(),
+  "workerCategory": zod.string(),
+  "manager": zod.string()
+})
+}))
+})
+
+export const CreateSeparationBatchResponseItem = zod.object({
+  "caseId": zod.number(),
+  "status": zod.string(),
+  "conflict": zod.boolean()
+})
+export const CreateSeparationBatchResponse = zod.array(CreateSeparationBatchResponseItem)
+
+
+export const GetSeparationCaseParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const GetSeparationCaseResponse = zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "generation": zod.number(),
+  "status": zod.string(),
+  "facts": zod.object({
+  "employeeId": zod.string(),
+  "workerName": zod.string(),
+  "lastWorkingDay": zod.string(),
+  "terminationDate": zod.string(),
+  "timeZone": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "country": zod.string(),
+  "legalEntity": zod.string(),
+  "workerCategory": zod.string(),
+  "manager": zod.string()
+}),
+  "closureBlocker": zod.string(),
+  "lifecycle": zod.enum(['separation'])
+}).and(zod.object({
+  "privateVisible": zod.boolean(),
+  "privateFacts": zod.union([zod.object({
+  "employeeId": zod.string(),
+  "workerName": zod.string(),
+  "exitType": zod.string(),
+  "exitReason": zod.string(),
+  "lastWorkingDay": zod.coerce.date(),
+  "terminationDate": zod.coerce.date(),
+  "timeZone": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "country": zod.string(),
+  "legalEntity": zod.string(),
+  "workerCategory": zod.string(),
+  "manager": zod.string()
+}),zod.null()]).optional(),
+  "sources": zod.array(zod.object({
+  "channel": zod.string(),
+  "sourceReference": zod.string(),
+  "provenance": zod.string(),
+  "actor": zod.string(),
+  "facts": zod.object({
+  "employeeId": zod.string(),
+  "workerName": zod.string(),
+  "exitType": zod.string(),
+  "exitReason": zod.string(),
+  "lastWorkingDay": zod.coerce.date(),
+  "terminationDate": zod.coerce.date(),
+  "timeZone": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "country": zod.string(),
+  "legalEntity": zod.string(),
+  "workerCategory": zod.string(),
+  "manager": zod.string()
+})
+})),
+  "history": zod.array(zod.object({
+  "version": zod.number(),
+  "generation": zod.number(),
+  "status": zod.string(),
+  "actor": zod.string(),
+  "action": zod.string(),
+  "recordedAt": zod.coerce.date(),
+  "facts": zod.object({
+  "employeeId": zod.string(),
+  "workerName": zod.string(),
+  "exitType": zod.string(),
+  "exitReason": zod.string(),
+  "lastWorkingDay": zod.coerce.date(),
+  "terminationDate": zod.coerce.date(),
+  "timeZone": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "country": zod.string(),
+  "legalEntity": zod.string(),
+  "workerCategory": zod.string(),
+  "manager": zod.string()
+}),
+  "state": zod.record(zod.string(), zod.unknown())
+}).describe('Private revision history. Only current all-sensitive-field readers with the corresponding verified specialist authorities can read source facts and opaque state.')),
+  "settlementReview": zod.array(zod.object({
+  "revision": zod.number(),
+  "currency": zod.string(),
+  "items": zod.object({
+  "basePay": zod.number().optional(),
+  "assetRecovery": zod.number().optional(),
+  "relocationRecovery": zod.number().optional(),
+  "noticeAdjustment": zod.number().optional(),
+  "statutory": zod.number().optional(),
+  "equity": zod.number().optional(),
+  "other": zod.number().optional()
+}),
+  "recordedAt": zod.coerce.date(),
+  "authorityCurrent": zod.boolean()
+}).describe('Payroll-authorized fixed numeric projection. Does not disclose opaque calculation references, legal findings or narratives.')),
+  "finalizationAvailable": zod.boolean(),
+  "gatewayC": zod.string(),
+  "activity12": zod.string(),
+  "state": zod.object({
+  "gatewayA": zod.enum(['pending', 'clear', 'restricted']),
+  "classification": zod.string().nullish(),
+  "urgency": zod.string().nullable(),
+  "flags": zod.union([zod.object({
+  "privileged": zod.boolean(),
+  "highRisk": zod.boolean(),
+  "clientFacing": zod.boolean(),
+  "peopleManager": zod.boolean(),
+  "statutory": zod.boolean()
+}),zod.null()]).optional(),
+  "sensitiveTriggers": zod.array(zod.string()),
+  "conflict": zod.boolean(),
+  "holds": zod.array(zod.string()),
+  "policyId": zod.string().nullish(),
+  "policyVersion": zod.number().nullish(),
+  "policyCurrent": zod.boolean(),
+  "restrictedManual": zod.boolean().optional(),
+  "tasks": zod.array(zod.object({
+  "id": zod.string(),
+  "activity": zod.string(),
+  "label": zod.string(),
+  "stream": zod.string(),
+  "scope": zod.string(),
+  "owner": zod.string().nullable(),
+  "prerequisites": zod.array(zod.string()),
+  "dueAt": zod.string().nullable(),
+  "notBeforeAt": zod.string().nullable(),
+  "status": zod.enum(['pending', 'blocked', 'uncertain', 'verified']),
+  "evidence": zod.union([zod.object({
+  "actor": zod.string(),
+  "authorityId": zod.string(),
+  "authorityRevision": zod.number(),
+  "scope": zod.string(),
+  "reference": zod.string(),
+  "generation": zod.number(),
+  "recordedAt": zod.string(),
+  "provenance": zod.enum(['human-source-attested'])
+}),zod.null()]).optional(),
+  "details": zod.record(zod.string(), zod.unknown()),
+  "executionMode": zod.string(),
+  "blockers": zod.array(zod.string())
+})),
+  "decisions": zod.array(zod.object({
+  "actor": zod.string(),
+  "authorityId": zod.string(),
+  "authorityRevision": zod.number(),
+  "scope": zod.string(),
+  "reference": zod.string(),
+  "generation": zod.number(),
+  "recordedAt": zod.string(),
+  "provenance": zod.enum(['human-source-attested'])
+})),
+  "settlementVersions": zod.array(zod.record(zod.string(), zod.unknown())),
+  "pauseReason": zod.string().nullish()
+})
+}))
+
+
+export const ApplySeparationActionParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const ApplySeparationActionBody = zod.object({
+  "action": zod.enum(['screen', 'hrbp-reconcile', 'classify', 'adopt-policy', 'emergency-security-plan', 'pause', 'sensitive-flag', 'context-change', 'legal-hold', 'hrbp-disposition', 'settlement-version', 'assign', 'task-evidence', 'task-blocked', 'finalize']),
+  "expectedVersion": zod.number(),
+  "reference": zod.string(),
+  "sensitiveTriggers": zod.array(zod.string()).optional(),
+  "facts": zod.object({
+  "employeeId": zod.string(),
+  "workerName": zod.string(),
+  "exitType": zod.string(),
+  "exitReason": zod.string(),
+  "lastWorkingDay": zod.coerce.date(),
+  "terminationDate": zod.coerce.date(),
+  "timeZone": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "country": zod.string(),
+  "legalEntity": zod.string(),
+  "workerCategory": zod.string(),
+  "manager": zod.string()
+}).optional(),
+  "confirmed": zod.boolean().optional(),
+  "classification": zod.string().optional(),
+  "urgency": zod.enum(['Standard', 'Elevated', 'High']).optional(),
+  "flags": zod.object({
+  "privileged": zod.boolean(),
+  "highRisk": zod.boolean(),
+  "clientFacing": zod.boolean(),
+  "peopleManager": zod.boolean(),
+  "statutory": zod.boolean()
+}).optional(),
+  "policyId": zod.string().optional(),
+  "policyVersion": zod.number().optional(),
+  "disposition": zod.enum(['cancel', 'convert-to-transfer', 'resume']).optional(),
+  "items": zod.record(zod.string(), zod.number()).optional(),
+  "currency": zod.string().optional(),
+  "rulesReference": zod.string().optional(),
+  "taskId": zod.string().optional(),
+  "owner": zod.string().optional(),
+  "uncertain": zod.boolean().optional(),
+  "provenance": zod.enum(['human-source-attested']).optional(),
+  "simulated": zod.boolean().optional(),
+  "details": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const ApplySeparationActionResponse = zod.object({
+  "caseId": zod.number(),
+  "version": zod.number(),
+  "status": zod.string(),
+  "closureBlocker": zod.string()
+})
+
+
+export const ListSeparationPoliciesResponseItem = zod.object({
+  "id": zod.string(),
+  "version": zod.number(),
+  "policy": zod.object({
+  "country": zod.string(),
+  "role": zod.string(),
+  "workerCategory": zod.string(),
+  "timeZone": zod.string(),
+  "endOfLwd": zod.string(),
+  "rulesReference": zod.string(),
+  "retentionReference": zod.string(),
+  "obligations": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "stream": zod.string(),
+  "scope": zod.string(),
+  "prerequisites": zod.array(zod.string()),
+  "dueOffsetDays": zod.number()
+})),
+  "defaultAssets": zod.array(zod.string())
+}),
+  "status": zod.string(),
+  "approval": zod.object({
+  "actor": zod.string(),
+  "authorityId": zod.string(),
+  "authorityRevision": zod.number(),
+  "scope": zod.string(),
+  "reference": zod.string(),
+  "generation": zod.number(),
+  "recordedAt": zod.string(),
+  "provenance": zod.enum(['human-source-attested'])
+}).optional(),
+  "createdBy": zod.string()
+})
+export const ListSeparationPoliciesResponse = zod.array(ListSeparationPoliciesResponseItem)
+
+
+export const ProposeSeparationPolicyBody = zod.object({
+  "id": zod.string().optional(),
+  "expectedVersion": zod.number(),
+  "policy": zod.object({
+  "country": zod.string(),
+  "role": zod.string(),
+  "workerCategory": zod.string(),
+  "timeZone": zod.string(),
+  "endOfLwd": zod.string(),
+  "rulesReference": zod.string(),
+  "retentionReference": zod.string(),
+  "obligations": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "stream": zod.string(),
+  "scope": zod.string(),
+  "prerequisites": zod.array(zod.string()),
+  "dueOffsetDays": zod.number()
+})),
+  "defaultAssets": zod.array(zod.string())
+})
+})
+
+export const ProposeSeparationPolicyResponse = zod.object({
+  "id": zod.string(),
+  "version": zod.number(),
+  "policy": zod.object({
+  "country": zod.string(),
+  "role": zod.string(),
+  "workerCategory": zod.string(),
+  "timeZone": zod.string(),
+  "endOfLwd": zod.string(),
+  "rulesReference": zod.string(),
+  "retentionReference": zod.string(),
+  "obligations": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "stream": zod.string(),
+  "scope": zod.string(),
+  "prerequisites": zod.array(zod.string()),
+  "dueOffsetDays": zod.number()
+})),
+  "defaultAssets": zod.array(zod.string())
+}),
+  "status": zod.string(),
+  "approval": zod.object({
+  "actor": zod.string(),
+  "authorityId": zod.string(),
+  "authorityRevision": zod.number(),
+  "scope": zod.string(),
+  "reference": zod.string(),
+  "generation": zod.number(),
+  "recordedAt": zod.string(),
+  "provenance": zod.enum(['human-source-attested'])
+}).optional(),
+  "createdBy": zod.string()
+})
+
+
+export const DecideSeparationPolicyParams = zod.object({
+  "policyId": zod.coerce.string(),
+  "version": zod.coerce.number()
+})
+
+export const DecideSeparationPolicyBody = zod.object({
+  "decision": zod.enum(['approve', 'withdraw']),
+  "reference": zod.string()
+})
+
+export const DecideSeparationPolicyResponse = zod.object({
+  "id": zod.string(),
+  "version": zod.number(),
+  "policy": zod.object({
+  "country": zod.string(),
+  "role": zod.string(),
+  "workerCategory": zod.string(),
+  "timeZone": zod.string(),
+  "endOfLwd": zod.string(),
+  "rulesReference": zod.string(),
+  "retentionReference": zod.string(),
+  "obligations": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "stream": zod.string(),
+  "scope": zod.string(),
+  "prerequisites": zod.array(zod.string()),
+  "dueOffsetDays": zod.number()
+})),
+  "defaultAssets": zod.array(zod.string())
+}),
+  "status": zod.string(),
+  "approval": zod.object({
+  "actor": zod.string(),
+  "authorityId": zod.string(),
+  "authorityRevision": zod.number(),
+  "scope": zod.string(),
+  "reference": zod.string(),
+  "generation": zod.number(),
+  "recordedAt": zod.string(),
+  "provenance": zod.enum(['human-source-attested'])
+}).optional(),
+  "createdBy": zod.string()
+})
+
+
+export const GetSeparationMailboxResponse = zod.object({
+  "configurations": zod.array(zod.object({
+  "id": zod.string(),
+  "token": zod.string(),
+  "allowedSenders": zod.array(zod.string()),
+  "enabled": zod.number()
+})),
+  "channel": zod.record(zod.string(), zod.unknown()),
+  "monitor": zod.record(zod.string(), zod.unknown()),
+  "attachmentPolicy": zod.string(),
+  "provenance": zod.string()
+})
+
+
+export const ConfigureSeparationMailboxBody = zod.object({
+  "allowedSenders": zod.array(zod.string()),
+  "reference": zod.string()
+})
+
+export const ConfigureSeparationMailboxResponse = zod.object({
+  "id": zod.string(),
+  "token": zod.string(),
+  "allowedSenders": zod.array(zod.string()),
+  "enabled": zod.number()
+})
+
+
+export const ListSeparationMailboxRequestsResponseItem = zod.object({
+  "id": zod.string(),
+  "sender": zod.string(),
+  "fields": zod.record(zod.string(), zod.string()),
+  "status": zod.string(),
+  "caseId": zod.number().nullish(),
+  "providerMessageId": zod.string(),
+  "attachments": zod.array(zod.record(zod.string(), zod.unknown())),
+  "missingFields": zod.array(zod.string())
+})
+export const ListSeparationMailboxRequestsResponse = zod.array(ListSeparationMailboxRequestsResponseItem)
+
+
+export const ConvertSeparationMailboxRequestParams = zod.object({
+  "requestId": zod.coerce.string()
+})
+
+export const ConvertSeparationMailboxRequestBody = zod.object({
+  "facts": zod.object({
+  "employeeId": zod.string(),
+  "workerName": zod.string(),
+  "exitType": zod.string(),
+  "exitReason": zod.string(),
+  "lastWorkingDay": zod.coerce.date(),
+  "terminationDate": zod.coerce.date(),
+  "timeZone": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "country": zod.string(),
+  "legalEntity": zod.string(),
+  "workerCategory": zod.string(),
+  "manager": zod.string()
+}),
+  "attachmentsReviewed": zod.boolean().optional()
+})
+
+export const ConvertSeparationMailboxRequestResponse = zod.object({
+  "caseId": zod.number(),
+  "status": zod.string(),
+  "conflict": zod.boolean()
+})
+
+
+export const AdmitSeparationSourceEventParams = zod.object({
+  "channel": zod.enum(['manager-request', 'security-request', 'compliance-request', 'hris'])
+})
+
+export const AdmitSeparationSourceEventBody = zod.object({
+  "sourceReference": zod.string(),
+  "facts": zod.object({
+  "employeeId": zod.string(),
+  "workerName": zod.string(),
+  "exitType": zod.string(),
+  "exitReason": zod.string(),
+  "lastWorkingDay": zod.coerce.date(),
+  "terminationDate": zod.coerce.date(),
+  "timeZone": zod.string(),
+  "role": zod.string(),
+  "department": zod.string(),
+  "country": zod.string(),
+  "legalEntity": zod.string(),
+  "workerCategory": zod.string(),
+  "manager": zod.string()
+})
+})
+
+export const AdmitSeparationSourceEventResponseItem = zod.object({
+  "caseId": zod.number(),
+  "status": zod.string(),
+  "conflict": zod.boolean()
+})
+export const AdmitSeparationSourceEventResponse = zod.array(AdmitSeparationSourceEventResponseItem)
+
+
 /**
  * Requires an owner/admin or authenticated verified governance operator. Only active members of the pinned client are included. Names are display labels, never authority or identity proof.
  * @summary List client-scoped members and authority roles for appointments

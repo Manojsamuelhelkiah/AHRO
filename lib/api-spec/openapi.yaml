@@ -43,6 +43,186 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /offboarding/cases:
+    get:
+      operationId: listSeparationCases
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Scoped separation summaries; no confidential exit reasons.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/SeparationSummary" } }
+    post:
+      operationId: createSeparationCase
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SeparationIntake" }
+      responses:
+        "201":
+          description: Held, deduplicated or conflicting separation request.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/SeparationIntakeResult" } }
+  /offboarding/batch:
+    post:
+      operationId: createSeparationBatch
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SeparationBatch" }
+      responses:
+        "201":
+          description: Atomic held requests; no dispatch.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/SeparationIntakeResult" } }
+  /offboarding/cases/{caseId}:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer } }
+    get:
+      operationId: getSeparationCase
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Scoped workstreams and private evidence where authorized.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeparationDetail" }
+  /offboarding/cases/{caseId}/actions:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer } }
+    post:
+      operationId: applySeparationAction
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SeparationAction" }
+      responses:
+        "200":
+          description: Version-fenced recorded human decision.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeparationActionResult" }
+  /offboarding/policies:
+    get:
+      operationId: listSeparationPolicies
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Immutable approved revisions and non-executable proposals.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/SeparationPolicyRecord" } }
+    post:
+      operationId: proposeSeparationPolicy
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SeparationPolicyProposal" }
+      responses:
+        "201":
+          description: Review proposal, not executable approval.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeparationPolicyRecord" }
+  /offboarding/policies/{policyId}/{version}/decision:
+    parameters:
+      - { name: policyId, in: path, required: true, schema: { type: string } }
+      - { name: version, in: path, required: true, schema: { type: integer } }
+    post:
+      operationId: decideSeparationPolicy
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SeparationPolicyDecision" }
+      responses:
+        "200":
+          description: Independent verified Legal approval or withdrawal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeparationPolicyRecord" }
+  /offboarding/mailbox:
+    get:
+      operationId: getSeparationMailbox
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Reviewed shared ingress readiness, not a feature-specific poller.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeparationMailboxReadiness" }
+    post:
+      operationId: configureSeparationMailbox
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SeparationMailboxConfiguration" }
+      responses:
+        "201":
+          description: Tenant-pinned reviewed HRO ingress.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeparationMailboxIngress" }
+  /offboarding/mailbox/requests:
+    get:
+      operationId: listSeparationMailboxRequests
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Restricted mailbox requests requiring field review.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/SeparationMailboxRequest" } }
+  /offboarding/mailbox/requests/{requestId}/convert:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: convertSeparationMailboxRequest
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SeparationMailboxConversion" }
+      responses:
+        "200":
+          description: Deduplicated held separation, never HRIS attestation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeparationIntakeResult" }
+  /offboarding/source-events/{channel}:
+    parameters:
+      - { name: channel, in: path, required: true, schema: { type: string, enum: [manager-request, security-request, compliance-request, hris] } }
+    post:
+      operationId: admitSeparationSourceEvent
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SeparationIntake" }
+      responses:
+        "201":
+          description: Authenticated named human event; HRIS feeds are explicitly unsupported.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/SeparationIntakeResult" } }
+        "409":
+          description: HRIS integration not approved.
   /governance/authority-options:
     get:
       operationId: getGovernanceAuthorityOptions
@@ -6655,6 +6835,323 @@ components:
         type: integer
         minimum: 1
   schemas:
+    SeparationFacts:
+      type: object
+      additionalProperties: false
+      required: [employeeId, workerName, exitType, exitReason, lastWorkingDay, terminationDate, timeZone, role, department, country, legalEntity, workerCategory, manager]
+      properties:
+        employeeId: { type: string }
+        workerName: { type: string }
+        exitType: { type: string }
+        exitReason: { type: string }
+        lastWorkingDay: { type: string, format: date }
+        terminationDate: { type: string, format: date }
+        timeZone: { type: string }
+        role: { type: string }
+        department: { type: string }
+        country: { type: string }
+        legalEntity: { type: string }
+        workerCategory: { type: string }
+        manager: { type: string }
+    SeparationPublicFacts:
+      type: object
+      required: [employeeId, workerName, lastWorkingDay, terminationDate, timeZone, role, department, country, legalEntity, workerCategory, manager]
+      properties:
+        employeeId: { type: string }
+        workerName: { type: string }
+        lastWorkingDay: { type: string }
+        terminationDate: { type: string }
+        timeZone: { type: string }
+        role: { type: string }
+        department: { type: string }
+        country: { type: string }
+        legalEntity: { type: string }
+        workerCategory: { type: string }
+        manager: { type: string }
+    SeparationIntake:
+      type: object
+      required: [sourceReference, facts]
+      properties:
+        sourceReference: { type: string }
+        facts: { $ref: "#/components/schemas/SeparationFacts" }
+    SeparationBatch:
+      type: object
+      required: [entries]
+      properties:
+        entries: { type: array, items: { $ref: "#/components/schemas/SeparationIntake" } }
+    SeparationIntakeResult:
+      type: object
+      required: [caseId, status, conflict]
+      properties:
+        caseId: { type: integer }
+        status: { type: string }
+        conflict: { type: boolean }
+    SeparationSummary:
+      type: object
+      required: [id, version, generation, status, facts, closureBlocker, lifecycle]
+      properties:
+        id: { type: integer }
+        version: { type: integer }
+        generation: { type: integer }
+        status: { type: string }
+        facts: { $ref: "#/components/schemas/SeparationPublicFacts" }
+        closureBlocker: { type: string }
+        lifecycle: { type: string, enum: [separation] }
+    SeparationReceipt:
+      type: object
+      required: [actor, authorityId, authorityRevision, scope, reference, generation, recordedAt, provenance]
+      properties:
+        actor: { type: string }
+        authorityId: { type: string }
+        authorityRevision: { type: integer }
+        scope: { type: string }
+        reference: { type: string }
+        generation: { type: integer }
+        recordedAt: { type: string }
+        provenance: { type: string, enum: [human-source-attested] }
+    SeparationFlags:
+      type: object
+      required: [privileged, highRisk, clientFacing, peopleManager, statutory]
+      properties:
+        privileged: { type: boolean }
+        highRisk: { type: boolean }
+        clientFacing: { type: boolean }
+        peopleManager: { type: boolean }
+        statutory: { type: boolean }
+    SeparationTask:
+      type: object
+      required: [id, activity, label, stream, scope, owner, prerequisites, dueAt, notBeforeAt, status, details, executionMode, blockers]
+      properties:
+        id: { type: string }
+        activity: { type: string }
+        label: { type: string }
+        stream: { type: string }
+        scope: { type: string }
+        owner: { type: [string, "null"] }
+        prerequisites: { type: array, items: { type: string } }
+        dueAt: { type: [string, "null"] }
+        notBeforeAt: { type: [string, "null"] }
+        status: { type: string, enum: [pending, blocked, uncertain, verified] }
+        evidence:
+          anyOf:
+            - { $ref: "#/components/schemas/SeparationReceipt" }
+            - { type: "null" }
+        details: { type: object, additionalProperties: true }
+        executionMode: { type: string }
+        blockers: { type: array, items: { type: string } }
+    SeparationSource:
+      type: object
+      required: [channel, sourceReference, provenance, actor, facts]
+      properties:
+        channel: { type: string }
+        sourceReference: { type: string }
+        provenance: { type: string }
+        actor: { type: string }
+        facts: { $ref: "#/components/schemas/SeparationFacts" }
+    SeparationDetail:
+      allOf:
+        - { $ref: "#/components/schemas/SeparationSummary" }
+        - type: object
+          required: [privateVisible, sources, state, history, settlementReview, finalizationAvailable, gatewayC, activity12]
+          properties:
+            privateVisible: { type: boolean }
+            privateFacts:
+              anyOf:
+                - { $ref: "#/components/schemas/SeparationFacts" }
+                - { type: "null" }
+            sources: { type: array, items: { $ref: "#/components/schemas/SeparationSource" } }
+            history: { type: array, items: { $ref: "#/components/schemas/SeparationCheckpoint" } }
+            settlementReview: { type: array, items: { $ref: "#/components/schemas/SeparationSettlementReview" } }
+            finalizationAvailable: { type: boolean, const: false }
+            gatewayC: { type: string }
+            activity12: { type: string }
+            state:
+              type: object
+              required: [gatewayA, urgency, sensitiveTriggers, conflict, holds, policyCurrent, tasks, decisions, settlementVersions]
+              properties:
+                gatewayA: { type: string, enum: [pending, clear, restricted] }
+                classification: { type: [string, "null"] }
+                urgency: { type: [string, "null"] }
+                flags:
+                  anyOf:
+                    - { $ref: "#/components/schemas/SeparationFlags" }
+                    - { type: "null" }
+                sensitiveTriggers: { type: array, items: { type: string } }
+                conflict: { type: boolean }
+                holds: { type: array, items: { type: string } }
+                policyId: { type: [string, "null"] }
+                policyVersion: { type: [integer, "null"] }
+                policyCurrent: { type: boolean }
+                restrictedManual: { type: boolean }
+                tasks: { type: array, items: { $ref: "#/components/schemas/SeparationTask" } }
+                decisions: { type: array, items: { $ref: "#/components/schemas/SeparationReceipt" } }
+                settlementVersions: { type: array, items: { type: object, additionalProperties: true } }
+                pauseReason: { type: [string, "null"] }
+    SeparationCheckpoint:
+      description: Private revision history. Only current all-sensitive-field readers with the corresponding verified specialist authorities can read source facts and opaque state.
+      type: object
+      required: [version, generation, status, actor, action, recordedAt, facts, state]
+      properties:
+        version: { type: integer }
+        generation: { type: integer }
+        status: { type: string }
+        actor: { type: string }
+        action: { type: string }
+        recordedAt: { type: string, format: date-time }
+        facts: { $ref: "#/components/schemas/SeparationFacts" }
+        state: { type: object, additionalProperties: true }
+    SeparationSettlementReview:
+      description: Payroll-authorized fixed numeric projection. Does not disclose opaque calculation references, legal findings or narratives.
+      type: object
+      required: [revision, currency, items, recordedAt, authorityCurrent]
+      properties:
+        revision: { type: integer }
+        currency: { type: string }
+        items:
+          type: object
+          additionalProperties: false
+          properties:
+            basePay: { type: number }
+            assetRecovery: { type: number }
+            relocationRecovery: { type: number }
+            noticeAdjustment: { type: number }
+            statutory: { type: number }
+            equity: { type: number }
+            other: { type: number }
+        recordedAt: { type: string, format: date-time }
+        authorityCurrent: { type: boolean }
+    SeparationFutureAnalyticsContract:
+      description: Disabled future interface only. Disclosure requires an approved closure specification, reviewed cohort suppression and privacy policy; no threshold or eligibility is inferred now.
+      type: object
+      required: [enabled, closureSpecificationApprovedRequired, cohortSuppressionReviewRequired, privacyReviewRequired]
+      properties:
+        enabled: { type: boolean, const: false }
+        closureSpecificationApprovedRequired: { type: boolean, const: true }
+        cohortSuppressionReviewRequired: { type: boolean, const: true }
+        privacyReviewRequired: { type: boolean, const: true }
+    SeparationAction:
+      type: object
+      required: [action, expectedVersion, reference]
+      properties:
+        action:
+          type: string
+          enum: [screen, hrbp-reconcile, classify, adopt-policy, emergency-security-plan, pause, sensitive-flag, context-change, legal-hold, hrbp-disposition, settlement-version, assign, task-evidence, task-blocked, finalize]
+        expectedVersion: { type: integer }
+        reference: { type: string }
+        sensitiveTriggers: { type: array, items: { type: string } }
+        facts: { $ref: "#/components/schemas/SeparationFacts" }
+        confirmed: { type: boolean }
+        classification: { type: string }
+        urgency: { type: string, enum: [Standard, Elevated, High] }
+        flags: { $ref: "#/components/schemas/SeparationFlags" }
+        policyId: { type: string }
+        policyVersion: { type: integer }
+        disposition: { type: string, enum: [cancel, convert-to-transfer, resume] }
+        items: { type: object, additionalProperties: { type: number } }
+        currency: { type: string }
+        rulesReference: { type: string }
+        taskId: { type: string }
+        owner: { type: string }
+        uncertain: { type: boolean }
+        provenance: { type: string, enum: [human-source-attested] }
+        simulated: { type: boolean }
+        details: { type: object, additionalProperties: true }
+    SeparationActionResult:
+      type: object
+      required: [caseId, version, status, closureBlocker]
+      properties:
+        caseId: { type: integer }
+        version: { type: integer }
+        status: { type: string }
+        closureBlocker: { type: string }
+    SeparationPolicy:
+      type: object
+      required: [country, role, workerCategory, timeZone, endOfLwd, rulesReference, retentionReference, obligations, defaultAssets]
+      properties:
+        country: { type: string }
+        role: { type: string }
+        workerCategory: { type: string }
+        timeZone: { type: string }
+        endOfLwd: { type: string }
+        rulesReference: { type: string }
+        retentionReference: { type: string }
+        obligations:
+          type: array
+          items:
+            type: object
+            required: [id, label, stream, scope, prerequisites, dueOffsetDays]
+            properties:
+              id: { type: string }
+              label: { type: string }
+              stream: { type: string }
+              scope: { type: string }
+              prerequisites: { type: array, items: { type: string } }
+              dueOffsetDays: { type: integer }
+        defaultAssets: { type: array, items: { type: string } }
+    SeparationPolicyRecord:
+      type: object
+      required: [id, version, policy, status, createdBy]
+      properties:
+        id: { type: string }
+        version: { type: integer }
+        policy: { $ref: "#/components/schemas/SeparationPolicy" }
+        status: { type: string }
+        approval: { $ref: "#/components/schemas/SeparationReceipt" }
+        createdBy: { type: string }
+    SeparationPolicyProposal:
+      type: object
+      required: [expectedVersion, policy]
+      properties:
+        id: { type: string }
+        expectedVersion: { type: integer }
+        policy: { $ref: "#/components/schemas/SeparationPolicy" }
+    SeparationPolicyDecision:
+      type: object
+      required: [decision, reference]
+      properties:
+        decision: { type: string, enum: [approve, withdraw] }
+        reference: { type: string }
+    SeparationMailboxConfiguration:
+      type: object
+      required: [allowedSenders, reference]
+      properties:
+        allowedSenders: { type: array, items: { type: string } }
+        reference: { type: string }
+    SeparationMailboxIngress:
+      type: object
+      required: [id, token, allowedSenders, enabled]
+      properties:
+        id: { type: string }
+        token: { type: string }
+        allowedSenders: { type: array, items: { type: string } }
+        enabled: { type: integer }
+    SeparationMailboxReadiness:
+      type: object
+      required: [configurations, channel, monitor, attachmentPolicy, provenance]
+      properties:
+        configurations: { type: array, items: { $ref: "#/components/schemas/SeparationMailboxIngress" } }
+        channel: { type: object, additionalProperties: true }
+        monitor: { type: object, additionalProperties: true }
+        attachmentPolicy: { type: string }
+        provenance: { type: string }
+    SeparationMailboxRequest:
+      type: object
+      required: [id, sender, fields, status, attachments, missingFields, providerMessageId]
+      properties:
+        id: { type: string }
+        sender: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+        status: { type: string }
+        caseId: { type: [integer, "null"] }
+        providerMessageId: { type: string }
+        attachments: { type: array, items: { type: object, additionalProperties: true } }
+        missingFields: { type: array, items: { type: string } }
+    SeparationMailboxConversion:
+      type: object
+      required: [facts]
+      properties:
+        facts: { $ref: "#/components/schemas/SeparationFacts" }
+        attachmentsReviewed: { type: boolean }
     UatSignInChallenge:
       type: object
       required: [expiresAt]

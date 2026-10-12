@@ -359,6 +359,7 @@ export async function getInboundEmailMonitorStatus(
 type GmailHeader = { name: string; value: string };
 export type GmailPart = {
   mimeType?: string;
+  filename?: string;
   body?: { data?: string };
   parts?: GmailPart[];
 };
@@ -512,6 +513,7 @@ export async function recordInbound(opts: InboundMessage): Promise<boolean> {
 export type DetailFetchResult = { ok: boolean; json: () => Promise<unknown> };
 
 export type ProcessDeps = {
+  ingestHroMailboxMessage?: (msg: GmailMessage, sender: string, subject: string, body: string) => Promise<boolean>;
   fetchDetail: (id: string) => Promise<DetailFetchResult>;
   alreadyRecorded: (id: string, organizationId: string) => Promise<boolean>;
   recordInbound: (opts: InboundMessage) => Promise<boolean>;
@@ -578,6 +580,12 @@ export async function processMessageRefs(
     const fromAddress = extractAddress(header(msg, "From"));
     const raw = findPlainText(msg.payload) ?? "";
     const subject = header(msg, "Subject") || "";
+    if (subject.includes("[HRO-INTAKE:")) {
+      if (deps.ingestHroMailboxMessage && !deps.outboundProviderIds?.has(ref.id) && !await deps.alreadyRecorded(ref.id, "")) {
+        await deps.ingestHroMailboxMessage(msg, fromAddress, subject, sanitizeInboundText(raw));
+      }
+      continue;
+    }
     const simulationCandidates = [...new Set(
       [...raw.matchAll(/\[SIM-REPLY-TOKEN:([a-f0-9]{40,64})\]/gi), ...subject.matchAll(/\[SIM-REPLY-TOKEN:([a-f0-9]{40,64})\]/gi)]
         .map((match) => match[1]!.toLowerCase()),
@@ -667,7 +675,9 @@ async function pollOnce(): Promise<void> {
     .from(onbCases)
     .where(sql`${onbCases.lifecycleStage} not in ('complete')`);
   const simulationRoutes = await listSimulationEmailRoutes();
-  if (cases.length === 0 && simulationRoutes.length === 0) return;
+  const { hroMailboxIngress } = await import("@workspace/db");
+  const mailboxIngresses = await db.select().from(hroMailboxIngress).where(eq(hroMailboxIngress.enabled, 1));
+  if (cases.length === 0 && simulationRoutes.length === 0 && mailboxIngresses.length === 0) return;
 
   const caseByEmail = new Map<string, EmailCaseCandidate[]>();
   for (const c of cases) {
@@ -717,6 +727,7 @@ async function pollOnce(): Promise<void> {
   const fromClause = [...new Set([
     ...Array.from(caseByEmail.keys()),
     ...simulationRoutes.map((route) => route.recipient.trim().toLowerCase()),
+    ...mailboxIngresses.flatMap(ingress => ingress.allowedSenders),
   ])]
     .map((e) => `from:${e}`)
     .join(" OR ");
@@ -745,6 +756,7 @@ async function pollOnce(): Promise<void> {
       ),
     alreadyRecorded,
     recordInbound,
+    ingestHroMailboxMessage: async (...args) => (await import("../hro-mailbox-ingress")).ingestHroMailboxMessage(...args),
     recordSimulationInbound: (message) => recordSimulationEmailReply(message),
     outboundProviderIds: simulationOutboundIds,
   }, simulationByToken);
