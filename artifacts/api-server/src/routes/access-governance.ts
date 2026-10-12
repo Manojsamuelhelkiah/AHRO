@@ -61,6 +61,42 @@ function fail(res: Response, status: number, message: string, code: string): voi
   res.status(status).json({ message, code });
 }
 
+// Run after transaction rollback: PostgreSQL rejects queries inside a failed
+// transaction. Match only the name constraint, never starter IDs or other keys.
+async function respondToGroupNameConflict(
+  res: Response, error: unknown, organizationId: string,
+  type: "user-group" | "security-group", name: unknown,
+): Promise<boolean> {
+  if (typeof name !== "string") return false;
+  const constraint = type === "user-group"
+    ? "access_user_groups_org_name_unique" : "access_security_groups_org_name_unique";
+  let cause = error;
+  const seen = new Set<unknown>();
+  let matched = false;
+  while (cause && typeof cause === "object" && !seen.has(cause)) {
+    seen.add(cause);
+    const pgError = cause as { code?: string; constraint?: string; cause?: unknown };
+    if (pgError.code === "23505" && pgError.constraint === constraint) {
+      matched = true;
+      break;
+    }
+    cause = pgError.cause;
+  }
+  if (!matched) return false;
+  const table = type === "user-group" ? accessUserGroups : accessSecurityGroups;
+  const [group] = await db.select({ id: table.id, name: table.name, status: table.status })
+    .from(table).where(and(eq(table.organizationId, organizationId), eq(table.name, name.trim()))).limit(1);
+  const label = type === "user-group" ? "user group" : "security group";
+  res.status(409).json({
+    code: "ACCESS_GROUP_NAME_CONFLICT",
+    message: group
+      ? `A ${label} named “${group.name}” already exists in this organization${group.status === "retired" ? " and is retired" : ""}. View the existing group or choose a different name.`
+      : `This ${label} name is already in use in this organization. Refresh the group list and choose a different name.`,
+    ...(group ? { existingGroup: { ...group, type } } : {}),
+  });
+  return true;
+}
+
 function bodyObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -958,6 +994,8 @@ router.post("/user-groups", async (req, res, next) => {
       userGroup: result.created ? { ...result.userGroup, members: [], securityGroups: [], securityGroupAttachments: [] } : result.userGroup,
     });
   } catch (error) {
+    if (req.body?.starterId === undefined &&
+      await respondToGroupNameConflict(res, error, getOrganizationId(req), "user-group", req.body?.name)) return;
     if (error instanceof Error && "status" in error) {
       const coded = error as Error & { status: number; code: string };
       fail(res, coded.status, error.message, coded.code);
@@ -1050,6 +1088,7 @@ router.patch("/user-groups/:id", async (req, res, next) => {
     });
     res.json({ ok: true });
   } catch (error) {
+    if (await respondToGroupNameConflict(res, error, getOrganizationId(req), "user-group", req.body?.name)) return;
     if (error instanceof Error && "status" in error) {
       const coded = error as Error & { status: number; code: string };
       fail(res, coded.status, error.message, coded.code);
@@ -1745,6 +1784,7 @@ router.post("/security-groups", async (req, res, next) => {
       },
     });
   } catch (error) {
+    if (await respondToGroupNameConflict(res, error, getOrganizationId(req), "security-group", req.body?.name)) return;
     next(error);
   }
 });
@@ -1955,6 +1995,7 @@ router.patch("/security-groups/:id", async (req, res, next) => {
     });
     res.json({ ok: true, version: newVersion });
   } catch (error) {
+    if (await respondToGroupNameConflict(res, error, getOrganizationId(req), "security-group", req.body?.name)) return;
     if (error instanceof Error && "status" in error) {
       const coded = error as Error & { status: number; code: string };
       fail(res, coded.status, error.message, coded.code);

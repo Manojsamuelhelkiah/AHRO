@@ -19,6 +19,17 @@ type SecurityGroup = {
   id: string; name: string; status: string; version: number;
   allows: string[]; approvalStatus: string;
 };
+type ExistingGroup = { id: string; name: string; status: string; type: "user-group" | "security-group" };
+type Notice = { ok: boolean; message: string; existingGroup?: ExistingGroup };
+class GroupNameConflict extends Error {
+  constructor(message: string, readonly existingGroup?: ExistingGroup) {
+    super(message);
+  }
+}
+function failureNotice(error: unknown): Notice {
+  return { ok: false, message: errorText(error),
+    ...(error instanceof GroupNameConflict ? { existingGroup: error.existingGroup } : {}) };
+}
 type Member = {
   clerkUserId: string; role: string;
   name?: string | null; fullName?: string | null; email?: string | null;
@@ -159,6 +170,9 @@ async function accessRequest<T>(path: string, init: RequestInit = {}): Promise<T
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
+    if (response.status === 409 && payload.code === "ACCESS_GROUP_NAME_CONFLICT") {
+      throw new GroupNameConflict(payload.message, payload.existingGroup);
+    }
     throw new Error(payload.message || payload.error || `Request failed (${response.status}).`);
   }
   if (response.status === 204) return undefined as T;
@@ -190,14 +204,16 @@ export function AccessGovernanceSettings() {
     refetchInterval: 60_000,
   });
   const snapshot = snapshotQuery.data;
-  const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [agentOwner, setAgentOwner] = useState("");
   const [userGroupName, setUserGroupName] = useState("");
   const [userGroupChoice, setUserGroupChoice] = useState("");
   const creatingUserGroup = useRef(false);
-  const [groupNotice, setGroupNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [groupNotice, setGroupNotice] = useState<Notice | null>(null);
+  const [renamingUserGroup, setRenamingUserGroup] = useState<string | null>(null);
+  const [userGroupDraftName, setUserGroupDraftName] = useState("");
   const [securityGroupName, setSecurityGroupName] = useState("");
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
   const [groupDraftName, setGroupDraftName] = useState("");
@@ -268,7 +284,7 @@ export function AccessGovernanceSettings() {
       await refresh();
       return true;
     } catch (error) {
-      setNotice({ ok: false, message: errorText(error) });
+      setNotice(failureNotice(error));
       return false;
     } finally {
       setBusy(false);
@@ -461,9 +477,9 @@ export function AccessGovernanceSettings() {
           : `Using existing group “${group.name}”${selectedStarter && group.name !== selectedStarter.name ? " (renamed)" : ""}. Its members and access settings were not changed.` });
       if (userGroupChoice === "custom") setUserGroupName("");
     } catch (error) {
-      setGroupNotice({ ok: false, message: saved
-        ? `The group was saved, but refreshing the list failed. Use Refresh before creating another custom group. ${errorText(error)}`
-        : errorText(error) });
+      setGroupNotice(saved ? { ok: false, message:
+        `The group was saved, but refreshing the list failed. Use Refresh before creating another custom group. ${errorText(error)}`,
+      } : failureNotice(error));
     } finally {
       creatingUserGroup.current = false;
       setBusy(false);
@@ -477,13 +493,25 @@ export function AccessGovernanceSettings() {
     setGroupDraftAllows(group.allows);
   };
   const toggleAllow = (key: string) => setGroupDraftAllows((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
-  const saveSecurityGroup = (group: SecurityGroup) => {
-    void perform(() => accessRequest(`/security-groups/${encodeURIComponent(group.id)}`, {
+  const saveSecurityGroup = async (group: SecurityGroup) => {
+    const saved = await perform(() => accessRequest(`/security-groups/${encodeURIComponent(group.id)}`, {
       method: "PATCH",
       body: JSON.stringify({ name: groupDraftName.trim(), allows: groupDraftAllows, expectedVersion: group.version }),
     }), "Security group and policy grants updated.");
-    setEditingGroup(null);
+    if (saved) setEditingGroup(null);
   };
+  const noticeContent = (value: Notice) => <>{value.message}{value.existingGroup && <Button
+    size="sm" variant="outline" disabled={busy} className="ml-2"
+    onClick={async () => {
+      try {
+        await refresh();
+        const group = value.existingGroup!;
+        const row = document.getElementById(`access-${group.type}-${group.id}`);
+        row?.scrollIntoView({ behavior: "smooth", block: "center" });
+        row?.focus({ preventScroll: true });
+      } catch (error) { setNotice(failureNotice(error)); }
+    }}
+  >View existing group</Button>}</>;
   return (
     <Card className="overflow-hidden p-0">
       <CardContent className="p-0">
@@ -619,7 +647,7 @@ export function AccessGovernanceSettings() {
                     <Button type="submit" size="sm" disabled={busy || !userGroupChoice || (userGroupChoice === "custom" ? !userGroupName.trim() : !selectedStarter)}><Plus className="mr-1 h-3.5 w-3.5" />{busy ? "Saving..." : existingStarter ? "Use existing group" : "Create user group"}</Button>
                   </form>}
                   {existingStarter && <p className="mb-3 break-words text-xs text-[var(--text-muted)]">This starter already exists as “{existingStarter.name}” ({existingStarter.status}). Choosing it will not recreate, rename, reactivate, or change its access.</p>}
-                  {groupNotice && <p role={groupNotice.ok ? "status" : "alert"} data-testid="status-access-user-group" className={cn("mb-3 rounded-md p-3 text-xs", groupNotice.ok ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]")}>{groupNotice.message}</p>}
+                  {groupNotice && <p role={groupNotice.ok ? "status" : "alert"} data-testid="status-access-user-group" className={cn("mb-3 rounded-md p-3 text-xs", groupNotice.ok ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]")}>{noticeContent(groupNotice)}</p>}
                   {!data.userGroups.length && <p className="mb-3 text-xs text-[var(--text-muted)]">No user groups yet. An organization owner can create an optional starter or a custom group.</p>}
                   {canManage && <div className="mb-3 flex flex-wrap gap-2 rounded-md bg-[var(--surface-alt)] p-3">
                     <select aria-label="Group for principal" className={inputClass} value={memberGroupId} onChange={(event) => { setMemberGroupId(event.target.value); setMemberExpiry(""); }}><option value="">Choose user group</option>{userGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
@@ -656,16 +684,28 @@ export function AccessGovernanceSettings() {
                     }}>{proposalLoading ? "Preparing preview..." : "Preview attachment impact"}</Button>
                   </div>}
                   <div className="space-y-2">
-                    {data.userGroups.map((group) => <div key={group.id} data-testid={`row-access-user-group-${group.id}`} className="rounded-md border border-[var(--border)] p-3">
+                    {data.userGroups.map((group) => <div key={group.id} id={`access-user-group-${group.id}`} tabIndex={-1} data-testid={`row-access-user-group-${group.id}`} className="rounded-md border border-[var(--border)] p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2"><span className="text-xs font-semibold">{group.name}</span><Badge className="bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]">{group.status}</Badge><span className="text-xs text-[var(--text-muted)]">{group.members.length} principals · {group.securityGroups.length} security groups</span></div>
                         {canManage && group.status === "active" && <div className="flex gap-2">
                           <Button variant="outline" size="sm" disabled={busy} onClick={() => {
-                            const name = window.prompt("Rename user group", group.name);
-                            if (name?.trim()) void perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}`, { method: "PATCH", body: JSON.stringify({ name: name.trim(), expectedVersion: group.version }) }), "User group renamed.");
+                            setRenamingUserGroup(group.id);
+                            setUserGroupDraftName(group.name);
                           }}>Rename</Button>
                           <Button variant="outline" size="sm" disabled={busy} onClick={() => void perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}`, { method: "PATCH", body: JSON.stringify({ status: "retired", expectedVersion: group.version }) }), "User group retired.")}>Retire</Button>
                         </div>}
+                        {canManage && renamingUserGroup === group.id && <form className="flex flex-wrap gap-2" onSubmit={async (event) => {
+                          event.preventDefault();
+                          if (busy || !userGroupDraftName.trim()) return;
+                          const saved = await perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}`, {
+                            method: "PATCH", body: JSON.stringify({ name: userGroupDraftName.trim(), expectedVersion: group.version }),
+                          }), "User group renamed.");
+                          if (saved) setRenamingUserGroup(null);
+                        }}>
+                          <input aria-label={`Rename ${group.name}`} className={inputClass} value={userGroupDraftName} onChange={(event) => setUserGroupDraftName(event.target.value)} disabled={busy} />
+                          <Button size="sm" disabled={busy || !userGroupDraftName.trim()}>Save name</Button>
+                          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setRenamingUserGroup(null)}>Cancel</Button>
+                        </form>}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {group.members.map((principal) => <span key={`${principal.principalType}-${principal.principalId}`} className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-alt)] px-2 py-1 text-[10px] text-[var(--text-secondary)]">{principalLabel(principal.principalType, principal.principalId, data.members, data.agents)} · {expiryLabel(principal.expiresAt)}{canManage && group.status === "active" && <button type="button" aria-label={`Remove ${principalLabel(principal.principalType, principal.principalId, data.members, data.agents)} from ${group.name}`} disabled={busy} className="font-bold text-[var(--status-red)] disabled:opacity-50" onClick={() => void perform(() => accessRequest(`/user-groups/${encodeURIComponent(group.id)}/members`, { method: "PUT", body: JSON.stringify({ principalType: principal.principalType, principalId: principal.principalId, active: false }) }), "Principal removed from user group.")}>×</button>}</span>)}
@@ -723,18 +763,18 @@ export function AccessGovernanceSettings() {
                       <p className="mb-2 text-xs font-semibold">Policy catalog</p>
                       {data.catalog.length ? <div className="space-y-1.5">{data.catalog.map((policy) => <div key={policy.key} data-testid={`row-policy-catalog-${policy.key}`} className="flex flex-wrap items-center gap-2 text-xs"><span className="font-medium">{policy.label}</span><code className="text-[var(--text-muted)]">{policy.key}</code><Badge className={/high|critical/i.test(policy.sensitivity) ? "bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]" : "bg-[var(--surface-soft)] text-[var(--text-secondary)]"}>{policy.sensitivity}</Badge><span className="text-[var(--text-muted)]">{policy.kind}</span></div>)}</div> : <p className="text-xs text-[var(--text-muted)]">No catalog policies are available.</p>}
                     </div>
-                    {canManage && <form className="flex gap-2 sm:flex-col" onSubmit={(event) => {
+                    {canManage && <form className="flex gap-2 sm:flex-col" onSubmit={async (event) => {
                       event.preventDefault();
-                      if (!securityGroupName.trim()) return;
-                      void perform(() => accessRequest("/security-groups", { method: "POST", body: JSON.stringify({ name: securityGroupName.trim(), allows: [] }) }), "Security group created.");
-                      setSecurityGroupName("");
+                      if (busy || !securityGroupName.trim()) return;
+                      const saved = await perform(() => accessRequest("/security-groups", { method: "POST", body: JSON.stringify({ name: securityGroupName.trim(), allows: [] }) }), "Security group created.");
+                      if (saved) setSecurityGroupName("");
                     }}>
                       <input aria-label="New security group name" className={inputClass} placeholder="New security group name" value={securityGroupName} onChange={(event) => setSecurityGroupName(event.target.value)} />
                       <Button type="submit" size="sm" disabled={busy || !securityGroupName.trim()}><Plus className="mr-1 h-3.5 w-3.5" />Create</Button>
                     </form>}
                   </div>
                   <div className="space-y-2">
-                    {data.securityGroups.map((group) => <div key={group.id} data-testid={`row-access-security-group-${group.id}`} className="rounded-md border border-[var(--border)] p-3">
+                    {data.securityGroups.map((group) => <div key={group.id} id={`access-security-group-${group.id}`} tabIndex={-1} data-testid={`row-access-security-group-${group.id}`} className="rounded-md border border-[var(--border)] p-3">
                       {editingGroup === group.id ? <div className="space-y-3">
                         <input aria-label="Security group name" className={inputClass} value={groupDraftName} onChange={(event) => setGroupDraftName(event.target.value)} />
                         <div className="grid gap-2 sm:grid-cols-2">{data.catalog.map((policy) => <label key={policy.key} className={cn("flex items-start gap-2 rounded-md border border-[var(--border)] p-2 text-xs", /high|critical/i.test(policy.sensitivity) && "bg-[var(--status-amber-bg)]/40")}>
@@ -868,7 +908,7 @@ export function AccessGovernanceSettings() {
                 </section>
               </>
             )}
-          {notice && <p role="status" data-testid="status-access-governance" className={cn("rounded-md p-3 text-xs", notice.ok ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]")}>{notice.message}</p>}
+          {notice && <p role={notice.ok ? "status" : "alert"} data-testid="status-access-governance" className={cn("rounded-md p-3 text-xs", notice.ok ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]")}>{noticeContent(notice)}</p>}
           {canManage && activeGroupMembers.length === 0 && snapshot && <p className="text-xs text-[var(--text-muted)]">No active human members are available for ownership assignments.</p>}
         </div>
       </CardContent>

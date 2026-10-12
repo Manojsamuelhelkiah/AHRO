@@ -333,6 +333,91 @@ after(async () => {
   await deleteGovernanceFixture(organizationId);
 });
 
+test("custom group name conflicts are actionable, atomic, concurrent-safe and tenant-scoped", { skip: !hasDb }, async () => {
+  const otherOrganizationId = `${suffix}-conflicts-other`;
+  await db.insert(organizationsTable).values({
+    id: otherOrganizationId, name: "Name conflict isolation", slug: otherOrganizationId,
+    joinCodeHash: `${otherOrganizationId}-join`, createdByUserId: managerUserId,
+  });
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: otherOrganizationId, clerkUserId: managerUserId, role: "owner",
+  });
+  try {
+    for (const type of ["user-group", "security-group"] as const) {
+      const path = `/${type}s`;
+      const key = type === "user-group" ? "userGroup" : "securityGroup";
+      const name = `${type} exact conflict`;
+      const createBody = (value: string) => ({ name: value, ...(type === "security-group" ? { allows: [] } : {}) });
+      const parallel = await Promise.all(Array.from({ length: 3 }, () =>
+        mutate(path, "POST", managerUserId, createBody(` ${name} `))));
+      assert.deepEqual(parallel.map((item) => item.response.status).sort(), [201, 409, 409]);
+      const group = parallel.find((item) => item.response.status === 201)!.body[key];
+      const expectConflict = (result: ApiResult, status = "active", id = group.id) => {
+        expectStatus(result, 409);
+        assert.equal(result.body.code, "ACCESS_GROUP_NAME_CONFLICT");
+        assert.deepEqual(result.body.existingGroup, { id, name, status, type });
+        assert.match(result.body.message, /in this organization/);
+        assert.match(result.body.message, /View the existing group or choose a different name/);
+        assert.deepEqual(Object.keys(result.body).sort(), ["code", "existingGroup", "message"]);
+      };
+      parallel.filter((item) => item.response.status === 409).forEach((item) => expectConflict(item));
+      const foreign = await mutate(path, "POST", managerUserId, createBody(name), otherOrganizationId);
+      expectStatus(foreign, 201);
+      assert.notEqual(foreign.body[key].id, group.id);
+      expectConflict(await mutate(path, "POST", managerUserId, createBody(name), otherOrganizationId), "active", foreign.body[key].id);
+      const denied = await mutate(path, "POST", humanMemberUserId, createBody(name));
+      expectStatus(denied, 403);
+      assert.equal(denied.body.existingGroup, undefined);
+      const missing = await mutate(`${path}/${foreign.body[key].id}`, "PATCH", managerUserId, { name, expectedVersion: 1 });
+      expectStatus(missing, 404);
+      assert.equal(missing.body.existingGroup, undefined);
+      // Self-renames and case-distinct names retain the exact DB semantics.
+      expectStatus(await mutate(`${path}/${group.id}`, "PATCH", managerUserId, { name, expectedVersion: 1 }), 200);
+      expectStatus(await mutate(path, "POST", managerUserId, createBody(name.toUpperCase())), 201);
+      const sources = await Promise.all(["one", "two"].map((label) =>
+        mutate(path, "POST", managerUserId, createBody(`${name} ${label}`))));
+      sources.forEach((item) => expectStatus(item, 201));
+      const before = await currentSnapshot();
+      for (const source of sources) {
+        expectConflict(await mutate(`${path}/${source.body[key].id}`, "PATCH", managerUserId, {
+          name: ` ${name} `, expectedVersion: 1,
+          ...(type === "security-group" ? { allows: ["data.case.notes.read"] } : {}),
+        }));
+      }
+      const afterFailure = await currentSnapshot();
+      assert.equal(afterFailure.history.length, before.history.length, "failed renames must not write audit history");
+      for (const source of sources) {
+        const saved = afterFailure[type === "user-group" ? "userGroups" : "securityGroups"]
+          .find((item: JsonRecord) => item.id === source.body[key].id);
+        assert.equal(saved.version, 1);
+        assert.equal(saved.name, source.body[key].name);
+        if (type === "security-group") {
+          assert.deepEqual(saved.allows, []);
+          const policies = await db.select().from(accessSecurityGroupPolicies).where(and(
+            eq(accessSecurityGroupPolicies.organizationId, organizationId),
+            eq(accessSecurityGroupPolicies.securityGroupId, saved.id),
+          ));
+          assert.equal(policies.length, 1, "conflicting rename must roll back the new policy revision");
+        }
+      }
+      const targetName = `${name} concurrent rename`;
+      const renames = await Promise.all(sources.map((source) => mutate(`${path}/${source.body[key].id}`, "PATCH",
+        managerUserId, { name: targetName, expectedVersion: 1 })));
+      assert.deepEqual(renames.map((item) => item.response.status).sort(), [200, 409]);
+      const winner = sources[renames.findIndex((item) => item.response.status === 200)].body[key];
+      assert.equal(renames.find((item) => item.response.status === 409)!.body.existingGroup.id, winner.id);
+      expectStatus(await mutate(`${path}/${group.id}`, "PATCH", managerUserId, { status: "retired", expectedVersion: 2 }), 200);
+      expectConflict(await mutate(path, "POST", managerUserId, createBody(name)), "retired");
+      const retiredRename = await mutate(`${path}/${group.id}`, "PATCH", managerUserId, { name: targetName, expectedVersion: 3 });
+      expectStatus(retiredRename, 409);
+      assert.equal(retiredRename.body.code, "ACCESS_GROUP_RETIRED");
+      assert.equal(retiredRename.body.existingGroup, undefined);
+    }
+  } finally {
+    await deleteGovernanceFixture(otherOrganizationId);
+  }
+});
+
 test("temporary memberships and group/direct attachments stop granting access at expiry without cleanup", { skip: !hasDb }, async () => {
   const expiry = new Date(Date.now() + 3_600_000).toISOString();
   const past = new Date(Date.now() - 1_000);
