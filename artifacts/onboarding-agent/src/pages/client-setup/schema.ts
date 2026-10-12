@@ -44,6 +44,14 @@ export const processFileSchema = z.object({
   createdAt: z.string().min(1),
 });
 
+export const flowBasisSchema = z.object({
+  source: z.enum(['product-base', 'product-base-with-overrides']),
+  fingerprint: z.string().min(1),
+  selectedDomains: z.array(z.string()).min(1),
+  intentWeights: z.record(z.number().nonnegative()),
+  overrideRefs: z.array(z.string()),
+});
+
 const clientSetupFieldsObject = z.object({
   clientName: z.string().min(1, 'Client name is required'),
   sector: z.string().min(1, 'Sector is required'),
@@ -56,6 +64,9 @@ const clientSetupFieldsObject = z.object({
   hrHourlyCostUsd: z.coerce.number().min(1, 'Must be at least 1'),
   hitlHourlyCostUsd: z.coerce.number().min(1, 'Must be at least 1'),
   processMode: z.enum(['recommended', 'hybrid', 'custom']),
+  flowBasis: flowBasisSchema.optional(),
+  customizationStatus: z.enum(['none', 'pending-review', 'reviewed-overrides']).optional(),
+  processBasisNeedsReview: z.boolean().optional(),
   selectedDomains: z.array(z.string()).min(1, 'Select at least one process domain'),
   processFiles: z.array(processFileSchema).default([]),
   personas: z.array(personaSchema).min(1, 'Add at least one accountable contact'),
@@ -71,7 +82,7 @@ function withLegacySystemIds<T extends z.ZodTypeAny>(schema: T) {
 }
 
 export const clientSetupDataSchema = withLegacySystemIds(
-  clientSetupFieldsObject.omit({ processFiles: true }).transform(({ systems, ...draft }) => ({
+  clientSetupFieldsObject.omit({ processFiles: true, processBasisNeedsReview: true }).transform(({ systems, ...draft }) => ({
     ...draft,
     systems: systems.map(({ needsReview: _needsReview, ...system }) => system),
   })),
@@ -122,11 +133,11 @@ export const clientSetupSchema = withLegacySystemIds(clientSetupFieldsObject).su
       watcherModes.set(system.key, watcherMode);
     }
   });
-  if (draft.processMode !== 'recommended' && draft.processFiles.length === 0) {
+  if (draft.processBasisNeedsReview) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['processFiles'],
-      message: 'Upload at least one client flow for hybrid or custom adoption',
+      path: ['processMode'],
+      message: 'Review the older custom arrangement and explicitly confirm its planning basis before continuing.',
     });
   }
 });
@@ -238,12 +249,16 @@ export function resolveInitialDraft(
     ...baseline,
     ...(savedDraft ?? {}),
   }) as ClientSetupDraft;
+  if (savedDraft && savedDraft.processMode !== undefined && savedDraft.processMode !== 'recommended' && !savedDraft.flowBasis) {
+    candidate.processBasisNeedsReview = true;
+  }
   const hasUnresolvedSystemChoice = candidate.systems.some(
     (system) => !system.key || !system.mode,
   );
   if (
     useSyntheticDemo
     && !hasUnresolvedSystemChoice
+    && !savedDraft
     && !clientSetupSchema.safeParse(candidate).success
   ) {
     return demoDraft;
@@ -261,6 +276,9 @@ export function migrateLegacyClientSetupDraft(
   }
 
   const draft = { ...(savedDraft as Record<string, unknown>) };
+  if (draft.processMode && draft.processMode !== 'recommended' && !draft.flowBasis) {
+    draft.processBasisNeedsReview = true;
+  }
   if (!Array.isArray(draft.systems)) return draft as Partial<ClientSetupDraft>;
 
   draft.systems = draft.systems.map((entry) => {

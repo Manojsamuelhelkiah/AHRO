@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
-import { db, scenariosTable, scenarioFilesTable, actualsOverlaysTable, objectCleanupJobsTable } from "@workspace/db";
+import { db, scenariosTable, scenarioFilesTable, actualsOverlaysTable, objectCleanupJobsTable, flowOverridesTable } from "@workspace/db";
 import { onbConnectors, onbSystemChecks } from "@workspace/db/schema";
 import {
   ListScenariosResponse,
@@ -11,8 +11,9 @@ import {
   UpdateScenarioResponse,
   ComputeRollupBody,
   ComputeRollupResponse,
+  ResolveScenarioFlowBasisBody,
 } from "@workspace/api-zod";
-import { computeRollup, computeVariance, type ScenarioInputs } from "../lib/rollup";
+import { computeRollup, computeVariance, type ScenarioInputs, type FlowOverrideValues } from "../lib/rollup";
 import { loadActiveFlowOverrides } from "./flow-overrides";
 import { loadActiveCustomIntents } from "./custom-intents";
 import { validateScenarioInputs, InputValidationError } from "../lib/validate-inputs";
@@ -39,8 +40,37 @@ import {
 } from "../lib/onboarding/system-setup-capabilities";
 import { ensureConnectorsSeeded } from "../lib/onboarding/connectors";
 import { systemDef } from "../lib/onboarding/external-systems";
+import { resolveSetupFlowBasis, validateSetupFlowBasis } from "../lib/setup-flow-basis";
 
 const router: IRouter = Router();
+
+async function currentSetupSnapshot(organizationId: string, domains: string[]) {
+  // Unlike the legacy rollup loader, failure here must not conceal existing overrides.
+  const overrides = await db.select().from(flowOverridesTable).where(and(
+    organizationWhere(flowOverridesTable, organizationId), eq(flowOverridesTable.status, "approved"),
+  )).catch(() => { throw new InputValidationError("Approved flow definitions could not be read. Restore the definition store and retry; existing client overrides have not been replaced."); });
+  const values: Record<string, FlowOverrideValues> = {};
+  for (const row of [...overrides].sort((a, b) => a.version - b.version)) {
+    values[row.intentKey] = {
+      ...(row.flowClass !== null && { flowClass: row.flowClass }),
+      ...(row.toBeHumanMin !== null && { toBeHumanMin: row.toBeHumanMin }),
+      ...(row.actGetActions !== null && { actGetActions: row.actGetActions }),
+      ...(row.actPutActions !== null && { actPutActions: row.actPutActions }),
+    };
+  }
+  return { basis: resolveSetupFlowBasis(domains, overrides), values };
+}
+
+async function currentSetupBasis(organizationId: string, domains: string[]) {
+  return (await currentSetupSnapshot(organizationId, domains)).basis;
+}
+
+router.post("/scenario-flow-basis", requireAuth, async (req, res, next) => {
+  try {
+    const body = ResolveScenarioFlowBasisBody.parse(req.body);
+    res.json(await currentSetupBasis(getOrganizationId(req), body.selectedDomains));
+  } catch (error) { next(error); }
+});
 
 router.get("/scenario-system-capabilities", requireAuth, (_req, res) => {
   res.json(SYSTEM_SETUP_CAPABILITIES);
@@ -110,11 +140,15 @@ function parseId(raw: string | string[] | undefined): number {
 }
 
 function serialize(row: typeof scenariosTable.$inferSelect, fileIds: number[] = []) {
+  const setup = row.setupData as Record<string, unknown> | null;
+  const basis = setup?.flowBasis as { overrideRefs?: unknown[] } | undefined;
   return {
     id: row.id,
     name: row.name,
     inputs: row.inputs,
-    setupData: row.setupData,
+    setupData: setup && basis ? { ...setup,
+      customizationStatus: setup.processMode !== "recommended" || fileIds.length ? "pending-review"
+        : basis.overrideRefs?.length ? "reviewed-overrides" : "none" } : row.setupData,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     fileIds,
@@ -148,9 +182,21 @@ router.post("/scenarios", requireAuth, async (req, res, next) => {
     const body = CreateScenarioBody.parse(req.body);
     const organizationId = getOrganizationId(req);
     validateSystemSetup(body.setupData);
+    if (body.setupData && !body.setupData.flowBasis) {
+      throw new InputValidationError("Resolve and review the current flow basis before saving a new client setup. Existing saved configurations remain intact.");
+    }
+    if (body.setupData?.flowBasis) {
+      const basis = await currentSetupBasis(organizationId, body.setupData.selectedDomains);
+      validateSetupFlowBasis(body.setupData.flowBasis, basis, body.inputs);
+      const expectedStatus = body.setupData.processMode !== "recommended" || body.fileIds?.length ? "pending-review"
+        : basis.overrideRefs.length ? "reviewed-overrides" : "none";
+      if (body.setupData.customizationStatus !== expectedStatus) {
+        throw new InputValidationError("Customization status must reflect the reviewed planning basis, not uploaded files.");
+      }
+    }
     const [overrides, customIntents] = await Promise.all([
       loadActiveFlowOverrides(organizationId),
-      loadRequiredCustomIntents(organizationId),
+      body.setupData?.flowBasis ? Promise.resolve([]) : loadRequiredCustomIntents(organizationId),
     ]);
     const customKeys = new Set(customIntents.map((i) => i.key));
     validateScenarioInputs(body.inputs as ScenarioInputs, customKeys);
@@ -262,17 +308,12 @@ router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
     const organizationId = getOrganizationId(req);
     const body = UpdateScenarioBody.parse(req.body);
     validateSystemSetup(body.setupData);
-    if (body.inputs !== undefined) {
-      const customIntents = await loadRequiredCustomIntents(organizationId);
-      const customKeys = new Set(customIntents.map((i) => i.key));
-      validateScenarioInputs(body.inputs as ScenarioInputs, customKeys);
-    }
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) updates["name"] = body.name;
     if (body.inputs !== undefined) updates["inputs"] = body.inputs;
     if (body.setupData !== undefined) updates["setupData"] = body.setupData;
     const row = await db.transaction(async (tx) => {
-      const [accessibleScenario] = await tx.select({ id: scenariosTable.id, ownerUserId: scenariosTable.ownerUserId })
+      const [accessibleScenario] = await tx.select()
         .from(scenariosTable)
         .where(and(
           eq(scenariosTable.id, id),
@@ -280,6 +321,35 @@ router.patch("/scenarios/:id", requireAuth, async (req, res, next) => {
         ))
         .for("update");
       if (!accessibleScenario) return undefined;
+      const previous = accessibleScenario.setupData as { flowBasis?: Parameters<typeof validateSetupFlowBasis>[0] } | null;
+      if (previous?.flowBasis && body.setupData !== undefined && !body.setupData?.flowBasis) {
+        throw new InputValidationError("Existing flow provenance cannot be silently removed from a saved setup.");
+      }
+      if (body.inputs !== undefined) {
+        const reviewedBasis = body.setupData?.flowBasis ?? previous?.flowBasis;
+        // Ordinary Cost Explorer saves send only inputs. Preserve historical
+        // planning provenance unless a new basis is explicitly reviewed;
+        // never retain its label alongside a different intent distribution.
+        if (reviewedBasis) validateSetupFlowBasis(reviewedBasis, reviewedBasis, body.inputs);
+        const customIntents = reviewedBasis ? [] : await loadRequiredCustomIntents(organizationId);
+        validateScenarioInputs(body.inputs as ScenarioInputs, new Set(customIntents.map((intent) => intent.key)));
+      }
+      if (body.setupData !== undefined && body.setupData !== null) {
+        if (body.setupData.flowBasis) {
+          validateSetupFlowBasis(body.setupData.flowBasis,
+            await currentSetupBasis(organizationId, body.setupData.selectedDomains),
+            (body.inputs ?? accessibleScenario.inputs) as ScenarioInputs);
+          const retainedFiles = body.fileIds === undefined
+            ? await tx.select({ id: scenarioFilesTable.id }).from(scenarioFilesTable).where(and(
+              organizationWhere(scenarioFilesTable, organizationId),
+              eq(scenarioFilesTable.ownerUserId, req.authUserId!),
+              eq(scenarioFilesTable.scenarioId, id),
+            )) : body.fileIds;
+          const expected = body.setupData.processMode !== "recommended" || retainedFiles.length ? "pending-review"
+            : body.setupData.flowBasis.overrideRefs.length ? "reviewed-overrides" : "none";
+          if (body.setupData.customizationStatus !== expected) throw new InputValidationError("Invalid customization status.");
+        }
+      }
       if (body.fileIds !== undefined) {
         if (accessibleScenario.ownerUserId === null && body.fileIds.length > 0) {
           throw new InputValidationError("Private files cannot be attached to a legacy scenario");
@@ -379,6 +449,11 @@ router.post("/rollup", async (req, res, next) => {
   try {
     const body = ComputeRollupBody.parse(req.body);
     const organizationId = getOrganizationId(req);
+    const setupSnapshot = body.flowBasis ? await currentSetupSnapshot(organizationId, body.flowBasis.selectedDomains) : undefined;
+    if (body.flowBasis) {
+      if (body.actualsOverlayId !== undefined) throw new InputValidationError("Setup basis estimates cannot apply an unreviewed actuals overlay.");
+      validateSetupFlowBasis(body.flowBasis, setupSnapshot!.basis, body.inputs);
+    }
 
     // Seed baseline if no rate sets exist, then load and validate the current snapshot.
     // This must happen before any compute so both passes use exactly the same snapshot.
@@ -393,8 +468,8 @@ router.post("/rollup", async (req, res, next) => {
     };
 
     const [overrides, customIntents] = await Promise.all([
-      loadActiveFlowOverrides(organizationId),
-      loadRequiredCustomIntents(organizationId),
+      setupSnapshot ? Promise.resolve(setupSnapshot.values) : loadActiveFlowOverrides(organizationId),
+      body.flowBasis ? Promise.resolve([]) : loadRequiredCustomIntents(organizationId),
     ]);
     const inputs = body.inputs as ScenarioInputs;
     const customKeys = new Set(customIntents.map((i) => i.key));

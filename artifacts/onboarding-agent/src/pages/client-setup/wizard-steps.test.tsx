@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { FormProvider, useForm } from "react-hook-form";
 import type { ScenarioSystemCapability } from "@workspace/api-client-react";
 import { demoDraft } from "./schema";
-import { StepLandscape } from "./wizard-steps";
+import { StepLandscape, FlowBasisSummary } from "./wizard-steps";
 
 const capabilities: ScenarioSystemCapability[] = [
   {
@@ -59,4 +59,18 @@ test("responsive setup rows render server-provided choices without unsupported e
   assert.equal(html.match(/value="email-watch"/g)?.length, 1);
   assert.match(html, /previously saved connection choice is no longer supported/);
   assert.match(html, /Payroll and ticketing support multiple estates/);
+});
+
+test("flow review distinguishes planned adoption, current overrides and private documents", () => {
+  const basis = { source: "product-base-with-overrides" as const, fingerprint: "abc123",
+    selectedDomains: ["Hire", "Pay"], intentWeights: { onboarding: 0.5, payroll: 0.5 }, overrideRefs: ["onboarding:v2"] };
+  const pending = renderToStaticMarkup(<FlowBasisSummary basis={basis} mode="custom" saved attachmentCount={2} />);
+  for (const copy of ["Base product flows with existing approved client overrides", "Hire, Pay", "2 intents", "abc123", "onboarding:v2", "Pending review", "not a pinned executable version", "Private document references: 2"]) {
+    assert.ok(pending.includes(copy), copy);
+  }
+  const legacy = renderToStaticMarkup(<FlowBasisSummary mode="custom" saved />);
+  assert.match(legacy, /Legacy source not recorded/);
+  assert.match(legacy, /no product-default reset/);
+  const uploaded = renderToStaticMarkup(<FlowBasisSummary basis={basis} mode="recommended" attachmentCount={1} />);
+  assert.match(uploaded, /Documents attached, pending review; effective flows unchanged/);
 });

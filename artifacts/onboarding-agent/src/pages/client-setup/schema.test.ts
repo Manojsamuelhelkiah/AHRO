@@ -9,9 +9,10 @@ import {
   resolveInitialDraft,
 } from "./schema";
 
-test("hybrid and custom client setups require real uploaded file IDs", () => {
+test("base, planned hybrid and planned custom setups need no files; uploads remain optional references", () => {
   const hybrid = { ...initialDraft, clientName: "Acme", processMode: "hybrid" as const, personas: initialDraft.personas.map((p) => ({ ...p, name: "Owner", email: "owner@example.com" })), systems: initialDraft.systems.map((s) => ({ ...s, name: "System", vendor: "Vendor" })) };
-  assert.equal(clientSetupSchema.safeParse(hybrid).success, false);
+  assert.equal(clientSetupSchema.safeParse(hybrid).success, true);
+  assert.equal(clientSetupSchema.safeParse({ ...hybrid, processMode: "custom" }).success, true);
   const processFiles = [{
     id: 42,
     scenarioId: null,
@@ -22,6 +23,29 @@ test("hybrid and custom client setups require real uploaded file IDs", () => {
   }];
   assert.equal(clientSetupSchema.safeParse({ ...hybrid, processFiles }).success, true);
   assert.equal(clientSetupSchema.safeParse({ ...hybrid, processMode: "custom", processFiles }).success, true);
+});
+
+test("older custom drafts retain files, inputs and adoption intent until explicit basis review", () => {
+  const legacy = { ...demoDraft, clientName: "Existing client", processMode: "custom" as const,
+    processFiles: [{ id: 42, scenarioId: null, originalName: "flow.txt", contentType: "text/plain", sizeBytes: 3, createdAt: "2026-01-01" }] };
+  const migrated = migrateLegacyClientSetupDraft(legacy)!;
+  const resumed = resolveInitialDraft(migrated, true);
+  assert.equal(resumed.processBasisNeedsReview, true);
+  assert.equal(resumed.clientName, legacy.clientName);
+  assert.deepEqual(resumed.processFiles, legacy.processFiles);
+  assert.equal(resumed.processMode, "custom");
+  assert.equal(clientSetupSchema.safeParse(resumed).success, false);
+  assert.equal(clientSetupSchema.safeParse({ ...resumed, processBasisNeedsReview: false }).success, true);
+});
+
+test("reviewed source provenance survives saved-data round trips without transient review state", () => {
+  const flowBasis = { source: "product-base-with-overrides" as const, fingerprint: "sha256-test",
+    selectedDomains: ["Hire"], intentWeights: { onboarding: 1 }, overrideRefs: ["onboarding:v2"] };
+  const parsed = clientSetupDataSchema.parse({ ...demoDraft, selectedDomains: ["Hire"], flowBasis,
+    customizationStatus: "pending-review", processMode: "hybrid", processBasisNeedsReview: false });
+  assert.deepEqual(parsed.flowBasis, flowBasis);
+  assert.equal(parsed.customizationStatus, "pending-review");
+  assert.equal("processBasisNeedsReview" in parsed, false);
 });
 
 test("persisted setup data is complete and excludes transient process files", () => {

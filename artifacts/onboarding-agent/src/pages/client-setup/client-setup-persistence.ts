@@ -19,7 +19,7 @@ type StoredDraft<TDraft extends object> = {
 const LEGACY_DRAFT_KEY = 'clientSetupDraft';
 const LEGACY_DRAFT_QUARANTINE_KEY = 'clientSetupDraft:legacy-unscoped';
 const SCOPED_DRAFT_PREFIX = 'clientSetupDraft:v2';
-export const CLIENT_SETUP_DRAFT_VERSION = 2;
+export const CLIENT_SETUP_DRAFT_VERSION = 3;
 
 export function createClientSetupDraftSession<TDraft extends object>(
   storage: DraftStorage,
@@ -73,6 +73,11 @@ export function createClientSetupDraftSession<TDraft extends object>(
             ? stored.draft
             : null;
         }
+        if (stored.version === 2 && stored.draft && typeof stored.draft === 'object') {
+          const migrated = migrateLegacyDraft?.(stored.draft) ?? stored.draft;
+          storage.setItem(storageKey, JSON.stringify({ version: CLIENT_SETUP_DRAFT_VERSION, draft: migrated }));
+          return migrated;
+        }
         if ('version' in stored) return null;
         const migrated = migrateLegacyDraft?.(parsed) ?? parsed as Partial<TDraft>;
         if (migrated) {
@@ -107,8 +112,9 @@ export type ScenarioHydrationPlan<TFile> = {
 export function planScenarioHydration<TFile>(
   activeScenarioId: number | null,
   currentProcessFiles: TFile[],
+  requestedScenarioId?: number,
 ): ScenarioHydrationPlan<TFile> {
-  if (activeScenarioId !== null) {
+  if (activeScenarioId !== null && (requestedScenarioId === undefined || activeScenarioId === requestedScenarioId)) {
     return {
       shouldHydrateSetup: false,
       processFiles: currentProcessFiles,

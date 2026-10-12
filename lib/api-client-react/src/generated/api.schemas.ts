@@ -1218,6 +1218,15 @@ export const ScenarioSetupDataProcessMode = {
   custom: 'custom',
 } as const;
 
+export type ScenarioSetupDataCustomizationStatus = typeof ScenarioSetupDataCustomizationStatus[keyof typeof ScenarioSetupDataCustomizationStatus];
+
+
+export const ScenarioSetupDataCustomizationStatus = {
+  none: 'none',
+  'pending-review': 'pending-review',
+  'reviewed-overrides': 'reviewed-overrides',
+} as const;
+
 export type ScenarioSetupDataPersonasItem = {
   /** @minLength 1 */
   role: string;
@@ -1225,6 +1234,24 @@ export type ScenarioSetupDataPersonasItem = {
   name: string;
   email: string;
 };
+
+export type ScenarioFlowBasisSource = typeof ScenarioFlowBasisSource[keyof typeof ScenarioFlowBasisSource];
+
+
+export const ScenarioFlowBasisSource = {
+  'product-base': 'product-base',
+  'product-base-with-overrides': 'product-base-with-overrides',
+} as const;
+
+export type ScenarioFlowBasisIntentWeights = {[key: string]: number};
+
+export interface ScenarioFlowBasis {
+  source: ScenarioFlowBasisSource;
+  fingerprint: string;
+  selectedDomains: string[];
+  intentWeights: ScenarioFlowBasisIntentWeights;
+  overrideRefs: string[];
+}
 
 export interface ScenarioSetupData {
   /** @minLength 1 */
@@ -1245,6 +1272,8 @@ export interface ScenarioSetupData {
   /** @minimum 1 */
   hitlHourlyCostUsd: number;
   processMode: ScenarioSetupDataProcessMode;
+  flowBasis?: ScenarioFlowBasis;
+  customizationStatus?: ScenarioSetupDataCustomizationStatus;
   /** @minItems 1 */
   selectedDomains: string[];
   /** @minItems 1 */
@@ -1252,6 +1281,11 @@ export interface ScenarioSetupData {
   /** @minItems 1 */
   systems: ScenarioSetupSystem[];
   notes: string;
+}
+
+export interface ScenarioFlowScope {
+  /** @minItems 1 */
+  selectedDomains: string[];
 }
 
 export interface OrganizationSummary {
@@ -3602,6 +3636,7 @@ export interface ImportWorkbookResult {
 
 export interface RollupRequest {
   inputs: ScenarioInputs;
+  flowBasis?: ScenarioFlowBasis;
   /** Optional id of a saved actuals overlay to apply. When present, the rollup is re-run twice (once without, once with the overlay) and the response includes estimatedTotals and a per-assumption variance array. */
   actualsOverlayId?: number;
 }

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useUser } from '@clerk/react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useSearch } from 'wouter';
+import { useSearch, useLocation } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import { clientSetupSchema, clientSetupDataSchema, ClientSetupDraft, migrateLegacyClientSetupDraft, resolveInitialDraft } from './schema';
 import {
   canNavigateOrCommit,
@@ -30,10 +31,10 @@ import {
   useComputeRollup,
   useCreateScenario,
   useGetScenario,
-  useListIntents,
+  resolveScenarioFlowBasis,
   useListScenarioSystemCapabilities,
 } from '@workspace/api-client-react';
-import type { Rollup, Scenario, ScenarioInputs } from '@workspace/api-client-react';
+import type { Rollup, Scenario, ScenarioInputs, ScenarioFlowBasis } from '@workspace/api-client-react';
 import { Building2, Check, ChevronRight, Copy, FileUp, FlaskConical, Users } from 'lucide-react';
 
 const STEPS = [
@@ -64,13 +65,16 @@ function ClientSetupWizard({
   useSyntheticDemo: boolean;
   canActivateSystemSetup: boolean;
 }) {
-  const savedScenarioId = Number(new URLSearchParams(window.location.search).get('scenarioId'));
+  const search = useSearch();
+  const savedScenarioId = Number(new URLSearchParams(search).get('scenarioId'));
   const [currentStep, setCurrentStep] = useState(0);
   const [rollup, setRollup] = useState<Rollup | null>(null);
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [activationNotice, setActivationNotice] = useState<string | null>(null);
   const [fileOperationPending, setFileOperationPending] = useState(false);
+  const [, navigate] = useLocation();
+  const estimateBasisRef = useRef<string | null>(null);
   const fileOperationPendingRef = useRef(false);
   const activeScenarioIdRef = useRef<number | null>(null);
   const draftPersistenceEnabled = useRef(true);
@@ -84,6 +88,31 @@ function ClientSetupWizard({
     fileOperationPendingRef.current = pending;
     setFileOperationPending(pending);
   }, []);
+
+  useEffect(() => {
+    if (!fileOperationPending) return;
+    const protectedUrl = window.location.href;
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    const blockLink = (event: MouseEvent) => {
+      if ((event.target as Element)?.closest('a[href]')) {
+        event.preventDefault(); event.stopImmediatePropagation();
+        setOperationError('Finish the active file operation before leaving setup.');
+      }
+    };
+    const blockHistory = (event: PopStateEvent) => {
+      window.history.pushState(null, '', protectedUrl);
+      event.stopImmediatePropagation();
+      setOperationError('Finish the active file operation before leaving setup.');
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    window.addEventListener('popstate', blockHistory, true);
+    document.addEventListener('click', blockLink, true);
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('popstate', blockHistory, true);
+      document.removeEventListener('click', blockLink, true);
+    };
+  }, [fileOperationPending]);
 
   useEffect(() => {
     const sub = form.watch((value) => {
@@ -101,7 +130,13 @@ function ClientSetupWizard({
     if (currentStep === 2) fieldsToValidate = ['processMode', 'selectedDomains', 'processFiles', 'personas'];
     
     const isValid = await form.trigger(fieldsToValidate);
-    if (isValid) setCurrentStep(c => Math.min(STEPS.length - 1, c + 1));
+    if (isValid) {
+      if (currentStep === 2) {
+        try { basisForOperation(); } catch (error) { setOperationError((error as Error).message); return; }
+      }
+      setOperationError(null);
+      setCurrentStep(c => Math.min(STEPS.length - 1, c + 1));
+    }
   };
 
   const handlePrev = () => {
@@ -112,10 +147,33 @@ function ClientSetupWizard({
   const computeRollup = useComputeRollup();
   const createScenario = useCreateScenario();
   const activateSystemSetup = useActivateScenarioSystemSetup();
-  const { data: reloadedScenario } = useGetScenario(savedScenarioId || 0, {
+  const { data: reloadedScenario, isLoading: scenarioLoading, error: scenarioLoadError } = useGetScenario(savedScenarioId || 0, {
     query: { enabled: Number.isInteger(savedScenarioId) && savedScenarioId > 0, queryKey: getGetScenarioQueryKey(savedScenarioId || 0) },
   });
-  const { data: intentCorpus, isLoading: intentsLoading } = useListIntents();
+  const selectedDomains = form.watch('selectedDomains');
+  const basisQuery = useQuery({
+    queryKey: ['client-setup-flow-basis', [...selectedDomains].sort()],
+    queryFn: () => resolveScenarioFlowBasis({ selectedDomains }),
+    enabled: selectedDomains.length > 0,
+    staleTime: 0,
+  });
+  const intentsLoading = basisQuery.isLoading;
+  const reviewBasis = () => {
+    if (!basisQuery.data) return;
+    form.setValue('flowBasis', basisQuery.data, { shouldDirty: true });
+    form.setValue('processBasisNeedsReview', false, { shouldDirty: true, shouldValidate: true });
+    setOperationError(null);
+    setRollup(null);
+  };
+  const basisForOperation = (): ScenarioFlowBasis => {
+    const reviewed = form.getValues('flowBasis');
+    if (!basisQuery.data) throw new Error('Base definitions could not be loaded. Retry the flow basis before continuing.');
+    if (form.getValues('processBasisNeedsReview') || !reviewed ||
+        reviewed.fingerprint !== basisQuery.data.fingerprint || reviewed.source !== basisQuery.data.source) {
+      throw new Error('Review and confirm the current flow basis in Process Adoption before estimating or saving.');
+    }
+    return reviewed;
+  };
   const {
     data: systemCapabilities = [],
     isLoading: systemCapabilitiesLoading,
@@ -123,10 +181,11 @@ function ClientSetupWizard({
   } = useListScenarioSystemCapabilities();
 
   useEffect(() => {
-    if (reloadedScenario) {
+    if (reloadedScenario && reloadedScenario.id === savedScenarioId && !fileOperationPending) {
       const hydrationPlan = planScenarioHydration(
         activeScenarioIdRef.current,
         form.getValues('processFiles'),
+        savedScenarioId,
       );
       if (!hydrationPlan.shouldHydrateSetup) return;
       draftPersistenceEnabled.current = false;
@@ -141,24 +200,21 @@ function ClientSetupWizard({
       setScenario(reloadedScenario);
       setCurrentStep(STEPS.length - 1);
     }
-  }, [form, reloadedScenario]);
+  }, [form, reloadedScenario, savedScenarioId, fileOperationPending]);
 
-  const buildInputs = (values: ClientSetupDraft): ScenarioInputs => {
-    const domainKeys: Record<string, string> = {
-      Hire: 'hire',
-      Pay: 'pay',
-      Leave: 'leave',
-      Benefits: 'benefits',
-      Time: 'time',
-      Mobility: 'mobility',
-      Develop: 'develop',
-      Retire: 'retire',
-      'Data/Admin': 'data-admin',
-      Policy: 'policy',
-    };
-    const selected = new Set(values.selectedDomains.map((domain) => domainKeys[domain]).filter(Boolean));
-    const includedIntents = (intentCorpus?.intents ?? []).filter((intent) => selected.has(intent.domain));
-    const totalWeight = includedIntents.reduce((sum, intent) => sum + intent.baseWeight, 0);
+  useEffect(() => {
+    if (savedScenarioId > 0 || activeScenarioIdRef.current === null || fileOperationPending) return;
+    draftPersistenceEnabled.current = false;
+    form.reset(loadInitialDraft(draftSession, useSyntheticDemo));
+    activeScenarioIdRef.current = null;
+    setScenario(null);
+    setRollup(null);
+    setCurrentStep(0);
+    setOperationError(null);
+    draftPersistenceEnabled.current = true;
+  }, [savedScenarioId, draftSession, form, useSyntheticDemo, fileOperationPending]);
+
+  const buildInputs = (values: ClientSetupDraft, basis: ScenarioFlowBasis): ScenarioInputs => {
     return {
       numSystems: countMappedEstates(values.systems),
       annualTransactions: values.annualTransactions,
@@ -172,39 +228,42 @@ function ClientSetupWizard({
       landscapeMaturity: values.landscapeMaturity,
       contractYears: 3,
       nonIntegratedSystems: nonIntegratedSystemKeys(values.systems),
-      ...(totalWeight > 0
-        ? {
-            intentShareOverrides: Object.fromEntries(
-              includedIntents.map((intent) => [intent.key, intent.baseWeight / totalWeight]),
-            ),
-          }
-        : {}),
+      intentShareOverrides: basis.intentWeights,
     };
   };
 
-  const handleSimulate = () => {
+  const handleSimulate = async () => {
+    if (!canNavigateOrCommit(fileOperationPendingRef.current) || !await form.trigger()) return;
     const values = form.getValues();
-    if (!intentCorpus) {
-      setOperationError('The intent catalog is still loading. Please wait a moment and run the estimate again.');
-      return;
-    }
-    const inputs = buildInputs(values);
+    let basis: ScenarioFlowBasis;
+    try { basis = basisForOperation(); } catch (error) { setOperationError((error as Error).message); return; }
+    const inputs = buildInputs(values, basis);
     setOperationError(null);
-    computeRollup.mutate({ data: { inputs } }, {
-      onSuccess: (data) => setRollup(data),
-      onError: (error: any) => setOperationError(error?.response?.data?.message || error?.message || 'The implementation estimate could not be generated.'),
+    computeRollup.mutate({ data: { inputs, flowBasis: basis } }, {
+      onSuccess: (data) => { estimateBasisRef.current = JSON.stringify({ inputs, basis }); setRollup(data); },
+      onError: (error: any) => { setRollup(null); setOperationError(error?.data?.message || error?.data?.error || error?.message || 'The implementation estimate could not be generated.'); },
     });
   }
 
-  const handleCommit = () => {
+  const handleCommit = async () => {
     if (!canNavigateOrCommit(fileOperationPendingRef.current)) {
       setOperationError('Wait for the file upload to finish before committing this scenario.');
       return;
     }
+    if (!await form.trigger()) { setOperationError('Review the required setup fields before saving.'); return; }
     const values = form.getValues();
-    const inputs = buildInputs(values);
+    let basis: ScenarioFlowBasis;
+    try { basis = basisForOperation(); } catch (error) { setOperationError((error as Error).message); return; }
+    const inputs = buildInputs(values, basis);
+    if (estimateBasisRef.current !== JSON.stringify({ inputs, basis })) {
+      setRollup(null);
+      setOperationError('The setup changed after the estimate. Recalculate before saving.');
+      return;
+    }
     const { processFiles, ...setupValues } = values;
-    const setupData = clientSetupDataSchema.parse(setupValues);
+    const setupData = clientSetupDataSchema.parse({ ...setupValues, flowBasis: basis,
+      customizationStatus: values.processMode !== 'recommended' || processFiles.length ? 'pending-review'
+        : basis.overrideRefs.length ? 'reviewed-overrides' : 'none' });
     setOperationError(null);
     createScenario.mutate({ data: { name: `${values.clientName} — ${values.processMode} implementation`, inputs, setupData, fileIds: processFiles.map((file) => file.id) } }, {
       onSuccess: (data) => {
@@ -228,13 +287,18 @@ function ClientSetupWizard({
           },
         });
       },
-      onError: (error: any) => setOperationError(error?.response?.data?.message || error?.message || 'The implementation scenario could not be saved.'),
+      onError: (error: any) => setOperationError(error?.data?.message || error?.data?.error || error?.message || 'The implementation scenario could not be saved.'),
     });
   }
 
   const isSimulating = computeRollup.isPending || (computeRollup as any).isLoading;
   const isCommitting = createScenario.isPending || (createScenario as any).isLoading || activateSystemSetup.isPending;
 
+  if (savedScenarioId > 0 && !scenario && (scenarioLoading || !reloadedScenario || operationError)) {
+    return <div role={scenarioLoadError || operationError ? 'alert' : 'status'} className="p-6">
+      {scenarioLoadError ? 'This saved scenario could not be opened in your workspace. Check your access or return to Client Setup without a scenario ID.' : operationError ?? 'Loading saved setup…'}
+    </div>;
+  }
   return (
      <div className="max-w-5xl mx-auto pb-12">
         <PageHeader 
@@ -280,13 +344,16 @@ function ClientSetupWizard({
           
           <FormProvider {...form}>
             <div className="p-4 sm:p-8">
+                {currentStep !== 3 && operationError && <p role="alert" className="mb-4 text-sm text-[var(--status-red-fg)]">{operationError}</p>}
                {currentStep === 0 && <StepScope />}
                 {currentStep === 1 && (systemCapabilitiesLoading
                   ? <div className="py-12 text-center text-sm text-[var(--text-muted)]">Loading supported connection methods…</div>
                   : systemCapabilitiesError || systemCapabilities.length === 0
                     ? <div role="alert" className="rounded-lg border border-[var(--status-red)] bg-[var(--status-red-bg)] p-4 text-sm text-[var(--status-red-fg)]">Supported connection methods could not be loaded. Setup cannot continue safely.</div>
                   : <StepLandscape capabilities={systemCapabilities} />)}
-               {currentStep === 2 && <StepProcess onFileOperationPendingChange={handleFileOperationPendingChange} />}
+                {currentStep === 2 && <StepProcess onFileOperationPendingChange={handleFileOperationPendingChange}
+                  basis={basisQuery.data} basisError={basisQuery.error?.message}
+                  onReviewBasis={reviewBasis} onRetryBasis={() => void basisQuery.refetch()} />}
                {currentStep === 3 && <StepReview 
                  onSimulate={handleSimulate} 
                  onCommit={handleCommit} 
@@ -300,6 +367,11 @@ function ClientSetupWizard({
                   intentsLoading={intentsLoading}
                    capabilities={systemCapabilities}
                    activationNotice={activationNotice}
+                    basis={basisQuery.data}
+                    onOpenWorkspace={() => {
+                      if (canNavigateOrCommit(fileOperationPendingRef.current)) navigate('/');
+                    }}
+                    canActivateSystemSetup={canActivateSystemSetup}
                />}
             </div>
             

@@ -42,6 +42,12 @@ test('initial reload hydrates saved setup before its file manager is mounted', (
   assert.deepEqual(plan.processFiles, []);
 });
 
+test('switching saved scenario IDs cannot retain the previous scenario private file list', () => {
+  const previous = [{ id: 71, originalName: 'previous.txt' }];
+  assert.deepEqual(planScenarioHydration(7, previous, 8), { shouldHydrateSetup: true, processFiles: [] });
+  assert.deepEqual(planScenarioHydration(7, previous, 7), { shouldHydrateSetup: false, processFiles: previous });
+});
+
 function createMemoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
   return {
@@ -143,6 +149,19 @@ test('future-version drafts are not interpreted with an older reader', () => {
   );
   assert.ok(workspace);
   assert.equal(workspace.load(), null);
+});
+
+test('version two scoped custom drafts retain attachments and require explicit source review', () => {
+  const key = 'clientSetupDraft:v2:user-1:workspace-a';
+  const files = [{ id: 88, originalName: 'existing.txt', contentType: 'text/plain', sizeBytes: 1, createdAt: '2026-01-01' }];
+  const storage = createMemoryStorage({ [key]: JSON.stringify({ version: 2, draft: { ...demoDraft, processMode: 'custom', processFiles: files } }) });
+  const session = createClientSetupDraftSession(storage, 'user-1', 'workspace-a', migrateLegacyClientSetupDraft)!;
+  const draft = session.load()!;
+  assert.equal(draft.processBasisNeedsReview, true);
+  assert.equal(draft.processMode, 'custom');
+  assert.deepEqual(draft.processFiles, files);
+  assert.equal(JSON.parse(storage.getItem(key)!).version, CLIENT_SETUP_DRAFT_VERSION);
+  assert.equal(createClientSetupDraftSession(storage, 'user-2', 'workspace-a', migrateLegacyClientSetupDraft)!.load(), null);
 });
 
 test('unscoped legacy client drafts are quarantined instead of adopted', () => {

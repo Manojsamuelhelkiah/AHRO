@@ -294,6 +294,8 @@ import type {
   ScenarioFileFinalizeRequest,
   ScenarioFileUploadIntent,
   ScenarioFileUploadRequest,
+  ScenarioFlowBasis,
+  ScenarioFlowScope,
   ScenarioInput,
   ScenarioSystemCapability,
   ScenarioUpdate,
@@ -400,6 +402,71 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getResolveScenarioFlowBasisUrl = () => {
+
+
+
+
+  return `/api/scenario-flow-basis`
+}
+
+export const resolveScenarioFlowBasis = async (scenarioFlowScope: ScenarioFlowScope, options?: RequestInit): Promise<ScenarioFlowBasis> => {
+
+  return customFetch<ScenarioFlowBasis>(getResolveScenarioFlowBasisUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(scenarioFlowScope)
+  }
+);}
+
+
+
+
+
+export const getResolveScenarioFlowBasisMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveScenarioFlowBasis>>, TError,{data: BodyType<ScenarioFlowScope>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveScenarioFlowBasis>>, TError,{data: BodyType<ScenarioFlowScope>}, TContext> => {
+
+const mutationKey = ['resolveScenarioFlowBasis'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveScenarioFlowBasis>>, {data: BodyType<ScenarioFlowScope>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resolveScenarioFlowBasis(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveScenarioFlowBasisMutationResult = NonNullable<Awaited<ReturnType<typeof resolveScenarioFlowBasis>>>
+    export type ResolveScenarioFlowBasisMutationBody = BodyType<ScenarioFlowScope>
+    export type ResolveScenarioFlowBasisMutationError = ErrorType<unknown>
+
+    export const useResolveScenarioFlowBasis = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveScenarioFlowBasis>>, TError,{data: BodyType<ScenarioFlowScope>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resolveScenarioFlowBasis>>,
+        TError,
+        {data: BodyType<ScenarioFlowScope>},
+        TContext
+      > => {
+      return useMutation(getResolveScenarioFlowBasisMutationOptions(options));
+    }
 
 export const getListHroBatchTemplatesUrl = () => {
 

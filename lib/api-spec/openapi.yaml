@@ -43,6 +43,23 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /scenario-flow-basis:
+    post:
+      operationId: resolveScenarioFlowBasis
+      tags: [Scenarios]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioFlowScope"
+      responses:
+        "200":
+          description: Current planning basis, not operational authorization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioFlowBasis"
   /onboarding/batch-upload/templates:
     get:
       operationId: listHroBatchTemplates
@@ -7706,6 +7723,9 @@ components:
         hrHourlyCostUsd: { type: number, minimum: 1 }
         hitlHourlyCostUsd: { type: number, minimum: 1 }
         processMode: { type: string, enum: [recommended, hybrid, custom] }
+        flowBasis:
+          $ref: "#/components/schemas/ScenarioFlowBasis"
+        customizationStatus: { type: string, enum: [none, pending-review, reviewed-overrides] }
         selectedDomains: { type: array, minItems: 1, items: { type: string } }
         personas:
           type: array
@@ -7723,6 +7743,22 @@ components:
           minItems: 1
           items: { $ref: "#/components/schemas/ScenarioSetupSystem" }
         notes: { type: string }
+    ScenarioFlowScope:
+      type: object
+      required: [selectedDomains]
+      properties:
+        selectedDomains: { type: array, minItems: 1, items: { type: string } }
+    ScenarioFlowBasis:
+      type: object
+      required: [source, fingerprint, selectedDomains, intentWeights, overrideRefs]
+      properties:
+        source: { type: string, enum: [product-base, product-base-with-overrides] }
+        fingerprint: { type: string }
+        selectedDomains: { type: array, items: { type: string } }
+        intentWeights:
+          type: object
+          additionalProperties: { type: number }
+        overrideRefs: { type: array, items: { type: string } }
     OrganizationSummary:
       type: object
       additionalProperties: false
@@ -9857,6 +9893,8 @@ components:
       properties:
         inputs:
           $ref: "#/components/schemas/ScenarioInputs"
+        flowBasis:
+          $ref: "#/components/schemas/ScenarioFlowBasis"
         actualsOverlayId:
           type: integer
           description: Optional id of a saved actuals overlay to apply. When present, the rollup is re-run twice (once without, once with the overlay) and the response includes estimatedTotals and a per-assumption variance array.

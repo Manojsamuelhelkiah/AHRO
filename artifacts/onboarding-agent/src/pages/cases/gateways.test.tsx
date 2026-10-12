@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Router } from 'wouter';
 import { GatewaysStrip } from './detail/gateways-strip';
 import { NewCaseForm } from './index';
+import { CaseAccessProvider } from './detail/case-access';
 
 test('GatewaysStrip renders all three gates and only exposes Gate A after scoped authority preflight', () => {
   const mockCase = {
@@ -22,7 +23,7 @@ test('GatewaysStrip renders all three gates and only exposes Gate A after scoped
   const dummyHook = () => ['/cases/1', () => {}] as [string, (path: string) => void];
   const gateApproval = { id: 44, version: 1, status: 'pending' };
 
-  const render = (canDecide: boolean) => {
+  const render = (canDecide: boolean, canEditIdentity = true) => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(
       ['/api/onboarding/approvals', gateApproval.id, 'capability', gateApproval.version, null],
@@ -31,7 +32,14 @@ test('GatewaysStrip renders all three gates and only exposes Gate A after scoped
     return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
       <Router hook={dummyHook}>
-        <GatewaysStrip c={mockCase} gateApproval={gateApproval} />
+        <CaseAccessProvider value={{
+          caseId: 1,
+          access: { flowRead: true, profileRead: true, profileEdit: true, notesRead: true, notesEdit: true, flowEdit: true },
+          sensitive: { identity: { read: true, edit: canEditIdentity }, medical: { read: false, edit: false },
+            payroll: { read: false, edit: false }, bgv: { read: false, edit: false } },
+        }}>
+          <GatewaysStrip c={mockCase} gateApproval={gateApproval} />
+        </CaseAccessProvider>
       </Router>
     </QueryClientProvider>
     );
@@ -48,6 +56,7 @@ test('GatewaysStrip renders all three gates and only exposes Gate A after scoped
 
   const htmlDenied = render(false);
   assert.doesNotMatch(htmlDenied, /Confirm Offer Package/, 'Unscoped browser roles must not reveal the confirmation control');
+  assert.doesNotMatch(render(true, false), /Confirm Offer Package/, 'Approval authority alone cannot bypass sensitive case permissions');
 });
 
 test('NewCaseForm does not permit bypassing dedicated Gate A confirmation', () => {

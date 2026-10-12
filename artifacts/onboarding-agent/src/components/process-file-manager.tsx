@@ -62,7 +62,7 @@ export function ProcessFileManager({
   const [error, setError] = React.useState<string | null>(null);
   const [replacing, setReplacing] = React.useState<number | null>(null);
   const [mutationPending, setMutationPending] = React.useState(false);
-  const { data: persisted } = useListScenarioFiles(scenarioId ?? 0, {
+  const { data: persisted, error: listError, isLoading: listLoading, refetch } = useListScenarioFiles(scenarioId ?? 0, {
     query: { enabled: Boolean(scenarioId), queryKey: getListScenarioFilesQueryKey(scenarioId ?? 0) },
   });
 
@@ -137,12 +137,14 @@ export function ProcessFileManager({
 
   return <div className="space-y-3">
     <div className="flex items-center justify-between gap-3">
-      <div><h3 className="text-sm font-semibold text-[var(--text-primary)]">Client flow files</h3><p className="text-[11px] text-[var(--text-muted)]">Private process definitions, up to 10 MB each.</p></div>
-      <Button type="button" variant="outline" size="sm" disabled={mutationPending} onClick={() => pick()}><Upload className="mr-1 h-4 w-4" />Add file</Button>
+      <div><h3 className="text-sm font-semibold text-[var(--text-primary)]">Client flow files</h3><p className="text-[11px] text-[var(--text-muted)]">Optional private review documents, up to 10 MB each. Uploads do not activate workflows.</p></div>
+      <Button type="button" variant="outline" size="sm" disabled={mutationPending || (Boolean(scenarioId) && (listLoading || Boolean(listError)))} onClick={() => pick()}><Upload className="mr-1 h-4 w-4" />Add file</Button>
     </div>
     <input ref={inputRef} className="sr-only" type="file" accept=".json,.csv,.txt,.md,.pdf,.docx,.bpmn,.xml" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} />
     {progress !== null && <><Progress value={progress} aria-label={`Upload ${progress}% complete`} /><p className="text-xs text-[var(--text-muted)]">Uploading {progress}%…</p></>}
     {error && <p role="alert" className="text-xs text-[var(--status-red-fg)]">{error}</p>}
+    {scenarioId && listLoading && <p role="status" className="text-xs">Loading saved private documents…</p>}
+    {listError && <div role="alert" className="text-xs text-[var(--status-red-fg)]">Saved documents could not be loaded; their references have not been removed. <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>Retry document list</Button></div>}
     {files.length > 0 && <div className="divide-y rounded-[var(--radius-md)] border border-[var(--border)]">
       {files.map((file) => <div className="flex items-center gap-2 p-2 text-xs" key={file.id}>
         <FileText className="h-4 w-4 shrink-0 text-[var(--primary)]" /><span className="min-w-0 flex-1 truncate font-medium">{file.originalName}</span>
@@ -151,6 +153,6 @@ export function ProcessFileManager({
         <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-[var(--status-red-fg)]" disabled={mutationPending} onClick={() => void remove(file)} aria-label={`Remove ${file.originalName}`}><Trash2 className="h-3.5 w-3.5" /></Button>
       </div>)}
     </div>}
-    {!scenarioId && files.length === 0 && <p className="text-[11px] text-[var(--text-muted)]">Upload is required for hybrid and custom process adoption.</p>}
+    {files.length === 0 && <p className="text-[11px] text-[var(--text-muted)]">Continue with base flows without files. Attach customizations now or return to the saved scenario later.</p>}
   </div>;
 }

@@ -8,6 +8,22 @@
 import * as zod from 'zod';
 
 
+
+
+
+export const ResolveScenarioFlowBasisBody = zod.object({
+  "selectedDomains": zod.array(zod.string()).min(1)
+})
+
+export const ResolveScenarioFlowBasisResponse = zod.object({
+  "source": zod.enum(['product-base', 'product-base-with-overrides']),
+  "fingerprint": zod.string(),
+  "selectedDomains": zod.array(zod.string()),
+  "intentWeights": zod.record(zod.string(), zod.number()),
+  "overrideRefs": zod.array(zod.string())
+})
+
+
 export const ListHroBatchTemplatesResponseItem = zod.object({
   "id": zod.string(),
   "version": zod.number(),
@@ -9043,6 +9059,14 @@ export const CreateScenarioBody = zod.object({
   "hrHourlyCostUsd": zod.number().min(1),
   "hitlHourlyCostUsd": zod.number().min(1),
   "processMode": zod.enum(['recommended', 'hybrid', 'custom']),
+  "flowBasis": zod.object({
+  "source": zod.enum(['product-base', 'product-base-with-overrides']),
+  "fingerprint": zod.string(),
+  "selectedDomains": zod.array(zod.string()),
+  "intentWeights": zod.record(zod.string(), zod.number()),
+  "overrideRefs": zod.array(zod.string())
+}).optional(),
+  "customizationStatus": zod.enum(['none', 'pending-review', 'reviewed-overrides']).optional(),
   "selectedDomains": zod.array(zod.string()).min(1),
   "personas": zod.array(zod.object({
   "role": zod.string().min(1),
@@ -9251,6 +9275,14 @@ export const UpdateScenarioBody = zod.object({
   "hrHourlyCostUsd": zod.number().min(1),
   "hitlHourlyCostUsd": zod.number().min(1),
   "processMode": zod.enum(['recommended', 'hybrid', 'custom']),
+  "flowBasis": zod.object({
+  "source": zod.enum(['product-base', 'product-base-with-overrides']),
+  "fingerprint": zod.string(),
+  "selectedDomains": zod.array(zod.string()),
+  "intentWeights": zod.record(zod.string(), zod.number()),
+  "overrideRefs": zod.array(zod.string())
+}).optional(),
+  "customizationStatus": zod.enum(['none', 'pending-review', 'reviewed-overrides']).optional(),
   "selectedDomains": zod.array(zod.string()).min(1),
   "personas": zod.array(zod.object({
   "role": zod.string().min(1),
@@ -10272,6 +10304,13 @@ export const ExportScenarioWorkbookBody = zod.object({
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
   "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
 }),
+  "flowBasis": zod.object({
+  "source": zod.enum(['product-base', 'product-base-with-overrides']),
+  "fingerprint": zod.string(),
+  "selectedDomains": zod.array(zod.string()),
+  "intentWeights": zod.record(zod.string(), zod.number()),
+  "overrideRefs": zod.array(zod.string())
+}).optional(),
   "actualsOverlayId": zod.number().optional().describe('Optional id of a saved actuals overlay to apply. When present, the rollup is re-run twice (once without, once with the overlay) and the response includes estimatedTotals and a per-assumption variance array.')
 })
 
@@ -10378,6 +10417,13 @@ export const ComputeRollupBody = zod.object({
   "nonIntegratedSystems": zod.array(zod.string()).optional().describe('System keys (see \/systems) that will NOT be integrated with the MCP layer. Their get\/put actions lose MCP cost but stay manual, adding handling minutes per action and reducing the benefit for intents touching them.'),
   "intentContainmentOverrides": zod.record(zod.string(), zod.number()).optional().describe('Per-intent containment targets used for drift comparison only (intentKey → 0-1 fraction). When set for an intent, overrides the flow-class-level containment estimate shown as the reference line in the Drift tab. Does not affect the rollup\/cost engine. Absent keys fall back to the flow-class expansion from containmentRates\/containmentOverrides.\n')
 }),
+  "flowBasis": zod.object({
+  "source": zod.enum(['product-base', 'product-base-with-overrides']),
+  "fingerprint": zod.string(),
+  "selectedDomains": zod.array(zod.string()),
+  "intentWeights": zod.record(zod.string(), zod.number()),
+  "overrideRefs": zod.array(zod.string())
+}).optional(),
   "actualsOverlayId": zod.number().optional().describe('Optional id of a saved actuals overlay to apply. When present, the rollup is re-run twice (once without, once with the overlay) and the response includes estimatedTotals and a per-assumption variance array.')
 })
 
