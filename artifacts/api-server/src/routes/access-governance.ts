@@ -18,6 +18,9 @@ import type { OnboardingDbTransaction } from "../lib/onboarding/settings";
 import { getOrganizationId } from "../lib/organization-scope";
 import {
   ACCESS_GOVERNANCE_CATALOG,
+  USER_GROUP_STARTERS,
+  userGroupStarter,
+  normalizedUserGroupName,
   isActiveDistinctOwnerApprovalValid,
   isIndependentOwnerApprovalValid,
   grantIsLive,
@@ -643,6 +646,7 @@ async function snapshot(organizationId: string) {
     userGroups: userGroups.map((group) => ({
       id: group.id,
       name: group.name,
+      starterId: group.starterId,
       ownerUserId: group.ownerUserId,
       status: group.status,
       version: group.version,
@@ -652,6 +656,7 @@ async function snapshot(organizationId: string) {
         link.userGroupId === group.id && (securityGroupsByUserGroup.get(group.id)?.has(link.securityGroupId) ?? false),
       ).map((link) => ({ securityGroupId: link.securityGroupId, expiresAt: link.expiresAt?.toISOString() ?? null })),
     })),
+    userGroupStarters: USER_GROUP_STARTERS,
     securityGroups: securityGroups.map((group) => {
       const policy = currentPolicy(policiesByGroup.get(group.id) ?? []);
       const rawAllows = policy ? groupAllows(policy.policy) : [];
@@ -898,26 +903,66 @@ router.post("/user-groups", async (req, res, next) => {
       return;
     }
     const body = bodyObject(req.body);
-    if (!body || !nonEmptyString(body.name)) {
-      fail(res, 400, "name is required.", "ACCESS_INVALID_USER_GROUP");
+    const starter = userGroupStarter(body?.starterId);
+    if (!body || (body.starterId !== undefined
+      ? !starter || body.name !== undefined
+      : !nonEmptyString(body.name))) {
+      fail(res, 400, "Choose a valid starterId or provide a custom name, not both.", "ACCESS_INVALID_USER_GROUP");
       return;
     }
     const organizationId = getOrganizationId(req);
     const actor = req.authUserId!;
     const id = randomUUID();
-    await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       await lockTenant(tx, organizationId);
-      await tx.insert(accessUserGroups).values({
-        id, organizationId, name: (body.name as string).trim(), ownerUserId: actor,
+      if (starter && !await isActiveOrganizationOwner(tx, organizationId, actor)) {
+        throw Object.assign(new Error("Only an active organization owner may create groups."), { status: 403, code: "ORGANIZATION_OWNER_REQUIRED" });
+      }
+      if (starter) {
+        const groups = await tx.select().from(accessUserGroups)
+          .where(eq(accessUserGroups.organizationId, organizationId));
+        const bound = groups.find((group) => group.starterId === starter.id);
+        if (bound) return { userGroup: bound, created: false, reusedLegacy: false };
+        // Never overwrite a legacy group's members, owner, lifecycle, or version.
+        const matches = groups.filter((group) =>
+          normalizedUserGroupName(group.name) === normalizedUserGroupName(starter.name));
+        if (matches.length > 1 || matches.some((group) => group.starterId !== null)) {
+          throw Object.assign(new Error(`Multiple or conflicting existing groups match ${starter.name}. Rename the conflicting custom groups explicitly before choosing this starter.`), { status: 409, code: "ACCESS_STARTER_AMBIGUOUS" });
+        }
+        if (matches[0]) {
+          const existing = matches[0];
+          await tx.update(accessUserGroups).set({ starterId: starter.id }).where(and(
+            eq(accessUserGroups.organizationId, organizationId), eq(accessUserGroups.id, existing.id),
+          ));
+          await recordHistory(tx, {
+            organizationId, actorUserId: actor, eventType: "user-group.starter-linked",
+            entityType: "user-group", entityId: existing.id, detail: { starterId: starter.id },
+          });
+          return { userGroup: { ...existing, starterId: starter.id }, created: false, reusedLegacy: true };
+        }
+      }
+      const name = starter?.name ?? (body.name as string).trim();
+      const [userGroup] = await tx.insert(accessUserGroups).values({
+        id, organizationId, name, starterId: starter?.id ?? null, ownerUserId: actor,
         status: "active", version: 1, createdByUserId: actor,
-      });
+      }).returning();
       await recordHistory(tx, {
         organizationId, actorUserId: actor, eventType: "user-group.created", entityType: "user-group", entityId: id,
-        detail: { status: "active" },
+        detail: { status: "active", ...(starter ? { starterId: starter.id } : {}) },
       });
+      return { userGroup, created: true, reusedLegacy: false };
     });
-    res.status(201).json({ userGroup: { id, name: body.name, ownerUserId: actor, status: "active", version: 1, members: [], securityGroups: [] } });
+    // Existing groups may already have access configured; don't describe them as empty.
+    res.status(result.created ? 201 : 200).json({
+      ...result,
+      userGroup: result.created ? { ...result.userGroup, members: [], securityGroups: [], securityGroupAttachments: [] } : result.userGroup,
+    });
   } catch (error) {
+    if (error instanceof Error && "status" in error) {
+      const coded = error as Error & { status: number; code: string };
+      fail(res, coded.status, error.message, coded.code);
+      return;
+    }
     next(error);
   }
 });

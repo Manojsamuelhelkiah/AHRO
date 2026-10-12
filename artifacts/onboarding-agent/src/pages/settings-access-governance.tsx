@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPinnedOrganizationIdForPage } from "@workspace/api-client-react";
 import { AlertTriangle, Check, History, LockKeyhole, Plus, RefreshCw, ShieldCheck, Users } from "lucide-react";
@@ -10,6 +10,7 @@ type CatalogItem = { key: string; label: string; sensitivity: string; kind: stri
 type Agent = { id: string; name: string; ownerUserId: string; status: string; version: number };
 type UserGroup = {
   id: string; name: string; status: string; version: number;
+  starterId?: string | null;
   members: Array<{ principalType: string; principalId: string; expiresAt: string | null }>;
   securityGroups: string[];
   securityGroupAttachments: Array<{ securityGroupId: string; expiresAt: string | null }>;
@@ -31,6 +32,7 @@ type AccessSnapshot = {
   members: Member[];
   agents: Agent[];
   userGroups: UserGroup[];
+  userGroupStarters: Array<{ id: string; name: string }>;
   securityGroups: SecurityGroup[];
   grants: Array<{ principalType: string; principalId: string; securityGroupId: string; expiresAt: string | null }>;
   pendingGrants?: Array<{ principalType: string; principalId: string; securityGroupId: string }>;
@@ -63,7 +65,7 @@ type ProposedPreview = {
 };
 
 const basePath = "/api/organizations/current/access";
-const inputClass = "h-8 rounded-md border border-input bg-background px-2 text-xs text-[var(--text-primary)]";
+const inputClass = "h-8 min-w-0 max-w-full rounded-md border border-input bg-background px-2 text-xs text-[var(--text-primary)]";
 
 function expiryIso(value: string): string | null {
   if (!value) return null;
@@ -193,6 +195,9 @@ export function AccessGovernanceSettings() {
   const [agentName, setAgentName] = useState("");
   const [agentOwner, setAgentOwner] = useState("");
   const [userGroupName, setUserGroupName] = useState("");
+  const [userGroupChoice, setUserGroupChoice] = useState("");
+  const creatingUserGroup = useRef(false);
+  const [groupNotice, setGroupNotice] = useState<{ ok: boolean; message: string } | null>(null);
   const [securityGroupName, setSecurityGroupName] = useState("");
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
   const [groupDraftName, setGroupDraftName] = useState("");
@@ -249,7 +254,7 @@ export function AccessGovernanceSettings() {
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey });
-    await snapshotQuery.refetch();
+    await snapshotQuery.refetch({ throwOnError: true });
     await queryClient.invalidateQueries({ queryKey: [...queryKey, "preview"] });
     await queryClient.invalidateQueries({ queryKey: [...queryKey, "field-access"] });
   };
@@ -270,7 +275,9 @@ export function AccessGovernanceSettings() {
     }
   };
 
-  const data = snapshot ?? { catalog: [], members: [], agents: [], userGroups: [], securityGroups: [], grants: [], history: [], pendingMembers: [], pendingGrants: [] };
+  const data = snapshot ?? { catalog: [], members: [], agents: [], userGroups: [], userGroupStarters: [], securityGroups: [], grants: [], history: [], pendingMembers: [], pendingGrants: [] };
+  const selectedStarter = data.userGroupStarters?.find((starter) => starter.id === userGroupChoice);
+  const existingStarter = selectedStarter && data.userGroups.find((group) => group.starterId === selectedStarter.id);
   const activeSecurityGroups = data.securityGroups.filter((group) => group.status === "active");
   const userGroups = data.userGroups.filter((group) => group.status === "active");
   const effectiveMembers = principals[memberType];
@@ -431,6 +438,37 @@ export function AccessGovernanceSettings() {
     const succeeded = await perform(action, message);
     if (succeeded) setProposedPreview(null);
   };
+  const createUserGroup = async () => {
+    if (!canManage || creatingUserGroup.current || !userGroupChoice ||
+      (userGroupChoice === "custom" ? !userGroupName.trim() : !selectedStarter)) return;
+    creatingUserGroup.current = true;
+    setBusy(true);
+    setGroupNotice(null);
+    let saved = false;
+    try {
+      const result = await accessRequest<{
+        created: boolean; reusedLegacy: boolean; userGroup: UserGroup;
+      }>("/user-groups", { method: "POST", body: JSON.stringify(
+        userGroupChoice === "custom" ? { name: userGroupName.trim() } : { starterId: userGroupChoice },
+      ) });
+      saved = true;
+      await refresh();
+      const group = result.userGroup;
+      setGroupNotice({ ok: true, message: result.created
+        ? `${group.name} created. No members or access were added.`
+        : group.status === "retired"
+          ? `This starter already exists as retired group “${group.name}”. It was not recreated or reactivated.`
+          : `Using existing group “${group.name}”${selectedStarter && group.name !== selectedStarter.name ? " (renamed)" : ""}. Its members and access settings were not changed.` });
+      if (userGroupChoice === "custom") setUserGroupName("");
+    } catch (error) {
+      setGroupNotice({ ok: false, message: saved
+        ? `The group was saved, but refreshing the list failed. Use Refresh before creating another custom group. ${errorText(error)}`
+        : errorText(error) });
+    } finally {
+      creatingUserGroup.current = false;
+      setBusy(false);
+    }
+  };
   if (roleLoading) return null;
 
   const beginEdit = (group: SecurityGroup) => {
@@ -467,13 +505,17 @@ export function AccessGovernanceSettings() {
               Access governance is restricted to organization owners and administrators. Ask an organization owner for access.
             </div>
           ) : snapshotQuery.isLoading ? <LoadingBlock>Loading access-governance snapshot...</LoadingBlock>
-            : snapshotQuery.isError ? (
+            : snapshotQuery.isError && !snapshot ? (
               <div role="alert" className="rounded-md border border-[var(--status-red)] bg-[var(--status-red-bg)] p-3 text-xs text-[var(--status-red-fg)]">
                 {errorText(snapshotQuery.error)}
                 <Button variant="outline" size="sm" className="ml-3" onClick={() => void snapshotQuery.refetch()}>Retry</Button>
               </div>
             ) : (
               <>
+                {snapshotQuery.isError && <div role="alert" className="rounded-md border border-[var(--status-red)] bg-[var(--status-red-bg)] p-3 text-xs text-[var(--status-red-fg)]">
+                  The list could not be refreshed. Displaying the last loaded groups. {errorText(snapshotQuery.error)}
+                  <Button variant="outline" size="sm" className="ml-3" onClick={() => void snapshotQuery.refetch()}>Retry refresh</Button>
+                </div>}
                 {!canManage && <div className="flex items-start gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-xs text-[var(--text-muted)]"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Read-only access. Only organization owners can create or change agents, groups, memberships, grants, and approvals.</div>}
 
                 <section className="rounded-md border border-[var(--border)] bg-[var(--surface-alt)] p-3">
@@ -557,16 +599,28 @@ export function AccessGovernanceSettings() {
                 </section>
 
                 <section className="border-t border-[var(--border)] pt-5">
-                  <SectionTitle title="User groups" detail="Collect existing named humans and registered agents into reusable groups, then attach multiple security groups." />
-                  {canManage && <form className="mb-3 flex flex-wrap gap-2" onSubmit={(event) => {
+                  <SectionTitle title="User groups" detail="Groups organize existing humans and registered agents. Optional starter groups grant no permissions or specialist authority. Members, agent registration, and security-group access are configured separately." />
+                  {canManage && <form className="mb-3 flex flex-wrap items-end gap-2" onSubmit={(event) => {
                     event.preventDefault();
-                    if (!userGroupName.trim()) return;
-                    void perform(() => accessRequest("/user-groups", { method: "POST", body: JSON.stringify({ name: userGroupName.trim() }) }), "User group created.");
-                    setUserGroupName("");
+                    void createUserGroup();
                   }}>
-                    <input aria-label="New user group name" data-testid="input-access-user-group-name" className={inputClass} placeholder="New user group name" value={userGroupName} onChange={(event) => setUserGroupName(event.target.value)} />
-                    <Button type="submit" size="sm" disabled={busy || !userGroupName.trim()}><Plus className="mr-1 h-3.5 w-3.5" />Create user group</Button>
+                    <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+                      Predefined user group
+                      <select data-testid="select-access-user-group-starter" className={cn(inputClass, "w-full sm:min-w-52")} disabled={busy} value={userGroupChoice} onChange={(event) => { setUserGroupChoice(event.target.value); setGroupNotice(null); }}>
+                        <option value="">Choose a starter or custom group</option>
+                        {(data.userGroupStarters ?? []).map((starter) => <option key={starter.id} value={starter.id}>{starter.name}</option>)}
+                        <option value="custom">Custom group</option>
+                      </select>
+                    </label>
+                    {userGroupChoice === "custom" && <label className="flex w-full flex-col gap-1 text-xs sm:w-auto">
+                      Custom group name
+                      <input aria-label="New user group name" data-testid="input-access-user-group-name" className={inputClass} placeholder="New user group name" disabled={busy} value={userGroupName} onChange={(event) => setUserGroupName(event.target.value)} />
+                    </label>}
+                    <Button type="submit" size="sm" disabled={busy || !userGroupChoice || (userGroupChoice === "custom" ? !userGroupName.trim() : !selectedStarter)}><Plus className="mr-1 h-3.5 w-3.5" />{busy ? "Saving..." : existingStarter ? "Use existing group" : "Create user group"}</Button>
                   </form>}
+                  {existingStarter && <p className="mb-3 break-words text-xs text-[var(--text-muted)]">This starter already exists as “{existingStarter.name}” ({existingStarter.status}). Choosing it will not recreate, rename, reactivate, or change its access.</p>}
+                  {groupNotice && <p role={groupNotice.ok ? "status" : "alert"} data-testid="status-access-user-group" className={cn("mb-3 rounded-md p-3 text-xs", groupNotice.ok ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-red-bg)] text-[var(--status-red-fg)]")}>{groupNotice.message}</p>}
+                  {!data.userGroups.length && <p className="mb-3 text-xs text-[var(--text-muted)]">No user groups yet. An organization owner can create an optional starter or a custom group.</p>}
                   {canManage && <div className="mb-3 flex flex-wrap gap-2 rounded-md bg-[var(--surface-alt)] p-3">
                     <select aria-label="Group for principal" className={inputClass} value={memberGroupId} onChange={(event) => { setMemberGroupId(event.target.value); setMemberExpiry(""); }}><option value="">Choose user group</option>{userGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
                     <select aria-label="Principal type" className={inputClass} value={memberType} onChange={(event) => { setMemberType(event.target.value as PrincipalType); setMemberId(""); setMemberExpiry(""); }}><option value="user">Human</option><option value="agent">Registered agent</option></select>

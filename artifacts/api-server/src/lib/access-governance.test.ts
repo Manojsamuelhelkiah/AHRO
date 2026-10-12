@@ -9,7 +9,24 @@ import {
   membershipNeedsIndependentApproval,
   isReviewedAccessKey,
   grantIsLive,
+  USER_GROUP_STARTERS,
+  userGroupStarter,
+  normalizedUserGroupName,
 } from "./access-governance";
+
+test("user-group starters have stable distinct labels, not access bundles", () => {
+  assert.deepEqual(USER_GROUP_STARTERS.map((starter) => starter.name),
+    ["HR", "Hiring Managers", "IT Operations", "Payroll", "Compliance Reviewers", "AI Agents"]);
+  assert.equal(new Set(USER_GROUP_STARTERS.map((starter) => starter.id)).size, 6);
+  for (const starter of USER_GROUP_STARTERS) {
+    assert.equal(userGroupStarter(starter.id), starter);
+    assert.deepEqual(Object.keys(starter), ["id", "name"]);
+  }
+  for (const invalid of [null, undefined, "", "HR", "owner", "custom", "*", {}, ["hr"]]) {
+    assert.equal(userGroupStarter(invalid), undefined);
+  }
+  assert.equal(normalizedUserGroupName(" HR "), "hr");
+});
 
 test("temporary grants end at their exclusive expiry instant", () => {
   const now = new Date("2026-09-29T12:00:00.000Z");

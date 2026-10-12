@@ -16,6 +16,24 @@ import {
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
+/** Organizational labels only: no policies, membership, or specialist authority. */
+export const USER_GROUP_STARTERS = [
+  { id: "hr", name: "HR" },
+  { id: "hiring-managers", name: "Hiring Managers" },
+  { id: "it-operations", name: "IT Operations" },
+  { id: "payroll", name: "Payroll" },
+  { id: "compliance-reviewers", name: "Compliance Reviewers" },
+  { id: "ai-agents", name: "AI Agents" },
+] as const;
+
+export function userGroupStarter(value: unknown) {
+  return USER_GROUP_STARTERS.find((starter) => starter.id === value);
+}
+
+export function normalizedUserGroupName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
 /**
  * This is the reviewed server-side vocabulary. Database policy JSON and named
  * grants can only confer these exact keys; unknown values and wildcards are

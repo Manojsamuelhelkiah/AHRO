@@ -51,6 +51,7 @@ export const accessUserGroups = pgTable("access_user_groups", {
   id: text("id").notNull(),
   organizationId: text("organization_id").notNull().references(() => organizationsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  starterId: text("starter_id"),
   ownerUserId: text("owner_user_id").notNull(),
   status: text("status").$type<"active" | "retired">().notNull().default("active"),
   version: integer("version").notNull().default(1),
@@ -64,6 +65,7 @@ export const accessUserGroups = pgTable("access_user_groups", {
     name: "access_user_groups_owner_membership_fk",
   }),
   unique("access_user_groups_org_name_unique").on(t.organizationId, t.name),
+  unique("access_user_groups_org_starter_unique").on(t.organizationId, t.starterId),
   check("access_user_groups_status_check", sql`${t.status} in ('active', 'retired')`),
   check("access_user_groups_version_check", sql`${t.version} > 0`),
 ]);

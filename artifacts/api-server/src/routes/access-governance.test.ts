@@ -12,8 +12,12 @@ import {
   accessSecurityGroupAttachments,
   accessSecurityGroupUserGroups,
   accessUserGroupMembers,
+  accessUserGroups,
+  accessGovernanceHistory,
   db,
   onbCases,
+  onbConnectors,
+  onbSettings,
   organizationMembershipsTable,
   organizationsTable,
 } from "@workspace/db";
@@ -35,6 +39,15 @@ let caseId: number;
 
 type JsonRecord = Record<string, any>;
 type ApiResult = { response: Response; body: JsonRecord };
+
+async function deleteGovernanceFixture(id: string) {
+  await deleteTestOrganizations(eq(organizationsTable.id, id), async (tx) => {
+    // The live development workers may seed inert tenant defaults mid-test.
+    // Delete only this fixture's bootstrap rows under the parent's FK lock.
+    await tx.delete(onbConnectors).where(eq(onbConnectors.organizationId, id));
+    await tx.delete(onbSettings).where(eq(onbSettings.organizationId, id));
+  });
+}
 
 async function api(path: string, userId: string, body?: unknown): Promise<ApiResult> {
   const response = await fetch(`${baseUrl}/organizations/current/access${path}`, {
@@ -64,13 +77,14 @@ async function mutate(
   method: "POST" | "PUT" | "PATCH",
   userId: string,
   body: unknown,
+  tenantId = organizationId,
 ): Promise<ApiResult> {
   const response = await fetch(`${baseUrl}/organizations/current/access${path}`, {
     method,
     headers: {
       "content-type": "application/json",
       "x-test-user": userId,
-      "x-organization-id": organizationId,
+      "x-organization-id": tenantId,
     },
     body: JSON.stringify(body),
   });
@@ -196,6 +210,118 @@ before(async () => {
   baseUrl = `http://127.0.0.1:${address.port}`;
 });
 
+test("owner-created starters persist once per tenant without changing existing access or lifecycle", { skip: !hasDb }, async () => {
+  const otherOrganizationId = `${suffix}-starter-other`;
+  const adminUserId = `${suffix}-admin`;
+  await db.insert(organizationsTable).values({
+    id: otherOrganizationId, name: "Starter isolation", slug: otherOrganizationId,
+    joinCodeHash: `${otherOrganizationId}-join`, createdByUserId: managerUserId,
+  });
+  await db.insert(organizationMembershipsTable).values([
+    { organizationId: otherOrganizationId, clerkUserId: managerUserId, role: "owner" },
+    { organizationId, clerkUserId: adminUserId, role: "admin" },
+  ]);
+  try {
+    expectStatus(await mutate("/user-groups", "POST", adminUserId, { starterId: "hr" }), 403);
+    expectStatus(await mutate("/user-groups", "POST", humanMemberUserId, { starterId: "hr" }), 403);
+    for (const body of [{ starterId: "owner" }, { starterId: null }, { starterId: "HR" },
+      { starterId: "hr", name: "Override" }, { starterId: "custom" }, {}, { name: " " }]) {
+      expectStatus(await mutate("/user-groups", "POST", managerUserId, body), 400);
+    }
+    const custom = await mutate("/user-groups", "POST", userGroupOwnerUserId, { name: " HR " });
+    expectStatus(custom, 201);
+    const legacyId = custom.body.userGroup.id;
+    const security = await mutate("/security-groups", "POST", securityGroupOwnerUserId, {
+      name: "Starter preservation policy", allows: ["flow.case.read"],
+    });
+    expectStatus(security, 201);
+    const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+    expectStatus(await mutate(`/user-groups/${legacyId}/members`, "PUT", managerUserId, {
+      principalType: "user", principalId: humanMemberUserId, active: true, expiresAt,
+    }), 200);
+    expectStatus(await mutate(`/user-groups/${legacyId}/security-groups`, "PUT", managerUserId, {
+      securityGroupId: security.body.securityGroup.id, active: true, expiresAt,
+    }), 200);
+    const before = await currentSnapshot();
+    const legacyBefore = before.userGroups.find((group: JsonRecord) => group.id === legacyId);
+    const membersBefore = await db.select().from(accessUserGroupMembers).where(eq(accessUserGroupMembers.organizationId, organizationId));
+    const linksBefore = await db.select().from(accessSecurityGroupUserGroups).where(eq(accessSecurityGroupUserGroups.organizationId, organizationId));
+    const hrRequests = await Promise.all(Array.from({ length: 6 }, () =>
+      mutate("/user-groups", "POST", managerUserId, { starterId: "hr" })));
+    hrRequests.forEach((result) => { expectStatus(result, 200); assert.equal(result.body.userGroup.id, legacyId); });
+    assert.equal(hrRequests.filter((result) => result.body.reusedLegacy).length, 1);
+    const hr = (await currentSnapshot()).userGroups.find((group: JsonRecord) => group.id === legacyId);
+    assert.deepEqual(hr, { ...legacyBefore, starterId: "hr" });
+    assert.deepEqual(await db.select().from(accessUserGroupMembers).where(eq(accessUserGroupMembers.organizationId, organizationId)), membersBefore);
+    assert.deepEqual(await db.select().from(accessSecurityGroupUserGroups).where(eq(accessSecurityGroupUserGroups.organizationId, organizationId)), linksBefore);
+
+    const requests = await Promise.all(Array.from({ length: 8 }, () =>
+      mutate("/user-groups", "POST", managerUserId, { starterId: "ai-agents" })));
+    assert.equal(requests.filter((result) => result.response.status === 201).length, 1);
+    assert.equal(new Set(requests.map((result) => result.body.userGroup.id)).size, 1);
+    requests.forEach((result) => assert.ok([200, 201].includes(result.response.status)));
+    const agentGroupId = requests[0].body.userGroup.id;
+    for (const starterId of ["hiring-managers", "it-operations", "payroll", "compliance-reviewers"]) {
+      expectStatus(await mutate("/user-groups", "POST", managerUserId, { starterId }), 201);
+    }
+    const after = await currentSnapshot();
+    assert.equal(after.userGroupStarters.length, 6);
+    assert.equal(after.userGroups.filter((group: JsonRecord) => group.starterId).length, 6);
+    assert.deepEqual(after.agents, before.agents);
+    assert.deepEqual(after.securityGroups, before.securityGroups);
+    assert.deepEqual(after.grants, before.grants);
+    for (const group of after.userGroups.filter((group: JsonRecord) => group.starterId && group.id !== legacyId)) {
+      assert.deepEqual(group.members, []);
+      assert.deepEqual(group.securityGroups, []);
+      assert.deepEqual(group.securityGroupAttachments, []);
+    }
+    const events = await db.select().from(accessGovernanceHistory).where(eq(accessGovernanceHistory.organizationId, organizationId));
+    assert.equal(events.filter((event) => event.entityId === agentGroupId && event.eventType === "user-group.created").length, 1);
+    assert.equal(events.filter((event) => event.entityId === legacyId && event.eventType === "user-group.starter-linked").length, 1);
+    assert.ok(before.history.every((event: JsonRecord) => after.history.some((later: JsonRecord) => later.id === event.id)));
+
+    expectStatus(await mutate(`/user-groups/${agentGroupId}`, "PATCH", managerUserId, {
+      name: "Renamed automation team", expectedVersion: 1,
+    }), 200);
+    const renamed = await mutate("/user-groups", "POST", managerUserId, { starterId: "ai-agents" });
+    expectStatus(renamed, 200);
+    assert.equal(renamed.body.userGroup.id, agentGroupId);
+    assert.equal(renamed.body.userGroup.name, "Renamed automation team");
+    assert.equal(renamed.body.userGroup.version, 2);
+    expectStatus(await mutate(`/user-groups/${agentGroupId}`, "PATCH", managerUserId, {
+      status: "retired", expectedVersion: 2,
+    }), 200);
+    const retired = await mutate("/user-groups", "POST", managerUserId, { starterId: "ai-agents" });
+    expectStatus(retired, 200);
+    assert.equal(retired.body.userGroup.id, agentGroupId);
+    assert.equal(retired.body.userGroup.status, "retired");
+    assert.equal(retired.body.userGroup.version, 3);
+
+    const foreign = await mutate("/user-groups", "POST", managerUserId, { starterId: "hr" }, otherOrganizationId);
+    expectStatus(foreign, 201);
+    assert.notEqual(foreign.body.userGroup.id, legacyId);
+    const retiredLegacy = await mutate("/user-groups", "POST", managerUserId, { name: "Payroll" }, otherOrganizationId);
+    expectStatus(retiredLegacy, 201);
+    expectStatus(await mutate(`/user-groups/${retiredLegacy.body.userGroup.id}`, "PATCH", managerUserId,
+      { expectedVersion: 1, status: "retired" }, otherOrganizationId), 200);
+    const reusedRetired = await mutate("/user-groups", "POST", managerUserId, { starterId: "payroll" }, otherOrganizationId);
+    expectStatus(reusedRetired, 200);
+    assert.equal(reusedRetired.body.userGroup.status, "retired");
+    assert.equal(reusedRetired.body.userGroup.id, retiredLegacy.body.userGroup.id);
+    for (const name of ["IT Operations", "it operations"]) {
+      expectStatus(await mutate("/user-groups", "POST", managerUserId, { name }, otherOrganizationId), 201);
+    }
+    expectStatus(await mutate("/user-groups", "POST", managerUserId, { starterId: "it-operations" }, otherOrganizationId), 409);
+    const otherGroups = await db.select().from(accessUserGroups).where(eq(accessUserGroups.organizationId, otherOrganizationId));
+    assert.equal(otherGroups.filter((group) => group.starterId === "it-operations").length, 0);
+  } finally {
+    await deleteGovernanceFixture(otherOrganizationId);
+    await db.delete(organizationMembershipsTable).where(and(
+      eq(organizationMembershipsTable.organizationId, organizationId), eq(organizationMembershipsTable.clerkUserId, adminUserId),
+    ));
+  }
+});
+
 after(async () => {
   if (!hasDb) return;
   if (server) {
@@ -204,7 +330,7 @@ after(async () => {
     );
   }
   if (caseId) await db.delete(onbCases).where(eq(onbCases.id, caseId));
-  await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
+  await deleteGovernanceFixture(organizationId);
 });
 
 test("temporary memberships and group/direct attachments stop granting access at expiry without cleanup", { skip: !hasDb }, async () => {
