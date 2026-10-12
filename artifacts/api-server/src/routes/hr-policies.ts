@@ -1,4 +1,7 @@
 import { Router, type IRouter, type Response } from "express";
+import multer from "multer";
+import { authorizePolicyImport, uploadPolicyImport, getPolicyImport, discardPolicyImport } from "../lib/hr-policy-imports";
+import { POLICY_IMPORT_MAX_BYTES } from "../lib/hr-policy-document-extraction";
 import { getOrganizationId } from "../lib/organization-scope";
 import { policyEvaluationCatalog, reviewPolicyBenchmark, runPolicyBenchmark, configurePolicyDrift } from "../lib/hr-policy-evaluation";
 import { policyDriftInbox, updatePolicyDriftInbox } from "../lib/hr-policy-drift-notifications";
@@ -48,8 +51,45 @@ function positive(value: string | undefined, field: string): number {
   return number;
 }
 
+export const policyDocumentUpload = multer({
+  storage: multer.memoryStorage(),
+  // Busboy counts the terminating boundary toward the parts limit. One file
+  // needs two parts; files/fields still enforce exactly one file and no fields.
+  limits: { fileSize: POLICY_IMPORT_MAX_BYTES, files: 1, fields: 0, parts: 2 },
+}).single("file");
+
 export function createHrPolicyRouter(): IRouter {
   const router: IRouter = Router();
+  let activeImports = 0;
+  router.post("/policies/imports", async (req, res, next) => {
+    try {
+      await authorizePolicyImport(getOrganizationId(req), req.authUserId!);
+      if (activeImports >= 4) { res.status(503).json({ message: "Document importer is busy; try again shortly." }); return; }
+      activeImports++;
+      let released = false;
+      const release = () => { if (!released) { released = true; activeImports--; } };
+      // Release after processing, not after client disconnect: the private
+      // scan/extraction may still be running.
+      policyDocumentUpload(req, res, (error) => {
+        void (async () => {
+          try {
+            if (error) { res.status(400).json({ message: "Upload one PDF, DOCX or DOC file up to 10 MiB, with no extra fields." }); return; }
+            if (!req.file) throw new HrPolicyError("A document file is required.");
+            res.status(201).json(await uploadPolicyImport(getOrganizationId(req), req.authUserId!, req.file));
+          } catch (e) { if (!errorResponse(e, res)) next(e); }
+          finally { release(); }
+        })();
+      });
+    } catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
+  router.get("/policies/imports/:importId", async (req, res, next) => {
+    try { res.json(await getPolicyImport(getOrganizationId(req), req.authUserId!, policyId(req.params.importId))); }
+    catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
+  router.delete("/policies/imports/:importId", async (req, res, next) => {
+    try { res.json(await discardPolicyImport(getOrganizationId(req), req.authUserId!, policyId(req.params.importId))); }
+    catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
   router.get("/policies/evaluation/notifications", async (req, res, next) => {
     try { res.json(GetHrPolicyDriftNotificationsResponse.parse(await policyDriftInbox(getOrganizationId(req), req.authUserId!))); }
     catch (error) { if (!errorResponse(error, res)) next(error); }

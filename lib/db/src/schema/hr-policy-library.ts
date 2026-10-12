@@ -15,6 +15,40 @@ import {
 import { sql } from "drizzle-orm";
 import { organizationsTable } from "./organizations";
 
+export type PolicyImportProvenance = {
+  importId: string;
+  filename: string;
+  mediaType: string;
+  byteSize: number;
+  sha256: string;
+  uploadedAt: string;
+  uploadedByUserId: string;
+  extractor: string;
+  extractedTextSha256: string;
+  warnings: string[];
+  malware: "clean";
+  authenticity: "not_verified";
+};
+
+export const onbHrPolicyImports = pgTable("onb_hr_policy_imports", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
+  uploadedByUserId: text("uploaded_by_user_id").notNull(),
+  filename: text("filename").notNull(),
+  mediaType: text("media_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  sha256: text("sha256").notNull(),
+  objectPath: text("object_path").notNull(),
+  status: text("status").$type<"processing" | "quarantined" | "ready" | "consumed" | "discarded">().notNull(),
+  malwareVerdict: text("malware_verdict").notNull().default("pending"),
+  extraction: jsonb("extraction").$type<{ text: string; extractor: string; warnings: string[] }>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check("onb_hr_policy_import_status_check", sql`${t.status} in ('processing','quarantined','ready','consumed','discarded')`),
+  check("onb_hr_policy_imports_byte_size_check", sql`${t.byteSize} > 0 and ${t.byteSize} <= 10485760`),
+  index("onb_hr_policy_import_tenant_idx").on(t.organizationId, t.createdAt),
+]);
+
 /**
  * This library is intentionally independent of onboarding checklist policies
  * and case explainability evidence. Curated policy text is immutable once a
@@ -36,6 +70,7 @@ export const onbHrPolicyVersions = pgTable("onb_hr_policy_versions", {
   version: integer("version").notNull(),
   title: text("title").notNull(),
   sourceReference: text("source_reference").notNull(),
+  importProvenance: jsonb("import_provenance").$type<PolicyImportProvenance>(),
   /** Curated text only: URL references are never fetched or interpreted. */
   text: text("text").notNull(),
   audience: jsonb("audience").$type<Array<"owner" | "admin" | "member">>().notNull(),

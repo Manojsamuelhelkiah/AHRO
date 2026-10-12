@@ -7,9 +7,11 @@ import {
   onbHrPolicyHandoffs,
   onbHrPolicyReminders,
   onbHrPolicySources,
+  onbHrPolicyImports,
   onbHrPolicyVersions,
   organizationMembershipsTable,
 } from "@workspace/db";
+import type { PolicyImportProvenance } from "@workspace/db";
 import {
   HrPolicyAiUnavailableError,
   selectApprovedPolicyExtract,
@@ -161,6 +163,10 @@ async function administrativeAuthority(tx: any, organizationId: string, userId: 
   return verifiedAuthority(tx, organizationId, userId, role);
 }
 
+export async function requirePolicyMaintainer(tx: any, organizationId: string, userId: string) {
+  await administrativeAuthority(tx, organizationId, userId, "hr-policy-maintain");
+}
+
 async function authorityStillCurrent(tx: any, organizationId: string, assignmentId: number | null, role: string): Promise<boolean> {
   if (!assignmentId) return false;
   const now = new Date();
@@ -202,6 +208,7 @@ function policyPublic(row: typeof onbHrPolicyVersions.$inferSelect) {
   return {
     policyId: row.policyId, version: row.version, title: row.title,
     sourceReference: row.sourceReference, audience: row.audience,
+    importProvenance: row.importProvenance ?? null,
     applicability: row.applicability, effectiveFrom: row.effectiveFrom,
     reviewAuthorityRole: row.reviewAuthorityRole,
     effectiveUntil: row.effectiveUntil, reviewBy: row.reviewBy, status: row.status,
@@ -470,9 +477,10 @@ export async function createPolicy(organizationId: string, userId: string, input
       throw new HrPolicyError("Policy audience must include the acting maintainer's current membership role.", 403);
     }
     const policyId = randomUUID();
+    const importProvenance = await consumePolicyImport(tx, organizationId, userId, input);
     await tx.insert(onbHrPolicySources).values({ organizationId, policyId, createdByUserId: userId });
     const [created] = await tx.insert(onbHrPolicyVersions).values({
-      organizationId, policyId, version: 1, ...data, createdByUserId: userId,
+      organizationId, policyId, version: 1, ...data, importProvenance, createdByUserId: userId,
     }).returning();
     return policyPublic(created!);
   });
@@ -494,8 +502,11 @@ export async function revisePolicy(organizationId: string, userId: string, polic
     if (current.version !== expected) throw new HrPolicyError("Policy version changed; reload and retry.", 409, "STALE_POLICY_VERSION");
     if (current.status === "retired") throw new HrPolicyError("Retired policies cannot be revised.", 409);
     if (current.status === "in_review") throw new HrPolicyError("A policy under review cannot be edited.", 409);
+    const importProvenance = object(input).importId
+      ? await consumePolicyImport(tx, organizationId, userId, input)
+      : current.importProvenance;
     const [created] = await tx.insert(onbHrPolicyVersions).values({
-      organizationId, policyId, version: current.version + 1, ...data, createdByUserId: userId,
+      organizationId, policyId, version: current.version + 1, ...data, importProvenance, createdByUserId: userId,
     }).returning();
     return policyPublic(created!);
   });
@@ -800,4 +811,28 @@ export async function resolvePolicyHandoff(organizationId: string, userId: strin
     if (!updated) throw new HrPolicyError("Open policy handoff not found.", 404);
     return { handoff: updated, externalDispatch: false };
   });
+}
+
+/** Called within the policy insert transaction; cannot be replayed or forged. */
+async function consumePolicyImport(tx: any, organizationId: string, userId: string, input: unknown): Promise<PolicyImportProvenance | null> {
+  const importId = object(input).importId;
+  if (importId === undefined || importId === null) return null;
+  if (typeof importId !== "string" || !/^[0-9a-f-]{36}$/i.test(importId)) throw new HrPolicyError("Invalid import id.");
+  const [row] = await tx.select().from(onbHrPolicyImports).where(and(
+    eq(onbHrPolicyImports.id, importId), eq(onbHrPolicyImports.organizationId, organizationId),
+    eq(onbHrPolicyImports.uploadedByUserId, userId),
+  )).for("update");
+  if (!row) throw new HrPolicyError("Policy import not found.", 404);
+  if (row.status !== "ready" || row.malwareVerdict !== "clean" || !row.extraction ||
+      Date.now() - row.createdAt.valueOf() > 24 * 60 * 60 * 1000) {
+    throw new HrPolicyError("Only a recent, safely extracted, unused import can become a draft.", 409);
+  }
+  await tx.update(onbHrPolicyImports).set({ status: "consumed" }).where(eq(onbHrPolicyImports.id, importId));
+  return {
+    importId, filename: row.filename, mediaType: row.mediaType, byteSize: row.byteSize,
+    sha256: row.sha256, uploadedAt: row.createdAt.toISOString(), uploadedByUserId: userId,
+    extractor: row.extraction.extractor,
+    extractedTextSha256: createHash("sha256").update(row.extraction.text).digest("hex"),
+    warnings: row.extraction.warnings, malware: "clean", authenticity: "not_verified",
+  };
 }

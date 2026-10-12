@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { PolicyDocumentImport, PolicySourceProvenance } from './document-import';
 import { useRoute, Link } from 'wouter';
 import {
   usePolicyHistory, usePolicyVersion, useUpdateDraft, useSubmitReview, useReviewPolicy,
@@ -118,6 +119,9 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
   const [title, setTitle] = useState('');
   const [sourceReference, setSourceReference] = useState('');
   const [policyText, setPolicyText] = useState('');
+  const [importId, setImportId] = useState<string>();
+  const [importBusy, setImportBusy] = useState(false);
+  const [importBlocked, setImportBlocked] = useState(false);
   const [effectiveFrom, setEffectiveFrom] = useState('');
   const [effectiveUntil, setEffectiveUntil] = useState('');
   const [reviewBy, setReviewBy] = useState('');
@@ -127,6 +131,7 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
   const [workerType, setWorkerType] = useState('');
   const [location, setLocation] = useState('');
   const { mutate: updateDraft, isPending } = useUpdateDraft(policy.id);
+  const scope = usePolicyScope();
   const { toast } = useToast();
 
   // History returns metadata only. Populate editing state only from the
@@ -136,6 +141,8 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
     setTitle(editable.title);
     setSourceReference(editable.sourceReference);
     setPolicyText(text);
+    setImportId(undefined);
+    setImportBlocked(false);
     setEffectiveFrom(editable.effectiveFrom);
     setEffectiveUntil(editable.effectiveUntil ?? '');
     setReviewBy(editable.reviewBy ?? '');
@@ -144,16 +151,19 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
     setCountry(editable.applicability.country ?? '');
     setWorkerType(editable.applicability.workerType ?? '');
     setLocation(editable.applicability.location ?? '');
-  }, [editable, text]);
+  // Identical background re-fetches must not overwrite corrected text or
+  // detach a selected import while the maintainer is editing.
+  }, [editable?.policyId, editable?.version, text, scope.organizationId, scope.userId]);
 
   if (!editable) return null;
   const handleSave = () => {
-    if (!policyText.trim() || !title.trim() || !sourceReference.trim() || audience.length === 0 || !effectiveFrom) return;
+    if (importBusy || importBlocked || !policyText.trim() || !title.trim() || !sourceReference.trim() || audience.length === 0 || !effectiveFrom) return;
     const applicability = Object.fromEntries(
       Object.entries({ country, workerType, location }).filter(([, value]) => value.trim()),
     );
     updateDraft({
       expectedVersion: editable.version,
+      importId,
       title,
       sourceReference,
       text: policyText,
@@ -181,15 +191,22 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
           <h2 className="text-[var(--text-lg)] font-bold flex items-center gap-2"><FileText className="h-5 w-5" /> Full policy version</h2>
           <p className="text-xs text-[var(--text-muted)] mt-1">Editing creates version {editable.version + 1}; the stored text is loaded only after source authorization.</p>
         </div>
-        {canEdit && <button onClick={handleSave} disabled={isPending || contentLoading || contentError || !policyText.trim() || audience.length === 0} className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-bold rounded-lg disabled:opacity-50 flex items-center gap-2">
+        {canEdit && <button onClick={handleSave} disabled={isPending || importBusy || importBlocked || contentLoading || contentError || !policyText.trim() || audience.length === 0} className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-bold rounded-lg disabled:opacity-50 flex items-center gap-2">
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 className="h-4 w-4" />} Save full replacement
         </button>}
       </div>
+      <PolicySourceProvenance provenance={editable.importProvenance} />
 
       {!selectedForEditing ? <div className="p-4 rounded border bg-slate-50 text-sm text-[var(--text-muted)]">Viewing historical version metadata and any authorized source text below. Select the current editable version to create a full replacement.</div>
         : contentLoading ? <div className="py-12 flex justify-center text-[var(--text-muted)]"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading authorized version…</div>
         : contentError ? <div className="p-4 rounded border border-amber-200 bg-amber-50 text-sm text-amber-800">This version’s text is not available to your current authority. Metadata and provenance remain visible where permitted.</div>
         : <div className="space-y-4">
+          {canEdit && <PolicyDocumentImport key={editable.version}
+            onBusy={setImportBusy}
+            onExtracted={(extracted, id) => { setPolicyText(extracted); setImportId(id); setImportBlocked(false); }}
+            onClear={() => { setPolicyText(text ?? ''); setImportId(undefined); setImportBlocked(false); }}
+            onBlocked={() => { setImportId(undefined); setImportBlocked(true); }}
+          />}
           <div className="grid grid-cols-2 gap-4">
             <Field label="Policy title"><input value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canEdit} className={fieldClass} /></Field>
             <Field label="Source reference"><input value={sourceReference} onChange={(e) => setSourceReference(e.target.value)} disabled={!canEdit} className={`${fieldClass} font-mono`} /></Field>

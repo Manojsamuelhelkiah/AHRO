@@ -8842,6 +8842,9 @@ export const HrPolicyStatus = {
   retired: 'retired',
 } as const;
 
+export interface HrPolicyDocumentUpload {
+  file: Blob;
+}
 /**
  * @nullable
  */
@@ -8859,6 +8862,7 @@ export interface HrPolicyVersionMetadata {
   version: number;
   title: string;
   sourceReference: string;
+  importProvenance?: HrPolicyImportProvenance | null;
   /**
      * @minItems 1
      * @maxItems 3
@@ -8930,6 +8934,7 @@ export interface HrPolicyReminder {
 }
 
 export interface HrPolicyCreateInput {
+  importId?: string;
   /**
      * @minLength 1
      * @maxLength 4000
@@ -8960,6 +8965,7 @@ export interface HrPolicyCreateInput {
 }
 
 export interface HrPolicyRevisionInput {
+  importId?: string;
   /**
      * @minLength 1
      * @maxLength 4000
@@ -10655,3 +10661,67 @@ export type ListSensitiveLifecycleDeletionJobs200 = {
 
 export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
 
+
+export const HrPolicyImportProvenanceMalware = {
+  clean: 'clean',
+} as const;
+
+export const HrPolicyImportPreviewStatus = {
+  processing: 'processing',
+  quarantined: 'quarantined',
+  ready: 'ready',
+  consumed: 'consumed',
+  discarded: 'discarded',
+} as const;
+
+export type HrPolicyImportProvenanceAuthenticity = typeof HrPolicyImportProvenanceAuthenticity[keyof typeof HrPolicyImportProvenanceAuthenticity];
+
+export const HrPolicyImportProvenanceAuthenticity = {
+  not_verified: 'not_verified',
+} as const;
+
+export const HrPolicyImportPreviewAuthenticity = {
+  not_verified: 'not_verified',
+} as const;
+
+export type HrPolicyImportPreviewStatus = typeof HrPolicyImportPreviewStatus[keyof typeof HrPolicyImportPreviewStatus];
+
+export type HrPolicyImportProvenanceMalware = typeof HrPolicyImportProvenanceMalware[keyof typeof HrPolicyImportProvenanceMalware];
+
+export interface HrPolicyImportProvenance {
+  importId: string;
+  filename: string;
+  mediaType: string;
+  byteSize: number;
+  sha256: string;
+  uploadedAt: string;
+  uploadedByUserId: string;
+  extractor: string;
+  extractedTextSha256: string;
+  warnings: string[];
+  malware: HrPolicyImportProvenanceMalware;
+  authenticity: HrPolicyImportProvenanceAuthenticity;
+}
+
+export type HrPolicyImportPreviewAuthenticity = typeof HrPolicyImportPreviewAuthenticity[keyof typeof HrPolicyImportPreviewAuthenticity];
+
+export interface HrPolicyImportPreview {
+  importId: string;
+  status: HrPolicyImportPreviewStatus;
+  filename: string;
+  mediaType: string;
+  byteSize: number;
+  sha256: string;
+  uploadedAt: string;
+  malwareVerdict: string;
+  authenticity: HrPolicyImportPreviewAuthenticity;
+  /** @nullable */
+  text: string | null;
+  /** @nullable */
+  extractor: string | null;
+  warnings: string[];
+}
+
+export interface HrPolicyImportDiscardResult {
+  discarded: boolean;
+}

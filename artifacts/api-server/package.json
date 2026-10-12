@@ -36,9 +36,13 @@
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "http-proxy-middleware": "^4.2.0",
+    "mammoth": "^1.13.0",
     "multer": "^2.2.0",
+    "pdf-parse": "^2.4.5",
     "pino": "^9.14.0",
     "pino-http": "^10.5.0",
+    "word-extractor": "^1.0.4",
+    "yauzl": "^3.4.0",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -47,6 +51,7 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^2.2.0",
     "@types/node": "catalog:",
+    "@types/yauzl": "^3.4.0",
     "esbuild": "0.27.3",
     "esbuild-plugin-pino": "^2.3.3",
     "pg": "^8.22.0",

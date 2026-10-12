@@ -106,6 +106,7 @@ import type {
   HrPolicyCapabilities,
   HrPolicyCitationExcerpt,
   HrPolicyCreateInput,
+  HrPolicyDocumentUpload,
   HrPolicyDriftInbox,
   HrPolicyDriftInput,
   HrPolicyDriftNoticeInput,
@@ -118,6 +119,8 @@ import type {
   HrPolicyHandoffResolveInput,
   HrPolicyHandoffResolveResponse,
   HrPolicyHistoryResponse,
+  HrPolicyImportDiscardResult,
+  HrPolicyImportPreview,
   HrPolicyListResponse,
   HrPolicyPublishInput,
   HrPolicyReminder,
@@ -3126,6 +3129,215 @@ export const useRunHrPolicyEvaluation = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRunHrPolicyEvaluationMutationOptions(options));
+    }
+
+export const getUploadHrPolicyDocumentUrl = () => {
+
+
+
+
+  return `/api/policies/imports`
+}
+
+/**
+ * @summary Privately scan and extract a policy document for maintainer review
+ */
+export const uploadHrPolicyDocument = async (hrPolicyDocumentUpload: HrPolicyDocumentUpload, options?: RequestInit): Promise<HrPolicyImportPreview> => {
+    const formData = new FormData();
+formData.append(`file`, hrPolicyDocumentUpload.file);
+
+  return customFetch<HrPolicyImportPreview>(getUploadHrPolicyDocumentUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getUploadHrPolicyDocumentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadHrPolicyDocument>>, TError,{data: BodyType<HrPolicyDocumentUpload>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadHrPolicyDocument>>, TError,{data: BodyType<HrPolicyDocumentUpload>}, TContext> => {
+
+const mutationKey = ['uploadHrPolicyDocument'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadHrPolicyDocument>>, {data: BodyType<HrPolicyDocumentUpload>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  uploadHrPolicyDocument(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadHrPolicyDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof uploadHrPolicyDocument>>>
+    export type UploadHrPolicyDocumentMutationBody = BodyType<HrPolicyDocumentUpload>
+    export type UploadHrPolicyDocumentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Privately scan and extract a policy document for maintainer review
+ */
+export const useUploadHrPolicyDocument = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadHrPolicyDocument>>, TError,{data: BodyType<HrPolicyDocumentUpload>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadHrPolicyDocument>>,
+        TError,
+        {data: BodyType<HrPolicyDocumentUpload>},
+        TContext
+      > => {
+      return useMutation(getUploadHrPolicyDocumentMutationOptions(options));
+    }
+
+export const getGetHrPolicyImportUrl = (importId: string,) => {
+
+
+
+
+  return `/api/policies/imports/${importId}`
+}
+
+export const getHrPolicyImport = async (importId: string, options?: RequestInit): Promise<HrPolicyImportPreview> => {
+
+  return customFetch<HrPolicyImportPreview>(getGetHrPolicyImportUrl(importId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetHrPolicyImportQueryKey = (importId: string,) => {
+    return [
+    `/api/policies/imports/${importId}`
+    ] as const;
+    }
+
+
+export const getGetHrPolicyImportQueryOptions = <TData = Awaited<ReturnType<typeof getHrPolicyImport>>, TError = ErrorType<unknown>>(importId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHrPolicyImport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetHrPolicyImportQueryKey(importId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHrPolicyImport>>> = ({ signal }) => getHrPolicyImport(importId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: importId !== null && importId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getHrPolicyImport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetHrPolicyImportQueryResult = NonNullable<Awaited<ReturnType<typeof getHrPolicyImport>>>
+export type GetHrPolicyImportQueryError = ErrorType<unknown>
+
+
+
+export function useGetHrPolicyImport<TData = Awaited<ReturnType<typeof getHrPolicyImport>>, TError = ErrorType<unknown>>(
+ importId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHrPolicyImport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetHrPolicyImportQueryOptions(importId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDiscardHrPolicyImportUrl = (importId: string,) => {
+
+
+
+
+  return `/api/policies/imports/${importId}`
+}
+
+export const discardHrPolicyImport = async (importId: string, options?: RequestInit): Promise<HrPolicyImportDiscardResult> => {
+
+  return customFetch<HrPolicyImportDiscardResult>(getDiscardHrPolicyImportUrl(importId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDiscardHrPolicyImportMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof discardHrPolicyImport>>, TError,{importId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof discardHrPolicyImport>>, TError,{importId: string}, TContext> => {
+
+const mutationKey = ['discardHrPolicyImport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof discardHrPolicyImport>>, {importId: string}> = (props) => {
+          const {importId} = props ?? {};
+
+          return  discardHrPolicyImport(importId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DiscardHrPolicyImportMutationResult = NonNullable<Awaited<ReturnType<typeof discardHrPolicyImport>>>
+
+    export type DiscardHrPolicyImportMutationError = ErrorType<unknown>
+
+    export const useDiscardHrPolicyImport = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof discardHrPolicyImport>>, TError,{importId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof discardHrPolicyImport>>,
+        TError,
+        {importId: string},
+        TContext
+      > => {
+      return useMutation(getDiscardHrPolicyImportMutationOptions(options));
     }
 
 export const getGetHrPolicyCapabilitiesUrl = () => {

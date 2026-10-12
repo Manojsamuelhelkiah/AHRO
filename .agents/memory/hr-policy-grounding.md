@@ -36,3 +36,9 @@ Language-pair consistency is not correctness or broad fairness assurance. Equal 
 **Why:** Shared abstentions may reflect a safety gate rather than model understanding; equally unsupported citations can look consistent while still misleading users.
 
 **How to apply:** Bind paired questions to identical fictional evidence and answer keys, score agreement separately from correctness, and distinguish model-required pairs from pre-disclosure gates and scripted replay.
+
+Keep policy document extraction local and separate from model-assisted guidance. Do not work around unavailable private scanning by sending policy files to a public scanner or remote OCR/extraction provider.
+
+**Why:** HR policies can contain confidential organizational information; accepting uploads does not authorize another processor or establish source authenticity. A scan/extraction result must not bypass the independent review already required for guidance.
+
+**How to apply:** Treat any future OCR or external document processor as a separately approved privacy/processing decision. Preserve the authoritative source provenance when maintainers correct extracted text.

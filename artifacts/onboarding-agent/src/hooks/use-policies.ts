@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '@clerk/react';
 import { customFetch, getPinnedOrganizationIdForPage } from '@workspace/api-client-react';
+import type { HrPolicyImportProvenance } from '@workspace/api-client-react';
 
 export type PolicyMembershipRole = 'owner' | 'admin' | 'member';
 export type PolicyVersionStatus = 'draft' | 'in_review' | 'published' | 'superseded' | 'retired';
@@ -12,6 +13,7 @@ export interface PolicyVersion {
   version: number;
   title: string;
   sourceReference: string;
+  importProvenance?: HrPolicyImportProvenance | null;
   audience: PolicyMembershipRole[];
   applicability: PolicyApplicability;
   effectiveFrom: string;
@@ -61,6 +63,7 @@ export interface PolicyCapabilities {
 }
 
 export interface PolicyInput {
+  importId?: string;
   title: string;
   sourceReference: string;
   text: string;

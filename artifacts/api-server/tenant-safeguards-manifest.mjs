@@ -60,6 +60,7 @@ export const tenantSafeguards = [
   // Their distinct tables are deliberately checked independently of the
   // owner-managed checklist policy tables.
   { table: "onb_hr_policy_sources", phaseB: false },
+  { table: "onb_hr_policy_imports", phaseB: false },
   { table: "onb_hr_policy_versions", phaseB: false },
   { table: "onb_hr_policy_handoffs", phaseB: false },
   { table: "onb_hr_policy_excerpts", phaseB: false },

@@ -503,6 +503,50 @@ paths:
         "400": { description: Invalid run }
         "403": { description: Current membership or verified live-run authority required }
         "409": { description: "Missing review, stale benchmark or budget exhausted" }
+  /policies/imports:
+    post:
+      operationId: uploadHrPolicyDocument
+      summary: Privately scan and extract a policy document for maintainer review
+      tags: [HrPolicies]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/HrPolicyDocumentUpload"
+      responses:
+        "201":
+          description: Extraction preview or quarantined import; never published guidance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HrPolicyImportPreview"
+  /policies/imports/{importId}:
+    parameters:
+      - name: importId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getHrPolicyImport
+      tags: [HrPolicies]
+      responses:
+        "200":
+          description: Uploader-scoped extraction preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HrPolicyImportPreview"
+    delete:
+      operationId: discardHrPolicyImport
+      tags: [HrPolicies]
+      responses:
+        "200":
+          description: Unattached source discarded; attached sources cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HrPolicyImportDiscardResult"
   /policies/capabilities:
     get:
       operationId: getHrPolicyCapabilities
@@ -14271,6 +14315,49 @@ components:
     HrPolicyStatus:
       type: string
       enum: [draft, in_review, published, superseded, retired]
+    HrPolicyDocumentUpload:
+      type: object
+      additionalProperties: false
+      required: [file]
+      properties:
+        file: { type: string, format: binary }
+    HrPolicyImportDiscardResult:
+      type: object
+      required: [discarded]
+      properties:
+        discarded: { type: boolean }
+    HrPolicyImportPreview:
+      type: object
+      required: [importId, status, filename, mediaType, byteSize, sha256, uploadedAt, malwareVerdict, authenticity, text, extractor, warnings]
+      properties:
+        importId: { type: string }
+        status: { type: string, enum: [processing, quarantined, ready, consumed, discarded] }
+        filename: { type: string }
+        mediaType: { type: string }
+        byteSize: { type: integer }
+        sha256: { type: string }
+        uploadedAt: { type: string, format: date-time }
+        malwareVerdict: { type: string }
+        authenticity: { type: string, enum: [not_verified] }
+        text: { type: ["string", "null"] }
+        extractor: { type: ["string", "null"] }
+        warnings: { type: array, items: { type: string } }
+    HrPolicyImportProvenance:
+      type: object
+      required: [importId, filename, mediaType, byteSize, sha256, uploadedAt, uploadedByUserId, extractor, extractedTextSha256, warnings, malware, authenticity]
+      properties:
+        importId: { type: string }
+        filename: { type: string }
+        mediaType: { type: string }
+        byteSize: { type: integer }
+        sha256: { type: string }
+        uploadedAt: { type: string, format: date-time }
+        uploadedByUserId: { type: string }
+        extractor: { type: string }
+        extractedTextSha256: { type: string }
+        warnings: { type: array, items: { type: string } }
+        malware: { type: string, enum: [clean] }
+        authenticity: { type: string, enum: [not_verified] }
     HrPolicyVersionMetadata:
       type: object
       additionalProperties: false
@@ -14279,6 +14366,10 @@ components:
         version: { type: integer, minimum: 1 }
         title: { type: string }
         sourceReference: { type: string }
+        importProvenance:
+          anyOf:
+            - $ref: "#/components/schemas/HrPolicyImportProvenance"
+            - type: "null"
         audience:
           type: array
           minItems: 1
@@ -14347,6 +14438,7 @@ components:
       type: object
       additionalProperties: false
       properties:
+        importId: { type: string }
         title: { type: string, minLength: 1, maxLength: 4000 }
         sourceReference: { type: string, minLength: 1, maxLength: 4000 }
         text: { type: string, minLength: 1, maxLength: 40000 }
@@ -14365,6 +14457,7 @@ components:
       type: object
       additionalProperties: false
       properties:
+        importId: { type: string }
         title: { type: string, minLength: 1, maxLength: 4000 }
         sourceReference: { type: string, minLength: 1, maxLength: 4000 }
         text: { type: string, minLength: 1, maxLength: 40000 }

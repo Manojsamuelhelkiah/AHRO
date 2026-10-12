@@ -1,14 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import {
-  usePolicies, useHandoffs, useCreatePolicy, useResolveHandoff, usePolicyCapabilities,
+  usePolicies, useHandoffs, useCreatePolicy, useResolveHandoff, usePolicyCapabilities, usePolicyScope,
   type PolicyMembershipRole, type PolicyReviewAuthorityRole, type PolicyVersion,
 } from '../../hooks/use-policies';
 import { Link, useLocation } from 'wouter';
 import { Plus, BookOpen, CheckCircle, ShieldAlert, ArrowRight, Loader2, Shield } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { PolicyReminders } from './reminders';
+import { PolicyDocumentImport } from './document-import';
 
 export function HrPolicyLibraryIndexPage() {
+  const scope = usePolicyScope();
   const policiesQuery = usePolicies();
   const capabilitiesQuery = usePolicyCapabilities();
   // Do not continue to render a successful capability/list result after its
@@ -84,7 +86,7 @@ export function HrPolicyLibraryIndexPage() {
           {capabilities?.canMaintain && <PolicyReminders />}
           {capabilities?.canMaintain && (
             <div className="flex justify-end">
-              <CreatePolicyDialog membershipRole={capabilities.membershipRole} />
+              <CreatePolicyDialog key={`${scope.organizationId}:${scope.userId}`} membershipRole={capabilities.membershipRole} />
             </div>
           )}
           
@@ -267,6 +269,9 @@ function CreatePolicyDialog({ membershipRole }: { membershipRole: PolicyMembersh
   const [title, setTitle] = useState('');
   const [sourceReference, setSourceReference] = useState('');
   const [text, setText] = useState('');
+  const [importId, setImportId] = useState<string>();
+  const [importBusy, setImportBusy] = useState(false);
+  const [importBlocked, setImportBlocked] = useState(false);
   const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().split('T')[0]);
   const [effectiveUntil, setEffectiveUntil] = useState('');
   const [reviewBy, setReviewBy] = useState('');
@@ -283,9 +288,11 @@ function CreatePolicyDialog({ membershipRole }: { membershipRole: PolicyMembersh
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (importBusy || importBlocked || isPending) return;
     createPolicy(
       { 
         title, 
+        importId,
         sourceReference,
         text,
         audience: [...new Set([...audience, membershipRole])],
@@ -302,6 +309,8 @@ function CreatePolicyDialog({ membershipRole }: { membershipRole: PolicyMembersh
       {
         onSuccess: (data) => {
           setOpen(false);
+          setImportId(undefined);
+          setText('');
           if (data && data.policy) {
             setLocation(`/hr-policy-library/${data.policy.policyId}`);
           }
@@ -329,6 +338,12 @@ function CreatePolicyDialog({ membershipRole }: { membershipRole: PolicyMembersh
             <p className="text-[var(--text-sm)] text-[var(--text-muted)] mb-6">Initialize a new versioned HR policy.</p>
             
             <form onSubmit={handleSubmit} className="flex flex-col gap-4 overflow-y-auto flex-1 pr-2">
+              <PolicyDocumentImport
+                onBusy={setImportBusy}
+                onExtracted={(extracted, id) => { setText(extracted); setImportId(id); setImportBlocked(false); }}
+                onClear={() => { setText(''); setImportId(undefined); setImportBlocked(false); }}
+                onBlocked={() => { setText(''); setImportId(undefined); setImportBlocked(true); }}
+              />
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[var(--text-sm)] font-semibold mb-1.5">Policy Title</label>
@@ -411,14 +426,15 @@ function CreatePolicyDialog({ membershipRole }: { membershipRole: PolicyMembersh
                   value={text} 
                   onChange={e => setText(e.target.value)} 
                   required 
-                  placeholder="Paste the full approved policy text here..." 
+                  maxLength={40000}
+                  placeholder="Paste policy text or correct the extracted text. This remains an unapproved draft."
                   className="w-full h-40 p-3 rounded-lg border focus:border-[var(--primary)] outline-none resize-none font-serif"
                 />
               </div>
 
               <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
-                <button type="button" onClick={() => setOpen(false)} className="px-4 py-2 rounded-lg font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-                 <button type="submit" disabled={isPending || !title || !sourceReference || !text || audience.length === 0} className="px-4 py-2 rounded-lg font-semibold bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] disabled:opacity-50 flex items-center gap-2">
+                <button type="button" disabled={importBusy || isPending} onClick={() => { setOpen(false); setImportId(undefined); setText(''); setImportBlocked(false); }} className="px-4 py-2 rounded-lg font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                 <button type="submit" disabled={isPending || importBusy || importBlocked || !title || !sourceReference || !text || audience.length === 0} className="px-4 py-2 rounded-lg font-semibold bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] disabled:opacity-50 flex items-center gap-2">
                   {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Create Policy Draft
                 </button>
