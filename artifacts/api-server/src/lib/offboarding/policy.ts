@@ -22,7 +22,7 @@ export function validatePolicy(input: unknown): SeparationPolicy {
   p.defaultAssets = b.defaultAssets.map(v => text(v, "default asset", 160));
   p.obligations = b.obligations.map(raw => {
     const o = object(raw), id = text(o.id, "obligation id", 64);
-    if (!/^[a-z0-9][a-z0-9-]+$/.test(id) || !AUTHORITY_SCOPES.includes(o.scope as typeof AUTHORITY_SCOPES[number])) throw new SeparationError("Obligation requires a stable ID and supported verified authority scope.", 400);
+    if (!/^[a-z0-9][a-z0-9-]+$/.test(id) || !AUTHORITY_SCOPES.includes(o.scope as typeof AUTHORITY_SCOPES[number])) throw new SeparationError("Obligation requires a stable ID and supported reviewer routing label; labels do not grant permissions.", 400);
     if (!Array.isArray(o.prerequisites) || !Number.isInteger(o.dueOffsetDays) || Number(o.dueOffsetDays) < -90 || Number(o.dueOffsetDays) > 180) throw new SeparationError("Supply prerequisites and integer dueOffsetDays (-90 to 180).", 400);
     return { id, label: text(o.label, "obligation label", 160), scope: String(o.scope), stream: text(o.stream, "stream", 80), prerequisites: o.prerequisites.map(v => text(v, "prerequisite", 64)), dueOffsetDays: Number(o.dueOffsetDays) };
   });

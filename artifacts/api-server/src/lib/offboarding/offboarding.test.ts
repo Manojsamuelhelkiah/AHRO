@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { and, eq } from "drizzle-orm";
-import { db, pool, accessNamedGrants, offbCases, offbSources, offbPolicies, offbCheckpoints, onbCases, onbConnectors, onbSettings, onbSystemChecks, onbEvents, onbSensitiveLifecyclePolicies, onbAuthorityAssignments, onbAuthorityGovernance, organizationsTable, organizationMembershipsTable, hroMailboxIngress, hroMailboxRequests, type OnbAuthorityRole, type OnbAuthorityScope, type SeparationFacts } from "@workspace/db";
+import { db, pool, accessNamedGrants, offbCases, offbSources, offbPolicies, offbCheckpoints, onbCases, onbConnectors, onbSettings, onbSystemChecks, onbEvents, onbSensitiveLifecyclePolicies, organizationsTable, organizationMembershipsTable, hroMailboxIngress, hroMailboxRequests, type SeparationFacts } from "@workspace/db";
 import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import { onbReadinessSlaPolicies } from "@workspace/db";
 import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 import { createSeparations, actionSeparation, separationDetail, listSeparations } from "./service";
-import { savePolicy, decidePolicy } from "./policy";
+import { savePolicy, decidePolicy, listPolicies } from "./policy";
 import { endOfLwd, facts, initialState, compilePlan } from "./model";
 import { configureMailbox, ingestHroMailboxMessage, convertMailbox, reviewMailbox, extractMailboxFields } from "../hro-mailbox-ingress";
 import { completeDay1ReadinessGate } from "../onboarding/engine";
@@ -18,11 +18,6 @@ import { isSeparationOrLegacyExit, onboardingCaseCandidateSql } from "../onboard
 const base: SeparationFacts = { employeeId: "FIXTURE-EMPLOYEE", workerName: "Offboarding provider-denied regression", exitType: "resignation", exitReason: "Restricted regression-only reason", lastWorkingDay: "2000-01-15", terminationDate: "2000-01-15", timeZone: "America/New_York", role: "Engineer", department: "Regression", country: "US", legalEntity: "Regression fixture only", workerCategory: "Employee", manager: "Fixture manager" };
 const flags = { privileged: false, highRisk: false, clientFacing: false, peopleManager: false, statutory: false };
 const policy = { country: "US", role: "Engineer", workerCategory: "Employee", timeZone: "America/New_York", endOfLwd: "18:00", rulesReference: "fixture-source-rules", retentionReference: "fixture-source-retention", defaultAssets: ["Unconfirmed fixture laptop"], obligations: [] };
-const roles: Array<[OnbAuthorityRole, OnbAuthorityScope]> = [
-  ["hr-compliance", "hr-compliance-approve"], ["legal", "legal-approve"], ["occupational-health", "occupational-health-approve"],
-  ["payroll", "payroll-approve"], ["hrbp", "hrbp-approve"], ["hr-ethics", "hr-ethics-approve"], ["delivery-head", "delivery-head-approve"], ["finance", "finance-approve"],
-  ["manager", "manager-approve"], ["site-operations", "site-fulfillment-approve"], ["application-owner", "application-owner-approve"], ["it-security", "it-security-approve"],
-];
 
 test("calendar and all five paths compile without invented closure conditions", () => {
   assert.throws(() => facts({ ...base, terminationDate: "1999-01-01" }), /precede/);
@@ -54,15 +49,12 @@ test("dedicated lifecycle reaches 01–11, fences conflicts, source intake, priv
   const createOrg = async (id: string) => {
     await db.insert(organizationsTable).values({ id, name: "Provider-denied offboarding regression", slug: id, joinCodeHash: `${id}:unused`, createdByUserId: actor });
     await seedApprovedSensitiveLifecyclePolicies(id);
-    await db.insert(onbAuthorityGovernance).values({ organizationId: id, status: "governance-approved", revision: 1, approvedByUserId: "fixture-external-governance", approvedAt: new Date(), governanceSource: "provider-denied-regression-only" });
     for (const user of [actor, legal, viewer]) {
       await db.insert(organizationMembershipsTable).values({ organizationId: id, clerkUserId: user, role: "member" });
-      for (const key of ["flow.case.read", "flow.case.edit", "data.case.profile.read", "data.case.profile.edit", ...(user === viewer ? [] : ["data.identity.read", "data.medical.read", "data.payroll.read", "data.bgv.read"])]) {
-        await db.insert(accessNamedGrants).values({ organizationId: id, principalType: "human", principalId: user, scope: "tenant", resourceType: key.startsWith("flow.") ? "flow" : "field", resourceKey: key, source: "named", effect: "allow", status: "active", createdByUserId: "fixture-grantor", approvedByUserId: "fixture-independent-approver", approvedAt: new Date() });
+      for (const key of ["flow.case.read", "flow.case.edit", "data.case.profile.read", "data.case.profile.edit", ...(user === viewer ? [] : ["tool.policy.manage", "tool.approval.decide", "data.identity.read", "data.medical.read", "data.payroll.read", "data.bgv.read"])]) {
+        await db.insert(accessNamedGrants).values({ organizationId: id, principalType: "human", principalId: user, scope: "tenant", resourceType: key.startsWith("flow.") ? "flow" : key.startsWith("tool.") ? "tool" : "field", resourceKey: key, source: "named", effect: "allow", status: "active", createdByUserId: "fixture-grantor", approvedByUserId: "fixture-independent-approver", approvedAt: new Date() });
       }
     }
-    for (const [role, scope] of roles) await db.insert(onbAuthorityAssignments).values({ id: `${id}:${role}`, organizationId: id, personUserId: actor, authorityRole: role, scopes: [scope], validFrom: new Date(Date.now() - 60_000), validUntil: new Date(Date.now() + 3600_000), grantorUserId: "fixture-independent-governance", source: "provider-denied-regression-only", governanceDecisionRef: "fixture-reviewed-authority-only" });
-    await db.insert(onbAuthorityAssignments).values({ id: `${id}:independent-legal`, organizationId: id, personUserId: legal, authorityRole: "legal", scopes: ["legal-approve"], validFrom: new Date(Date.now() - 60_000), grantorUserId: "fixture-independent-governance", source: "provider-denied-regression-only", governanceDecisionRef: "fixture-reviewed-authority-only" });
   };
   const entry = (employeeId: string, overrides = {}) => ({ sourceReference: randomUUID(), facts: { ...base, employeeId, ...overrides } });
   const row = async (id: number) => (await db.select().from(offbCases).where(eq(offbCases.id, id)))[0];
@@ -95,6 +87,14 @@ test("dedicated lifecycle reaches 01–11, fences conflicts, source intake, priv
     await assert.rejects(act(id, "classify", { confirmed: true, classification: "cannot bypass", urgency: "Standard", flags }), /Separation Screening/);
     await act(id, "hrbp-reconcile", { facts: same.facts });
     const p = await draft();
+    assert.equal((await listPolicies(org, actor)).find(row => row.id === p.id)?.status, "approved");
+    assert.equal((await listPolicies(other, actor)).length, 0, "policy revisions remain tenant-scoped");
+    await assert.rejects(savePolicy(org, viewer, { expectedVersion: 0, policy }), /policy-management permission/);
+    const revision = await savePolicy(org, actor, { id: p.id, expectedVersion: p.version, policy: { ...policy, endOfLwd: "17:30" } });
+    assert.equal(revision.version, 2);
+    assert.equal(revision.status, "proposal", "saving a revision never implicitly approves it");
+    await assert.rejects(savePolicy(org, actor, { id: p.id, expectedVersion: p.version, policy }), /changed/);
+    await decidePolicy(org, legal, p.id, revision.version, { decision: "withdraw", reference: "fixture-withdraw-proposal" });
     await plan(id, p, { flags: { ...flags, clientFacing: true, peopleManager: true } });
     await assert.rejects(separationDetail(other, actor, id), /not found/);
     const restricted = await separationDetail(org, viewer, id);
@@ -211,8 +211,8 @@ test("dedicated lifecycle reaches 01–11, fences conflicts, source intake, priv
     await assert.rejects(convertMailbox(org, actor, requests[0].id, { facts: { ...base, employeeId: "MAILBOX", department: "Changed after conversion" }, attachmentsReviewed: true }), /reference.*different/);
     assert.throws(() => extractMailboxFields("employeeId: one\nemployeeId: two"), /Repeated/i);
     const beforeSources = (await db.select().from(offbSources).where(eq(offbSources.organizationId, org))).length;
-    await db.update(onbAuthorityAssignments).set({ status: "revoked", revision: 2 }).where(eq(onbAuthorityAssignments.id, `${org}:hr-compliance`));
-    await assert.rejects(createSeparations(org, actor, entry("REVOKED")), /verified/);
+    await db.delete(accessNamedGrants).where(and(eq(accessNamedGrants.organizationId, org), eq(accessNamedGrants.principalId, actor), eq(accessNamedGrants.resourceKey, "flow.case.edit")));
+    await assert.rejects(createSeparations(org, actor, entry("REVOKED")), /access|permissions/);
     assert.equal((await db.select().from(offbSources).where(eq(offbSources.organizationId, org))).length, beforeSources);
   } catch (error) {
     console.error("Offboarding regression failed before teardown:", error);

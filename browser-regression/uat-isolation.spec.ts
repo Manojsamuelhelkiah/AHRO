@@ -65,7 +65,12 @@ test("retired deep links retain fresh UAT admission, tenant isolation and histor
   await other.evaluate(() => localStorage.setItem("activeOrganizationId", "not-a-uat-workspace"));
   await page.reload();
   await expect(page.getByRole("heading", { name: "Acceptance history", exact: true })).toBeVisible();
+  // Protected UI exits immediately, before asynchronous server revocation.
+  // Test access only after that revocation completes, not a racing read.
+  const revocation = page.waitForResponse(response =>
+    response.url().endsWith("/uat/api/uat-auth/admission") && response.request().method() === "DELETE");
   await page.getByTestId("button-uat-logout").click();
+  expect((await revocation).status()).toBe(204);
   await expect(page.getByRole("heading", { name: "Sign in to UAT", exact: true })).toBeVisible();
   await expect(other.getByRole("heading", { name: "Sign in to UAT", exact: true })).toBeVisible();
   expect((await api.get("/uat/api/onboarding/uat/fairness/evidence-report")).status).toBe(401);

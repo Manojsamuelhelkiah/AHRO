@@ -1,6 +1,6 @@
 ---
 name: Rendering React components in the node test harness
-description: How to run .tsx UI tests through the esbuild + node:test harness in cost-explorer
+description: Rendering and mounting React UI tests through esbuild and node:test
 ---
 
 The cost-explorer test harness (esbuild bundle → `node --test`) can render real React components with `react-dom/server`'s `renderToStaticMarkup`, but three things must hold:
@@ -17,6 +17,12 @@ Mounted-component tests should keep React itself external to the esbuild bundle 
 **Why:** React's async `act` uses a dynamic `module.require("timers")` to select Node task scheduling. Bundling strips that native module method, so it falls back to browser MessageChannels. In Node those ports stay referenced: assertions pass but the worker never exits. Force-exit also produced varying, incomplete parallel-suite results rather than reliably validating every test.
 
 **How to apply:** Use the native React package, initialize the DOM before browser-sensitive bundled modules, and unmount roots, clear query/mutation timers, and close the DOM during teardown. If a test uses the MessageChannel fallback, track and close its test-owned ports. Let Node exit naturally: a timeout after passing assertions or an unexplained change in the reported test count is an unreliable run, not a reason to add `--test-force-exit`.
+
+Load native React DOM after installing the test DOM globals when testing text-input changes.
+
+**Why:** React DOM captures browser/event support during module initialization. A static import before happy-dom exists can let clicks work while text-input change handlers silently fail, making controlled-input tests misleading.
+
+**How to apply:** Dynamically import react-dom/client after DOM setup; use native input-value setters and bubbled input events, then assert both the visible value and submitted payload. Keep React external and perform normal root/DOM cleanup.
 
 Mounted page tests that use Wouter or form libraries also need the happy-dom `location`, `history`, window event methods, and HTML element constructors installed on `globalThis` before importing the page.
 

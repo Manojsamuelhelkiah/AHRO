@@ -587,6 +587,14 @@ function SettingsContent() {
 
       <Link href="/email-intake" data-testid="link-settings-email-intake" className="inline-block text-sm font-medium text-[var(--primary)] underline">Client email intake settings and routes</Link>
 
+      <Card className="p-5 space-y-3" data-testid="card-offboarding-settings">
+        <h2 className="text-lg font-semibold">Offboarding configuration</h2>
+        <p className="text-sm text-[var(--text-muted)]">Manage this client’s versioned separation policies: exact country, role, worker category and time-zone applicability, last-working-day end time, rules and retention references, default assets, and obligations with prerequisites and relative deadlines.</p>
+        <p className="text-xs text-[var(--text-muted)]">Proposals require independent human approval. Changes do not automatically revise running cases or authorize external effects.</p>
+        <Link href="/settings/offboarding" data-testid="link-settings-offboarding" className="inline-block text-sm font-semibold text-[var(--primary)] underline">Open Offboarding configuration</Link>
+      </Card>
+      <p className="text-sm text-[var(--text-muted)]" data-testid="text-onboarding-only-settings">Day-1 logistics, readiness checklists, targeted onboarding profiles and onboarding readiness SLAs below configure onboarding only, not offboarding.</p>
+
       <div className="flex flex-col gap-4">
         <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>
