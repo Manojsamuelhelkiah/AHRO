@@ -40,7 +40,11 @@ test("reviewed email intake: real isolated router, held conversion and responsiv
     expect(await source.json()).toMatchObject({ state: "unavailable", subject: null, body: null });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
     await page.goto("/cases");
-    await expect(page.getByRole("link", { name: "Email source history", exact: true }).first()).toBeVisible();
+    // Compact desktop rows include the case number in the accessible name;
+    // mobile cards retain the shorter label. Check this request's visible link.
+    const sourceHistory = page.getByRole("link", { name: /^Email source history(?: for .+)?$/ })
+      .and(page.locator(`a[href="/email-intake/${encodeURIComponent(request.id)}"]`));
+    await expect(sourceHistory).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
   }
 });
