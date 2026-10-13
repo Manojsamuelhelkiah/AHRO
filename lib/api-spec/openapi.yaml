@@ -43,6 +43,45 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /intent-catalog:
+    get:
+      operationId: getIntentCatalog
+      tags: [IntentCatalog]
+      summary: Read the scoped operational catalog; never authorizes execution
+      responses:
+        "200":
+          description: Validated versioned inventory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationalIntentCatalog" }
+  /intent-catalog/export:
+    get:
+      operationId: exportIntentCatalog
+      tags: [IntentCatalog]
+      summary: Download the same scoped structured inventory
+      responses:
+        "200":
+          description: JSON attachment with catalog parity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationalIntentCatalog" }
+  /intent-catalog/definitions/{key}:
+    get:
+      operationId: getCatalogDefinition
+      tags: [IntentCatalog]
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Canonical definition, not an executable route
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationalIntentDefinition" }
+        "404":
+          description: Unknown or inaccessible outcome
   /organizations/current/settings/operations:
     get:
       operationId: getClientOperationsSettings
@@ -6845,6 +6884,116 @@ components:
         type: integer
         minimum: 1
   schemas:
+    CatalogMapping:
+      type: object
+      required: [source, sourceVersion, sourceKey, label, relation, definitionKeys, reviewStatus, rationale]
+      properties:
+        source: { type: string, enum: [master, registry, case-family, sample, candidate] }
+        sourceVersion: { type: string }
+        sourceKey: { type: string }
+        label: { type: string }
+        relation: { type: string, enum: [exact, broader, related, ambiguous, unresolved] }
+        definitionKeys: { type: array, items: { type: string } }
+        reviewStatus: { type: string, enum: [proposed, reviewed] }
+        rationale: { type: string }
+    CatalogComposition:
+      type: object
+      required: [key, callerKey, calleeKey, condition, inputMappings, completionDependency, reviewStatus]
+      properties:
+        key: { type: string }
+        callerKey: { type: string }
+        calleeKey: { type: string }
+        condition: { type: string }
+        inputMappings: { type: array, items: { type: string } }
+        completionDependency: { type: string, enum: [conditional, mandatory, independent] }
+        reviewStatus: { type: string, enum: [proposed, reviewed] }
+    OperationalIntentDefinition:
+      type: object
+      required: [key, version, name, definitionClass, outcome, evidence, journeyKeys, serviceKeys, aliases, provenance, coverage, coverageEvidence, reviewStatus, initiation, requiredContext, invocationConstraints, status]
+      properties:
+        key: { type: string }
+        version: { type: string }
+        name: { type: string }
+        definitionClass: { type: string, enum: [atomic, composite, custom] }
+        outcome: { type: string }
+        evidence: { type: array, items: { type: string } }
+        journeyKeys: { type: array, items: { type: string } }
+        serviceKeys: { type: array, items: { type: string } }
+        aliases: { type: array, items: { type: string } }
+        provenance: { type: array, items: { type: string } }
+        coverage: { type: string, enum: [catalogued, illustrative, simulated, integrated, verified] }
+        coverageEvidence: { type: array, items: { type: string } }
+        reviewStatus: { type: string, enum: [proposed, reviewed] }
+        initiation:
+          type: object
+          required: [human, ai, standalone, composed, reviewStatus, note]
+          properties:
+            human: { type: boolean }
+            ai: { type: boolean }
+            standalone: { type: boolean }
+            composed: { type: boolean }
+            reviewStatus: { type: string, enum: [proposed, reviewed] }
+            note: { type: string }
+        requiredContext: { type: array, items: { type: string } }
+        invocationConstraints: { type: array, items: { type: string } }
+        status: { type: string, enum: [active, retired] }
+    CatalogGrouping:
+      type: object
+      required: [key, name, description, journeyKey]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        description: { type: string }
+        journeyKey: { type: ["string", "null"] }
+    CatalogGap:
+      type: object
+      required: [key, title, description, definitionKeys, reviewStatus]
+      properties:
+        key: { type: string }
+        title: { type: string }
+        description: { type: string }
+        definitionKeys: { type: array, items: { type: string } }
+        reviewStatus: { type: string, enum: [proposed, reviewed] }
+    FutureIntentInstanceContract:
+      type: object
+      required: [version, implemented, fields, lifecycle, safeguards, maximumDepth, maximumChildren, maximumTreeSize]
+      properties:
+        version: { type: string }
+        implemented: { type: boolean }
+        fields: { type: array, items: { type: string } }
+        lifecycle: { type: array, items: { type: string } }
+        safeguards: { type: array, items: { type: string } }
+        maximumDepth: { type: integer }
+        maximumChildren: { type: integer }
+        maximumTreeSize: { type: integer }
+    OperationalIntentCatalog:
+      type: object
+      required: [version, sourceVersions, scope, notices, counts, journeys, services, definitions, mappings, compositions, gaps, instanceContract]
+      properties:
+        version: { type: string }
+        sourceVersions: { type: array, items: { type: string } }
+        scope: { type: string }
+        notices: { type: array, items: { type: string } }
+        counts:
+          type: object
+          required: [journeys, services, masterAtomicOutcomes, canonicalAtomicDefinitions, compositeDefinitions, customDefinitions, proposedGaps, sampleVariations, registryEntries]
+          properties:
+            journeys: { type: integer }
+            services: { type: integer }
+            masterAtomicOutcomes: { type: integer }
+            canonicalAtomicDefinitions: { type: integer }
+            compositeDefinitions: { type: integer }
+            customDefinitions: { type: integer }
+            proposedGaps: { type: integer }
+            sampleVariations: { type: integer }
+            registryEntries: { type: integer }
+        journeys: { type: array, items: { $ref: "#/components/schemas/CatalogGrouping" } }
+        services: { type: array, items: { $ref: "#/components/schemas/CatalogGrouping" } }
+        definitions: { type: array, items: { $ref: "#/components/schemas/OperationalIntentDefinition" } }
+        mappings: { type: array, items: { $ref: "#/components/schemas/CatalogMapping" } }
+        compositions: { type: array, items: { $ref: "#/components/schemas/CatalogComposition" } }
+        gaps: { type: array, items: { $ref: "#/components/schemas/CatalogGap" } }
+        instanceContract: { $ref: "#/components/schemas/FutureIntentInstanceContract" }
     HroEmailRotationInput:
       type: object
       required: [expectedVersion, reference, retirementAcknowledged]

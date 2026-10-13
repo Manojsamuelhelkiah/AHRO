@@ -20,3 +20,18 @@ Model HRO coverage as journey → service intent → atomic sub-intent, with com
 **Why:** Broad labels such as onboarding hide independently owned BGV, worker-data, payroll, benefits, access, equipment, learning, readiness, probation, and cancellation outcomes. Expanding the cost baseline to every operational leaf would also double-count composite work.
 
 **How to apply:** Route execution only to leaves or declared composite orchestrations; report mapped/catalogued/simulated/integrated/verified separately. Preserve legacy cost concepts through typed mappings, and resolve country, entity, worker-type, plan, CBA, and effective-date policy at runtime.
+
+An HRO sub-intent is a runtime invocation of a reusable definition, not a
+child-only definition. Journey/service placement is browsing metadata, not
+exclusive ownership, authorization or a fixed parent. Human and AI initiation
+may be described provisionally but never grants execution permission.
+
+**Why:** The user's intent-driven vision requires the same outcome to be directly
+requested or invoked by multiple callers; cloning it whenever a caller changes
+would inflate the catalog and fragment completion evidence.
+
+**How to apply:** Keep composition conditions, input mappings and completion
+dependencies separate from browsing groups. Put actual parent/root linkage on
+future instances. Merge only outcomes with the same completion semantics; retain
+uncertain distinctions as visible review gaps. Retired simulations and fictional
+requests never establish current operational maturity.

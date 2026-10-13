@@ -5,7 +5,7 @@ import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@wor
 import { useOrganizationRole } from '../hooks/use-organization-role';
 import { cn } from './ui-shared';
 import { OrganizationSwitcher } from './organization-switcher';
-import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass, Presentation, Bot, FlaskConical, BookOpen, Waypoints, ClipboardCheck, History } from 'lucide-react';
+import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass, Presentation, Bot, FlaskConical, BookOpen, Waypoints, ClipboardCheck, History, ListTree } from 'lucide-react';
 
 const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }[] }[] = [
   {
@@ -32,6 +32,7 @@ const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: R
     label: 'Platform',
     items: [
       { path: '/systems', label: 'Systems', icon: Server },
+      { path: '/intent-catalog', label: 'Intent Catalog', icon: ListTree },
       { path: '/learning-guide', label: 'Learning Guide', icon: BookOpen },
       { path: '/audit', label: 'Audit Trail', icon: Shield },
       { path: '/hr-policy-library', label: 'HR Policy Library', icon: BookOpen },

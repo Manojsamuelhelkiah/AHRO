@@ -19432,3 +19432,224 @@ export const ApplyFairnessActionResponse = zod.object({
 
 export const DownloadFairnessEvidenceReportResponse = zod.record(zod.string(), zod.unknown())
 
+
+/**
+ * @summary Read the scoped operational catalog; never authorizes execution
+ */
+export const GetIntentCatalogResponse = zod.object({
+  "version": zod.string(),
+  "sourceVersions": zod.array(zod.string()),
+  "scope": zod.string(),
+  "notices": zod.array(zod.string()),
+  "counts": zod.object({
+  "journeys": zod.number(),
+  "services": zod.number(),
+  "masterAtomicOutcomes": zod.number(),
+  "canonicalAtomicDefinitions": zod.number(),
+  "compositeDefinitions": zod.number(),
+  "customDefinitions": zod.number(),
+  "proposedGaps": zod.number(),
+  "sampleVariations": zod.number(),
+  "registryEntries": zod.number()
+}),
+  "journeys": zod.array(zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "journeyKey": zod.string().nullable()
+})),
+  "services": zod.array(zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "journeyKey": zod.string().nullable()
+})),
+  "definitions": zod.array(zod.object({
+  "key": zod.string(),
+  "version": zod.string(),
+  "name": zod.string(),
+  "definitionClass": zod.enum(['atomic', 'composite', 'custom']),
+  "outcome": zod.string(),
+  "evidence": zod.array(zod.string()),
+  "journeyKeys": zod.array(zod.string()),
+  "serviceKeys": zod.array(zod.string()),
+  "aliases": zod.array(zod.string()),
+  "provenance": zod.array(zod.string()),
+  "coverage": zod.enum(['catalogued', 'illustrative', 'simulated', 'integrated', 'verified']),
+  "coverageEvidence": zod.array(zod.string()),
+  "reviewStatus": zod.enum(['proposed', 'reviewed']),
+  "initiation": zod.object({
+  "human": zod.boolean(),
+  "ai": zod.boolean(),
+  "standalone": zod.boolean(),
+  "composed": zod.boolean(),
+  "reviewStatus": zod.enum(['proposed', 'reviewed']),
+  "note": zod.string()
+}),
+  "requiredContext": zod.array(zod.string()),
+  "invocationConstraints": zod.array(zod.string()),
+  "status": zod.enum(['active', 'retired'])
+})),
+  "mappings": zod.array(zod.object({
+  "source": zod.enum(['master', 'registry', 'case-family', 'sample', 'candidate']),
+  "sourceVersion": zod.string(),
+  "sourceKey": zod.string(),
+  "label": zod.string(),
+  "relation": zod.enum(['exact', 'broader', 'related', 'ambiguous', 'unresolved']),
+  "definitionKeys": zod.array(zod.string()),
+  "reviewStatus": zod.enum(['proposed', 'reviewed']),
+  "rationale": zod.string()
+})),
+  "compositions": zod.array(zod.object({
+  "key": zod.string(),
+  "callerKey": zod.string(),
+  "calleeKey": zod.string(),
+  "condition": zod.string(),
+  "inputMappings": zod.array(zod.string()),
+  "completionDependency": zod.enum(['conditional', 'mandatory', 'independent']),
+  "reviewStatus": zod.enum(['proposed', 'reviewed'])
+})),
+  "gaps": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "definitionKeys": zod.array(zod.string()),
+  "reviewStatus": zod.enum(['proposed', 'reviewed'])
+})),
+  "instanceContract": zod.object({
+  "version": zod.string(),
+  "implemented": zod.boolean(),
+  "fields": zod.array(zod.string()),
+  "lifecycle": zod.array(zod.string()),
+  "safeguards": zod.array(zod.string()),
+  "maximumDepth": zod.number(),
+  "maximumChildren": zod.number(),
+  "maximumTreeSize": zod.number()
+})
+})
+
+export const GetCatalogDefinitionParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const GetCatalogDefinitionResponse = zod.object({
+  "key": zod.string(),
+  "version": zod.string(),
+  "name": zod.string(),
+  "definitionClass": zod.enum(['atomic', 'composite', 'custom']),
+  "outcome": zod.string(),
+  "evidence": zod.array(zod.string()),
+  "journeyKeys": zod.array(zod.string()),
+  "serviceKeys": zod.array(zod.string()),
+  "aliases": zod.array(zod.string()),
+  "provenance": zod.array(zod.string()),
+  "coverage": zod.enum(['catalogued', 'illustrative', 'simulated', 'integrated', 'verified']),
+  "coverageEvidence": zod.array(zod.string()),
+  "reviewStatus": zod.enum(['proposed', 'reviewed']),
+  "initiation": zod.object({
+  "human": zod.boolean(),
+  "ai": zod.boolean(),
+  "standalone": zod.boolean(),
+  "composed": zod.boolean(),
+  "reviewStatus": zod.enum(['proposed', 'reviewed']),
+  "note": zod.string()
+}),
+  "requiredContext": zod.array(zod.string()),
+  "invocationConstraints": zod.array(zod.string()),
+  "status": zod.enum(['active', 'retired'])
+})
+
+/**
+ * @summary Download the same scoped structured inventory
+ */
+export const ExportIntentCatalogResponse = zod.object({
+  "version": zod.string(),
+  "sourceVersions": zod.array(zod.string()),
+  "scope": zod.string(),
+  "notices": zod.array(zod.string()),
+  "counts": zod.object({
+  "journeys": zod.number(),
+  "services": zod.number(),
+  "masterAtomicOutcomes": zod.number(),
+  "canonicalAtomicDefinitions": zod.number(),
+  "compositeDefinitions": zod.number(),
+  "customDefinitions": zod.number(),
+  "proposedGaps": zod.number(),
+  "sampleVariations": zod.number(),
+  "registryEntries": zod.number()
+}),
+  "journeys": zod.array(zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "journeyKey": zod.string().nullable()
+})),
+  "services": zod.array(zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "journeyKey": zod.string().nullable()
+})),
+  "definitions": zod.array(zod.object({
+  "key": zod.string(),
+  "version": zod.string(),
+  "name": zod.string(),
+  "definitionClass": zod.enum(['atomic', 'composite', 'custom']),
+  "outcome": zod.string(),
+  "evidence": zod.array(zod.string()),
+  "journeyKeys": zod.array(zod.string()),
+  "serviceKeys": zod.array(zod.string()),
+  "aliases": zod.array(zod.string()),
+  "provenance": zod.array(zod.string()),
+  "coverage": zod.enum(['catalogued', 'illustrative', 'simulated', 'integrated', 'verified']),
+  "coverageEvidence": zod.array(zod.string()),
+  "reviewStatus": zod.enum(['proposed', 'reviewed']),
+  "initiation": zod.object({
+  "human": zod.boolean(),
+  "ai": zod.boolean(),
+  "standalone": zod.boolean(),
+  "composed": zod.boolean(),
+  "reviewStatus": zod.enum(['proposed', 'reviewed']),
+  "note": zod.string()
+}),
+  "requiredContext": zod.array(zod.string()),
+  "invocationConstraints": zod.array(zod.string()),
+  "status": zod.enum(['active', 'retired'])
+})),
+  "mappings": zod.array(zod.object({
+  "source": zod.enum(['master', 'registry', 'case-family', 'sample', 'candidate']),
+  "sourceVersion": zod.string(),
+  "sourceKey": zod.string(),
+  "label": zod.string(),
+  "relation": zod.enum(['exact', 'broader', 'related', 'ambiguous', 'unresolved']),
+  "definitionKeys": zod.array(zod.string()),
+  "reviewStatus": zod.enum(['proposed', 'reviewed']),
+  "rationale": zod.string()
+})),
+  "compositions": zod.array(zod.object({
+  "key": zod.string(),
+  "callerKey": zod.string(),
+  "calleeKey": zod.string(),
+  "condition": zod.string(),
+  "inputMappings": zod.array(zod.string()),
+  "completionDependency": zod.enum(['conditional', 'mandatory', 'independent']),
+  "reviewStatus": zod.enum(['proposed', 'reviewed'])
+})),
+  "gaps": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "definitionKeys": zod.array(zod.string()),
+  "reviewStatus": zod.enum(['proposed', 'reviewed'])
+})),
+  "instanceContract": zod.object({
+  "version": zod.string(),
+  "implemented": zod.boolean(),
+  "fields": zod.array(zod.string()),
+  "lifecycle": zod.array(zod.string()),
+  "safeguards": zod.array(zod.string()),
+  "maximumDepth": zod.number(),
+  "maximumChildren": zod.number(),
+  "maximumTreeSize": zod.number()
+})
+})

@@ -50,6 +50,7 @@ import { SeparationPoliciesPage } from './pages/cases/separations/policies';
 import { EmailIntakePage } from './pages/email-intake/index';
 import { EmailRequestDetailPage } from './pages/email-intake/detail';
 import { SeparationDetailPage } from './pages/cases/separations/detail';
+import { IntentCatalogPage } from './pages/intent-catalog';
 
 const queryClient = new QueryClient();
 
@@ -415,6 +416,9 @@ function Router() {
       </Route>
       <Route path="/learning-guide">
         <Protected><LearningGuidePage /></Protected>
+      </Route>
+      <Route path="/intent-catalog">
+        <Protected><IntentCatalogPage /></Protected>
       </Route>
       <Route path="/client-setup">
         <>

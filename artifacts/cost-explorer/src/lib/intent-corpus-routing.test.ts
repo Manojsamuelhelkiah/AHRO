@@ -51,7 +51,9 @@ test("artifact manifests route the intents page and API separately in preview an
   );
 
   assert.match(apiArtifact, /previewPath\s*=\s*"\/api"/);
-  assert.match(apiArtifact, /paths\s*=\s*\[\s*"\/api"\s*\]/);
+  const apiPaths = apiArtifact.match(/paths\s*=\s*(\[[^\]]*\])/);
+  assert.ok(apiPaths, "API artifact must declare proxy paths");
+  assert.ok((JSON.parse(apiPaths[1]!) as string[]).includes("/api"), "Shared API path must remain registered alongside any other API surfaces");
   assert.match(apiArtifact, /\[services\.development\]/);
   assert.match(apiArtifact, /\[services\.production\.run\]/);
   assert.match(
