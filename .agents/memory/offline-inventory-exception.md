@@ -25,6 +25,12 @@ recognize only a canonical reserved coverage key paired with its exact fixed
 fictional name and invalid-domain address; notes alone are not provenance.
 Development population is not proof of published database population.
 
+A merged task's provisioning report is not proof that the main development database contains the inventory.
+
+**Why:** A merged report described 120 curated examples, while the running main workspace still contained only its 30 older cases and none of the curated slots.
+
+**How to apply:** Verify current database inventory and authenticated list visibility rather than trusting copied counts. Apply only the approved, additive developer command to missing Demo slots; do not turn sample population into automatic startup or publishing behaviour.
+
 **Fixed fictional disclosure:** Ordinary case-scoped profile/notes access may
 show the fixed server-defined fictional request and review explanation, not
 mutable stored narratives or private evidence. This is not sensitive-record
