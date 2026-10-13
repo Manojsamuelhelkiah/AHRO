@@ -5,7 +5,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { AsyncResource } from "node:async_hooks";
 
-export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions }) {
+export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions, ownedIdentities }) {
   if (process.env.ONBOARDING_E2E_TEST !== "true" || process.env.ADMIN_READ_E2E_TEST !== "true" ||
       process.env.NODE_ENV === "production") throw new Error("Isolated admin harness only.");
   const scope = (await dbPackage.pool.query("SELECT current_schema() s, current_schemas(false)::text[] scopes")).rows[0];
@@ -21,6 +21,7 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions 
   const background = new AsyncResource("unprivileged-admin-read-fixture");
   const org = `admin-read-${randomUUID()}`;
   const actor = `named-admin-read-${randomUUID()}`;
+  ownedIdentities?.set(actor, { firstName: "Isolated", lastName: "Administrator", email: "admin@example.invalid" });
   const secret = randomUUID() + randomUUID();
   process.env.NODE_ENV = "development";
   process.env.DEV_SUPER_ADMIN_PASSWORD = secret;
@@ -30,7 +31,11 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions 
     joinCodeHash: randomUUID(), createdByUserId: actor,
   });
   await db.insert(organizationMembershipsTable).values({ organizationId: org, clerkUserId: actor, role: "member" });
-  await db.insert(employeeVaultProducts).values({ organizationId: org, enabled: true, version: 1, updatedBy: actor });
+  // The edit journey does not exercise employee-owned consent/reuse. Enabling
+  // it mounts a separate write-fenced Vault read, outside this test's scope.
+  await db.insert(employeeVaultProducts).values({
+    organizationId: org, enabled: process.env.ADMIN_EDIT_E2E_TEST !== "true", version: 1, updatedBy: actor,
+  });
   const [c] = await db.insert(onbCases).values({
     organizationId: org, workerName: "Confidential Read Fixture", workerEmail: "fixture@example.invalid",
     workerPhone: "+15550000000", managerName: "Fixture Manager", recruiterName: "Fixture Recruiter",
@@ -56,6 +61,9 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions 
     organizationId: org, caseId: c.id, channel: "email", direction: "inbound", audience: "internal",
     toAddress: "fixture@example.invalid", subject: "Private client message", body: "Private message body", status: "received",
   });
+  const editFixture = process.env.ADMIN_EDIT_E2E_TEST === "true"
+    ? await (await import("./admin-edit-browser-fixture.mjs")).installAdminEditFixture(app, { dbPackage, sessions, org, actor })
+    : null;
   const states = new Map();
   let approvalGeneration = "fixture";
   const cookie = (req, name) => req.cookies?.[name];
@@ -104,7 +112,7 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions 
       const value = `${payload}.${createHmac("sha256", secret).update(payload).digest("base64url")}`;
       res.cookie("hro_dev_super_admin", req.body?.invalid ? "invalid" : value, { httpOnly: true, path: "/", sameSite: "lax" });
     }
-    res.json({ organizationId: org, caseId: c.id });
+    res.json({ organizationId: org, caseId: c.id, actorUserId: actor, ...editFixture?.[mode] });
   });
   const privateContext = createPlatformAdminContext({
     getUser: async () => ({

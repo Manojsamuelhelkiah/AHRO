@@ -61,6 +61,26 @@ scope would also discard a separately entered provider-deny scope.
 the controlled provider and deny fence together. Do not weaken production
 dependency admission or rely on browser headers to recreate either scope.
 
+Private-mode browser write regressions should use actual local HTTPS rather
+than rewriting the browser's Origin to simulate a secure request.
+
+**Why:** A valid proof on an HTTP browser session still fails the production
+same-site safeguard. Forging the scheme would no longer exercise the real
+browser-to-server security boundary.
+
+**How to apply:** Use a test-only local TLS server and disposable certificate;
+keep production HTTPS and same-origin checks unchanged.
+
+Assertions about protected audit outcomes must wait for durable post-response
+capture rather than treating the HTTP response as the end of audit persistence.
+
+**Why:** An immediate fixture-state read can miss the final outcome even though
+the mutation or rejection is complete, producing timing-dependent failures.
+
+**How to apply:** Poll for the expected attributed audit outcomes with a bounded
+assertion, then inspect the settled state. Do not use fixed sleeps or reduce the
+expected audit count to accommodate the race.
+
 Fictional browser principals must resolve from owned test identity fixtures,
 not from the real identity provider. Such fixtures must not attest verified
 email, MFA enrollment, or private administrator approval.

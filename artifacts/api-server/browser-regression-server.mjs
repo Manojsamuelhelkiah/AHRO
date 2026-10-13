@@ -553,7 +553,7 @@ app.use("/api", (req, res, next) => {
 // Opt-in isolated UAT harness: does not change the existing Control Tower pass.
 if (process.env.ADMIN_READ_E2E_TEST === "true") {
   const { installAdminReadBrowserAdapter } = await import("./admin-read-browser-adapter.mjs");
-  await installAdminReadBrowserAdapter(app, { dbPackage, sessions });
+  await installAdminReadBrowserAdapter(app, { dbPackage, sessions, ownedIdentities });
 }
 if (process.env.UAT_E2E_TEST === "true") {
   const { installUatBrowserAdapter } = await import("./uat-browser-adapter.mjs");

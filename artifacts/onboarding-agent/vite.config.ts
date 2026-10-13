@@ -1,4 +1,5 @@
 import path from 'path';
+import { readFileSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type UserConfig } from 'vite';
@@ -22,6 +23,8 @@ export default defineConfig(async ({ command }): Promise<UserConfig> => {
     );
   }
   const e2eApiOrigin = process.env.E2E_API_ORIGIN || 'http://127.0.0.1:4178';
+  const adminEditTls = browserRegression && process.env.ADMIN_EDIT_E2E_TEST === 'true'
+    && process.env.ADMIN_EDIT_TLS_DIR;
   if (browserRegression) {
     const apiUrl = new URL(e2eApiOrigin);
     if (
@@ -93,6 +96,10 @@ export default defineConfig(async ({ command }): Promise<UserConfig> => {
     emptyOutDir: true,
   },
   server: {
+    ...(adminEditTls ? { https: {
+      key: readFileSync(path.join(adminEditTls, 'key.pem')),
+      cert: readFileSync(path.join(adminEditTls, 'cert.pem')),
+    } } : {}),
     port,
     strictPort: true,
     host: browserRegression ? '127.0.0.1' : '0.0.0.0',
