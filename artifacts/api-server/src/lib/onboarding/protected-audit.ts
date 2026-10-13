@@ -161,6 +161,11 @@ function opaqueReference(value: string | null | undefined): string | null {
 }
 
 /** Server-only scoping helper; callers must supply a server-authorized source reference. */
+export function protectedAuditObjectReference(objectId: string): string {
+  return opaqueReference(objectId)!;
+}
+
+/** Server-only scoping helper; callers must supply a server-authorized source reference. */
 export function protectedAuditCaseReference(caseId: number): string {
   return opaqueReference(`case:${caseId}`)!;
 }

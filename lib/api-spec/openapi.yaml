@@ -7035,8 +7035,9 @@ components:
         example: { type: string }
     HroEmailReadiness:
       type: object
-      required: [mailboxAddress, ready, routes, templates, monitor, lastSuccessAt, lastError, backlog, blocked, paginationPending, attachmentPolicy, canConfigure, canReview, canTriage]
+      required: [mailboxAddress, ready, routes, templates, monitor, lastSuccessAt, lastError, backlog, blocked, paginationPending, attachmentPolicy, canConfigure, canReview, canTriage, turnaround]
       properties:
+        turnaround: { $ref: "#/components/schemas/HroEmailTurnaround" }
         mailboxAddress: { type: [string, "null"] }
         ready: { type: boolean }
         routes: { type: array, items: { $ref: "#/components/schemas/HroEmailRoute" } }
@@ -7051,6 +7052,32 @@ components:
         canConfigure: { type: boolean }
         canReview: { type: boolean }
         canTriage: { type: boolean }
+    HroEmailDurationSummary:
+      type: object
+      required: [sampleCount, missingEvidenceCount, meanHours, medianHours, p90Hours]
+      properties:
+        sampleCount: { type: integer }
+        missingEvidenceCount: { type: integer }
+        meanHours: { type: [number, "null"] }
+        medianHours: { type: [number, "null"] }
+        p90Hours: { type: [number, "null"] }
+    HroEmailWaitingBands:
+      type: object
+      required: [under24Hours, from24To72Hours, from72To168Hours, atLeast168Hours]
+      properties:
+        under24Hours: { type: integer }
+        from24To72Hours: { type: integer }
+        from72To168Hours: { type: integer }
+        atLeast168Hours: { type: integer }
+    HroEmailTurnaround:
+      type: object
+      description: Tenant-only retained requests; recorded intake receipt to first successful authenticated review/rejection or held-case conversion audit event. No HR outcome or reviewer-level metrics.
+      required: [asOf, waiting, firstReview, heldConversion]
+      properties:
+        asOf: { type: string }
+        waiting: { $ref: "#/components/schemas/HroEmailWaitingBands" }
+        firstReview: { $ref: "#/components/schemas/HroEmailDurationSummary" }
+        heldConversion: { $ref: "#/components/schemas/HroEmailDurationSummary" }
     HroEmailRequest:
       type: object
       required: [id, templateId, family, status, reason, fields, fieldSources, missingFields, version, receivedAt, attachments, caseId, caseKind, sourceUrl, potentialDuplicates]

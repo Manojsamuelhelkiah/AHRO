@@ -20,6 +20,29 @@ export const GetHroEmailPrivateSourceResponse = zod.object({
 
 
 export const GetHroEmailIntakeResponse = zod.object({
+  "turnaround": zod.object({
+  "asOf": zod.string(),
+  "waiting": zod.object({
+  "under24Hours": zod.number(),
+  "from24To72Hours": zod.number(),
+  "from72To168Hours": zod.number(),
+  "atLeast168Hours": zod.number()
+}),
+  "firstReview": zod.object({
+  "sampleCount": zod.number(),
+  "missingEvidenceCount": zod.number(),
+  "meanHours": zod.number().nullable(),
+  "medianHours": zod.number().nullable(),
+  "p90Hours": zod.number().nullable()
+}),
+  "heldConversion": zod.object({
+  "sampleCount": zod.number(),
+  "missingEvidenceCount": zod.number(),
+  "meanHours": zod.number().nullable(),
+  "medianHours": zod.number().nullable(),
+  "p90Hours": zod.number().nullable()
+})
+}).describe('Tenant-only retained requests; recorded intake receipt to first successful authenticated review\/rejection or held-case conversion audit event. No HR outcome or reviewer-level metrics.'),
   "mailboxAddress": zod.string().nullable(),
   "ready": zod.boolean(),
   "routes": zod.array(zod.object({

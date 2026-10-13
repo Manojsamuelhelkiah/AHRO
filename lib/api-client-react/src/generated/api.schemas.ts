@@ -81,6 +81,34 @@ export interface HroEmailTemplate {
   example: string;
 }
 
+export interface HroEmailWaitingBands {
+  under24Hours: number;
+  from24To72Hours: number;
+  from72To168Hours: number;
+  atLeast168Hours: number;
+}
+
+export interface HroEmailDurationSummary {
+  sampleCount: number;
+  missingEvidenceCount: number;
+  /** @nullable */
+  meanHours: number | null;
+  /** @nullable */
+  medianHours: number | null;
+  /** @nullable */
+  p90Hours: number | null;
+}
+
+/**
+ * Tenant-only retained requests; recorded intake receipt to first successful authenticated review/rejection or held-case conversion audit event. No HR outcome or reviewer-level metrics.
+ */
+export interface HroEmailTurnaround {
+  asOf: string;
+  waiting: HroEmailWaitingBands;
+  firstReview: HroEmailDurationSummary;
+  heldConversion: HroEmailDurationSummary;
+}
+
 /**
  * Health of the background Gmail inbox poller that ingests real email replies
  */
@@ -112,6 +140,7 @@ export interface OnbInboundEmailMonitor {
 }
 
 export interface HroEmailReadiness {
+  turnaround: HroEmailTurnaround;
   /** @nullable */
   mailboxAddress: string | null;
   ready: boolean;

@@ -10,6 +10,7 @@ import type { HroEmailReadiness, HroEmailRoute, HroEmailTriage } from '@workspac
 import { Card, Button, Input, Label, PageHeader } from '@/components/ui-shared';
 import { Mail, ShieldAlert, Lock } from 'lucide-react';
 import { CopyButton, ErrorNote, Pill, Skeleton, fmtDate, inputCls, statusTone, useEmailScope } from './common';
+import { ReviewTurnaround } from './turnaround';
 
 function Templates({ data }: { data: HroEmailReadiness }) {
   const [open, setOpen] = useState<string | null>(null);
@@ -172,7 +173,7 @@ function Triage({ data, headers, scope }: { data: HroEmailReadiness; headers: Re
 
 export function EmailIntakePage() {
   const { scope, headers, org } = useEmailScope();
-  const intake = useGetHroEmailIntake({ request: { headers }, query: { queryKey: [...getGetHroEmailIntakeQueryKey(), scope], enabled: Boolean(org), retry: false } });
+  const intake = useGetHroEmailIntake({ request: { headers }, query: { queryKey: [...getGetHroEmailIntakeQueryKey(), scope], enabled: Boolean(org), retry: false, refetchInterval: 60_000 } });
   const [before, setBefore] = useState<string | undefined>();
   const [previous, setPrevious] = useState<Array<string | undefined>>([]);
   useEffect(() => { setBefore(undefined); setPrevious([]); }, [scope]);
@@ -200,6 +201,8 @@ export function EmailIntakePage() {
             <p className="rounded-md bg-[var(--surface-alt)] p-2 text-xs"><Lock className="mr-1 inline h-3 w-3" />Attachments policy: {d.attachmentPolicy}</p>
             <p className="text-xs text-[var(--text-muted)]" data-testid="text-permissions">Your permissions: {[d.canConfigure && 'configure routes', d.canReview && 'review requests', d.canTriage && 'platform triage'].filter(Boolean).join(', ') || 'view only'}.</p>
           </Card>
+
+          <ReviewTurnaround data={d.turnaround} />
 
           <Card className="space-y-3 p-4" data-testid="section-routes">
             <h2 className="text-base font-semibold">Client routes</h2>

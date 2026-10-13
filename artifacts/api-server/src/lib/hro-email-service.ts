@@ -17,6 +17,7 @@ import { normalizedWorkforceContext } from "./onboarding/workforce-policies";
 import { readinessFromChecklist } from "./onboarding/settings";
 import { resolveEffectiveAccessInTransaction } from "./access-governance";
 import { registeredDemoProfile } from "./demo-principal";
+import { emailReviewTurnaround } from "./hro-email-turnaround";
 
 type RequestRow = typeof hroEmailRequests.$inferSelect;
 type RouteRow = typeof hroMailboxIngress.$inferSelect;
@@ -69,6 +70,7 @@ export async function emailIntakeReadiness(org: string, actor: string) {
         routes.some(r => r.enabled === 1) && !routes.some(r => r.enabled === 1 && r.mailboxAddress === mailboxAddress && r.activatedAt)
           ? "Enabled routes need explicit review against the current connected Gmail address." : scan?.lastError ?? null,
       backlog: counts?.backlog ?? 0, blocked: counts?.blocked ?? 0, paginationPending: Boolean(scan?.pageToken),
+      turnaround: await emailReviewTurnaround(tx, org),
       attachmentPolicy: "Bounded source content is retained in private storage only after current collection-policy checks. Attachments remain quarantined and are never accepted as evidence by intake. Unavailable or unsafe malware scans block source access and evidence use. Use separately approved secure collection for bank, medical and identity values.",
       canConfigure, canReview, canTriage: isPlatformSuperAdmin(actor),
     };

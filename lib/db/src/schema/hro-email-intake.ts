@@ -22,6 +22,7 @@ export const hroEmailRequests = pgTable("hro_email_requests", {
   caseId: integer("case_id").references(() => onbCases.id, { onDelete: "restrict" }),
   caseKind: text("case_kind"),
   reviewedBy: text("reviewed_by"),
+  /** Recorded intake receipt, not the provider's mailbox receipt. Never reset on review or attribution. */
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [
