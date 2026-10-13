@@ -52,3 +52,4 @@ dist-test-admin/
 dist-workforce-check/
 test-results/
 playwright-report/
+/generated-artifacts/
