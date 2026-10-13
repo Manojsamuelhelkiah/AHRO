@@ -120,8 +120,8 @@ export function OrganizationSwitcher() {
   if (!selectedId || memberships.length === 0) return <span role={error ? "alert" : "status"} className="text-xs text-[var(--text-muted)]">{error || "Loading client…"}</span>;
 
   return (
-    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-    <label className="min-w-0 max-w-[240px] flex-1">
+    <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 md:w-auto">
+    <label className="min-w-[160px] max-w-[240px] flex-1">
       <span className="block text-[10px] font-semibold uppercase text-[var(--text-muted)]">Client workspaces</span>
       <span className="block break-words text-xs font-semibold" data-testid="active-client-name">{memberships.find(membership => membership.organizationId === selectedId)?.name}</span>
       <select

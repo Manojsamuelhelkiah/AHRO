@@ -4,8 +4,8 @@ import { CASE_TYPES, casesForList, casePresentationOf, caseTitleOf, caseTypeOf, 
 
 test("every family uses explicit request classification rather than falling back to onboarding", () => {
   for (const family of CASE_TYPES.filter(value => value !== "All Cases")) {
-    for (let slot = 1; slot <= 5; slot++) {
-      const c = { caseFamily: family, requestType: `${family} example ${slot}`, scenarioKey: `UAT-DEMO-EXAMPLES:additional-v1:${family}:${slot}`, hireType: "employee-service" };
+    for (let slot = 1; slot <= 10; slot++) {
+      const c = { caseFamily: family, requestType: `${family} example ${slot}`, scenarioKey: `UAT-DEMO-EXAMPLES:${slot <= 5 ? "additional-v1" : "complementary-v1"}:${family}:${slot}`, hireType: "employee-service" };
       assert.equal(caseTypeOf(c), family);
       assert.equal(caseTitleOf(c), c.requestType);
       assert.equal(casePresentationOf(c)?.type, family);

@@ -3,7 +3,7 @@ import { build } from "esbuild";
 import { spawnSync } from "node:child_process";
 
 if (process.env.NODE_ENV !== "development" ||
-    process.argv[2] !== "add-60-offline-examples-to-demo") {
+    !["add-60-offline-examples-to-demo", "extend-demo-to-ten-offline-scenarios-per-family"].includes(process.argv[2])) {
   console.error("Development-only operation. Supply the exact Demo offline-inventory confirmation.");
   process.exit(1);
 }

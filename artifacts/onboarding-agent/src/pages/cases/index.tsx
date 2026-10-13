@@ -279,7 +279,7 @@ export function CasesPage() {
     const q = query.trim().toLowerCase();
     if (q) {
       rows = rows.filter((c) =>
-        [c.workerName, c.workerEmail, caseTitleOf(c), caseIdOf(c), String(c.id), c.role, c.geography]
+        [c.workerName, c.workerEmail, caseTitleOf(c), caseIdOf(c), String(c.id), c.role, c.geography, isFictionalOfflineExample(c) ? c.planSummary : null]
           .some((v) => (v || '').toLowerCase().includes(q)),
       );
     }
@@ -622,6 +622,7 @@ export function CasesPage() {
                       <td style={{ padding: '12px var(--space-lg)' }}>
                         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</div>
                         {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Example · Offline</span>}
+                        {isFictionalOfflineExample(c) && c.planSummary && <p className="mt-1 max-w-md text-xs text-[var(--text-muted)]">{c.planSummary}</p>}
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
                         {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} className="text-xs underline">Email source history</Link>}
                       </td>
@@ -688,6 +689,7 @@ export function CasesPage() {
                     <HroStatusBadge status={status} />
                   </div>
                   {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Example · Offline</span>}
+                  {isFictionalOfflineExample(c) && c.planSummary && <p className="mt-1 text-xs text-[var(--text-muted)]">{c.planSummary}</p>}
                   <div className="flex items-center justify-between gap-2 mt-1">
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{c.workerName}</span>
                     <CaseTypeBadge type={caseTypeOf(c)} />

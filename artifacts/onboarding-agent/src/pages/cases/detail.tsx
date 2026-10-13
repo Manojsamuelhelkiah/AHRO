@@ -285,6 +285,12 @@ export function CaseDetailPage() {
       {!offlineSample && <EmployeeVaultPanel caseId={caseId} />}
 
       {c.batchIntake && <HroIntakeRequestPanel request={c.batchIntake} />}
+      {c.fictionalOfflineIdentity && permissions.access.notesRead && c.planSummary && (
+        <section aria-label="Example request and pending review" className="my-4 rounded-lg border p-4 text-sm">
+          <h3 className="mb-2 font-semibold">Request and unresolved review needs</h3>
+          <p className="break-words">{c.planSummary}</p>
+        </section>
+      )}
       {offlineSample ? (
         <div role="status" className="mb-6 rounded-lg border p-4 text-sm">
           {c.fictionalOfflineIdentity ? 'Example · Offline — read-only and permanently non-operational.' : 'Historical test record — read-only and permanently non-operational.'}

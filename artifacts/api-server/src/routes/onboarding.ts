@@ -325,7 +325,7 @@ import {
 
 import { readHroBatchRequest, policyWithoutBatchIntake } from "../lib/onboarding/hro-batch-templates";
 import { isFictionalOfflineExampleCase } from "../lib/onboarding/offline-example-display";
-import { OFFLINE_CASE_EXAMPLES } from "../lib/onboarding/offline-example-inventory";
+import { CURATED_OFFLINE_EXAMPLES } from "../lib/onboarding/offline-example-extension";
 
 const router: IRouter = Router();
 router.use((req, res, next) => {
@@ -858,7 +858,7 @@ async function serializeCase(
   const fictionalOfflineIdentity = isFictionalOfflineExampleCase(row);
   // Generic fixed-inventory description only, never a bypass for mutable notes.
   const offlineExample = fictionalOfflineIdentity
-    ? OFFLINE_CASE_EXAMPLES.find(example => example.key === row.scenarioKey)
+    ? CURATED_OFFLINE_EXAMPLES.find(example => example.key === row.scenarioKey)
     : undefined;
   const canReadIdentity = canReadProfile &&
     (sensitiveAccess.identity || fictionalOfflineIdentity);
@@ -871,7 +871,10 @@ async function serializeCase(
     requestType: canReadProfile ? intakeRequest?.requestType ?? null : null,
     intakeSource: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) && emailIntake?.requestId ? "Email" : null,
     intakeSourceUrl: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) && emailIntake?.requestId ? `/email-intake/${encodeURIComponent(emailIntake.requestId)}` : null,
-    batchIntake: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) ? intakeRequest : null,
+    batchIntake: canReadProfile && canReadNotes
+      ? offlineExample?.values.processPolicySnapshot.batchIntake ??
+        (hasOpaqueNarrativeAccess(sensitiveAccess) ? intakeRequest : null)
+      : null,
     workerName: canReadIdentity ? row.workerName : "Restricted candidate",
     workerEmail: canReadIdentity ? row.workerEmail : null,
     workerPhone: canReadIdentity ? row.workerPhone : null,

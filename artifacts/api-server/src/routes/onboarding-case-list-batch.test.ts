@@ -15,7 +15,7 @@ import {
 } from "@workspace/db";
 import onboardingRouter, { serializeCaseForRequest } from "./onboarding";
 import { resolveEffectiveAccess, resolveEffectiveAccessForCases } from "../lib/access-governance";
-import { OFFLINE_CASE_EXAMPLES } from "../lib/onboarding/offline-example-inventory";
+import { CURATED_OFFLINE_EXAMPLES } from "../lib/onboarding/offline-example-extension";
 import { demoPrincipalSettingKey } from "../lib/demo-principal";
 
 // Fixtures live outside public tables: neither background workers nor real
@@ -95,7 +95,7 @@ before(async () => {
     organizationId: "demo", key: demoPrincipalSettingKey(user), value: "reviewer",
   });
   cases = await db.insert(onbCases).values(Array.from({ length: 120 }, (_, index) => ({
-    organizationId: "demo", ...OFFLINE_CASE_EXAMPLES[index % OFFLINE_CASE_EXAMPLES.length]!.values,
+    organizationId: "demo", ...CURATED_OFFLINE_EXAMPLES[index]!.values,
   }))).returning();
   await db.insert(accessNamedGrants).values(cases.flatMap(row => readKeys.map(key => grant(key, row.id))));
   const app = express();
@@ -134,13 +134,36 @@ test("120 retained examples: batch list matches ordinary projection with bounded
     assert.equal(row.controllerRetired, true);
     assert.equal(row.offlineSample, true);
     assert.equal(row.fictionalOfflineIdentity, true);
-    assert.equal(row.batchIntake, null);
+    const example = CURATED_OFFLINE_EXAMPLES.find(item => item.key === row.scenarioKey)!;
+    assert.deepEqual(row.batchIntake, example.values.processPolicySnapshot.batchIntake);
+    assert.equal(row.planSummary, example.values.planSummary);
     assert.equal(row.workerPhone, null);
     assert.deepEqual(row.processPolicySnapshot, {});
   }
   const smaller = await measured(() => resolveEffectiveAccessForCases(accessInput, rows.slice(0, 10).map(row => row.id)));
   const larger = await measured(() => resolveEffectiveAccessForCases(accessInput, rows.map(row => row.id)));
   assert.equal(larger.queries, smaller.queries);
+});
+
+test("offline request projection uses fixed fictional definitions, not mutable private data; notes denial hides it", async () => {
+  const row = cases[60]!;
+  const example = CURATED_OFFLINE_EXAMPLES[60]!;
+  await db.update(onbCases).set({
+    planSummary: "PRIVATE mutable narrative",
+    processPolicySnapshot: { ...row.processPolicySnapshot, batchIntake: {
+      ...example.values.processPolicySnapshot.batchIntake,
+      data: { ...example.values.processPolicySnapshot.batchIntake.data, engagement_reference: "PRIVATE mutable evidence" },
+    } },
+  }).where(eq(onbCases.id, row.id));
+  const result = (await list()).find(item => item.id === row.id)!;
+  assert.equal(result.planSummary, example.values.planSummary);
+  assert.deepEqual(result.batchIntake, example.values.processPolicySnapshot.batchIntake);
+  assert.equal(JSON.stringify(result).includes("PRIVATE mutable"), false);
+  await db.insert(accessNamedGrants).values(grant("data.case.notes.read", row.id, "deny"));
+  const denied = (await list()).find(item => item.id === row.id)!;
+  assert.equal(denied.batchIntake, null);
+  assert.equal(denied.planSummary, null);
+  await db.update(onbCases).set({ planSummary: row.planSummary, processPolicySnapshot: row.processPolicySnapshot }).where(eq(onbCases.id, row.id));
 });
 
 test("case-scoped denies and redaction are fresh on every list, without broadening offline authority", async () => {
@@ -224,7 +247,7 @@ test("batch shares group-policy evaluator: owner revocation, latest policy, expi
   assert.equal(agent.allows.includes("tool.approval.decide"), false);
   const noInitiator = (await resolveEffectiveAccessForCases({ ...agentInput, initiatorUserId: undefined }, [id])).get(id)!;
   assert.deepEqual(noInitiator.allows, []);
-  const foreign = await db.insert(onbCases).values({ ...OFFLINE_CASE_EXAMPLES[0]!.values, organizationId: "other" }).returning();
+  const foreign = await db.insert(onbCases).values({ ...CURATED_OFFLINE_EXAMPLES[0]!.values, organizationId: "other" }).returning();
   assert.deepEqual((await resolveEffectiveAccessForCases(accessInput, [foreign[0]!.id])).get(foreign[0]!.id)?.allows, []);
   assert.deepEqual((await resolveEffectiveAccessForCases(accessInput, [-1])).get(-1)?.allows, []);
 });

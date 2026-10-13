@@ -41,6 +41,12 @@ independent release/security checks and commercial what-if modeling remain.
 Simulation-only connectors still do not claim genuine external execution.
 No changes authorize shared demo accounts for live workflows.
 
+The separately confirmed developer-only offline inventory extension permits
+five complementary fictional slots per current family (ten curated slots per
+family including the original five). It is additive, permanently blocked and
+read-only; older history remains. It restores no creation, reset, progression,
+execution, authority or operational-metric eligibility.
+
 ## Allowed retained identifiers and text
 
 This is an explicit category-based allowlist, not an assertion that every

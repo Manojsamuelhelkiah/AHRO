@@ -4,8 +4,8 @@ import { CASE_TYPES, casesForList } from "../pages/cases/case-presentation";
 import { operationalReportingPopulation } from "./operational-reporting";
 
 const examples = CASE_TYPES.filter(family => family !== "All Cases").flatMap((family, familyIndex) =>
-  Array.from({ length: 5 }, (_, slot) => ({
-    id: 100 + familyIndex * 5 + slot,
+  Array.from({ length: 10 }, (_, slot) => ({
+    id: 100 + familyIndex * 10 + slot,
     caseFamily: family, geography: `Example region ${familyIndex}`,
     hireType: "employee-service", status: "Blocked", orchestrationStatus: "blocked",
     controllerRetired: true, offlineSample: true, fictionalOfflineIdentity: true,
@@ -13,9 +13,9 @@ const examples = CASE_TYPES.filter(family => family !== "All Cases").flatMap((fa
   })),
 );
 
-test("the full sixty-example inventory stays in ordinary lists but contributes no operational population or denominators", () => {
-  assert.equal(examples.length, 60);
-  assert.equal(casesForList(examples, false).length, 60);
+test("the full 120-example inventory stays in ordinary lists but contributes no operational population or denominators", () => {
+  assert.equal(examples.length, 120);
+  assert.equal(casesForList(examples, false).length, 120);
   const approvals = examples.map(row => ({ caseId: row.id, status: "pending", agent: "Historical example" }));
   const population = operationalReportingPopulation(examples, approvals);
   assert.equal(population.cases.length, 0);
@@ -24,10 +24,10 @@ test("the full sixty-example inventory stays in ordinary lists but contributes n
   assert.equal(new Set(population.cases.map(row => row.geography)).size, 0);
   assert.equal(population.cases.flatMap(row => Object.values(row.gateways)).length, 0);
   // Dashboard and Analytics derive their totals, rates, choices and readiness
-  // summaries from this shared empty population, not the sixty visible rows.
+  // summaries from this shared empty population, not the 120 visible rows.
 });
 
-test("operational totals and intervention denominators stay unchanged after adding all sixty blocked examples", () => {
+test("operational totals and intervention denominators stay unchanged after adding all 120 blocked examples", () => {
   const live = [
     { ...examples[0]!, id: 1, caseFamily: "Payroll", controllerRetired: false, offlineSample: false, status: "Completed" },
     { ...examples[1]!, id: 2, caseFamily: "Leave", controllerRetired: false, offlineSample: false, status: "In Progress" },
