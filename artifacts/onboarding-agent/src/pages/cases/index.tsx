@@ -123,7 +123,7 @@ function CaseTypeBadge({ type }: { type: string }) {
   );
 }
 
-export function CompactGates({ gateways }: { gateways?: { a?: any; b?: any; c?: any } }) {
+export function CompactGates({ gateways, inline = false }: { gateways?: { a?: any; b?: any; c?: any }; inline?: boolean }) {
   if (!gateways) return null;
   const gates = [
     { key: 'a' as const, g: gateways.a },
@@ -131,7 +131,7 @@ export function CompactGates({ gateways }: { gateways?: { a?: any; b?: any; c?: 
     { key: 'c' as const, g: gateways.c },
   ];
   return (
-    <div className="flex flex-col items-start gap-1 min-w-0">
+    <div className={inline ? "flex items-center gap-1 whitespace-nowrap" : "flex flex-col items-start gap-1 min-w-0"}>
       {gates.map(({ key, g }) => {
         if (!g) return null;
         let bg = 'var(--surface-alt)';
@@ -142,9 +142,9 @@ export function CompactGates({ gateways }: { gateways?: { a?: any; b?: any; c?: 
         else if (g.status === 'human-review') { bg = 'var(--status-amber-bg)'; fg = 'var(--status-amber-fg)'; Icon = Clock; }
         else if (g.status === 'pending') { bg = 'var(--primary-light)'; fg = 'var(--primary)'; Icon = Clock; }
         return (
-          <div key={key} title={`${ONBOARDING_STAGE_NAMES[key]}: ${stageStatusText(g.status)} — ${lifecycleStageText(g.reason || g.label)}`} className="flex items-start gap-1 rounded px-1.5 py-1 text-[10px] break-words" style={{ backgroundColor: bg, color: fg, border: '1px solid var(--border)' }}>
+          <div key={key} tabIndex={inline ? 0 : undefined} aria-label={inline ? `${ONBOARDING_STAGE_NAMES[key]}: ${stageStatusText(g.status)} — ${lifecycleStageText(g.reason || g.label)}` : undefined} title={`${ONBOARDING_STAGE_NAMES[key]}: ${stageStatusText(g.status)} — ${lifecycleStageText(g.reason || g.label)}`} className={inline ? "flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]" : "flex items-start gap-1 rounded px-1.5 py-1 text-[10px] break-words"} style={{ backgroundColor: bg, color: fg, border: '1px solid var(--border)' }}>
             {Icon && <Icon aria-hidden className="w-3 h-3 shrink-0" />}
-            <span>{ONBOARDING_STAGE_NAMES[key]}: <strong>{stageStatusText(g.status)}</strong></span>
+            {inline ? (!Icon && <span aria-hidden>—</span>) : <span>{ONBOARDING_STAGE_NAMES[key]}: <strong>{stageStatusText(g.status)}</strong></span>}
           </div>
         );
       })}
@@ -540,14 +540,18 @@ export function CasesPage() {
 
         {/* Wide-screen table; narrower viewports use complete case cards. */}
         <div className="overflow-x-auto hidden lg:block">
-          <table className="w-full text-left" style={{ borderCollapse: 'collapse' }}>
+          <table className="w-full min-w-[960px] table-fixed text-left" style={{ borderCollapse: 'collapse' }}>
+            <colgroup>
+              {[23, 16, 13, 10, 10, 11, 11, 6].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}
+            </colgroup>
             <thead>
               <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
                 {['Case / Program', 'Worker / Population', 'Work Item Type', 'Effective Date', 'Business Stages', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
                   <th
                     key={h}
                     className={cn((h === 'Effective Date' || h === 'Owner / Agent' || h === 'Business Stages') && 'hidden lg:table-cell')}
-                    style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: i === 7 ? 'right' : 'left' }}
+                    title={h === 'Business Stages' ? 'Offer intake · Background checks · Day-1 readiness' : h}
+                    style={{ padding: '10px 8px', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: i === 7 ? 'right' : 'left' }}
                   >
                     {h}
                   </th>
@@ -619,36 +623,35 @@ export function CasesPage() {
                         }
                       }}
                     >
-                      <td style={{ padding: '12px var(--space-lg)' }}>
-                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</div>
-                        {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Example · Offline</span>}
-                        {isFictionalOfflineExample(c) && c.planSummary && <p className="mt-1 max-w-md text-xs text-[var(--text-muted)]">{c.planSummary}</p>}
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
-                        {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} className="text-xs underline">Email source history</Link>}
+                      <td style={{ padding: '10px 8px' }}>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="shrink-0 whitespace-nowrap" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</span>
+                          <span className="min-w-0 truncate" title={[caseTitleOf(c), isFictionalOfflineExample(c) ? c.planSummary : null].filter(Boolean).join(' — ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
+                          {isFictionalOfflineExample(c) && <span title="Fictional example · Offline and read-only" className="shrink-0 text-[10px] font-semibold text-[var(--text-muted)]">Offline</span>}
+                          {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} title="Email source history" aria-label={`Email source history for ${caseIdOf(c)}`} className="shrink-0 text-xs underline">Email</Link>}
+                        </div>
                       </td>
-                      <td style={{ padding: '12px var(--space-lg)' }}>
-                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{c.workerName}</div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>{c.workerEmail}</div>
-                       <WorkforceTags c={c} />
+                      <td style={{ padding: '10px 8px' }}>
+                        <div className="truncate" title={[c.workerName, c.workerEmail, workforceLabel(c).replace(/-/g, ' '), c.workforceContext?.siteExposure === true ? 'Site exposure' : c.workforceContext?.siteExposure === false ? 'No site exposure' : null, c.workforceContext?.safetyCritical === true ? 'Safety-critical' : c.workforceContext?.safetyCritical === false ? 'Not safety-critical' : null].filter(Boolean).join(' · ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{c.workerName}</div>
                       </td>
-                      <td style={{ padding: '12px var(--space-lg)' }}>
-                        <CaseTypeBadge type={caseTypeOf(c)} />
+                      <td style={{ padding: '10px 8px' }}>
+                        <div className="truncate" title={caseTypeOf(c)}><CaseTypeBadge type={caseTypeOf(c)} /></div>
                       </td>
-                      <td className="hidden lg:table-cell whitespace-nowrap" style={{ padding: '12px var(--space-lg)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+                      <td className="hidden lg:table-cell whitespace-nowrap" style={{ padding: '10px 8px', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
                         {c.joiningDate && Number.isFinite(Date.parse(c.joiningDate)) ? format(new Date(c.joiningDate), 'MMM d, yyyy') : 'Not applicable'}
                       </td>
-                      <td className="hidden lg:table-cell" style={{ padding: '12px var(--space-lg)' }}>
-                        {c.gateways ? <CompactGates gateways={c.gateways} /> : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>N/A</span>}
+                      <td className="hidden lg:table-cell" style={{ padding: '10px 8px' }}>
+                        {c.gateways ? <CompactGates gateways={c.gateways} inline /> : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>N/A</span>}
                       </td>
-                      <td style={{ padding: '12px var(--space-lg)' }}>
-                        <HroStatusBadge status={status} />
+                      <td style={{ padding: '10px 8px' }}>
+                        <div className="truncate" title={status}><HroStatusBadge status={status} /></div>
                       </td>
-                      <td className="hidden lg:table-cell" style={{ padding: '12px var(--space-lg)' }}>
+                      <td className="hidden lg:table-cell" style={{ padding: '10px 8px' }}>
                         <OwnerCell owner={owner} />
                       </td>
-                      <td style={{ padding: '12px var(--space-lg)', textAlign: 'right' }}>
-                        <Link href={`/cases/${c.id}`} className="hover:underline" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--primary)' }} onClick={(e) => e.stopPropagation()}>
-                          View Details
+                      <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+                        <Link href={`/cases/${c.id}`} aria-label={`View details for case ${caseIdOf(c)}`} className="whitespace-nowrap hover:underline" style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--primary)' }} onClick={(e) => e.stopPropagation()}>
+                          View
                         </Link>
                       </td>
                     </tr>
@@ -685,11 +688,11 @@ export function CasesPage() {
                   onClick={() => setLocation(`/cases/${c.id}`)}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
+                    <span className="min-w-0 truncate" title={caseTitleOf(c)} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
                     <HroStatusBadge status={status} />
                   </div>
                   {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Example · Offline</span>}
-                  {isFictionalOfflineExample(c) && c.planSummary && <p className="mt-1 text-xs text-[var(--text-muted)]">{c.planSummary}</p>}
+                  {isFictionalOfflineExample(c) && c.planSummary && <p className="mt-1 line-clamp-1 text-xs text-[var(--text-muted)]">{c.planSummary}</p>}
                   <div className="flex items-center justify-between gap-2 mt-1">
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{c.workerName}</span>
                     <CaseTypeBadge type={caseTypeOf(c)} />
@@ -714,14 +717,11 @@ export function CasesPage() {
 function OwnerCell({ owner }: { owner: { name: string; kind: 'AI Agent' | 'Human Reviewer' } }) {
   const Icon = owner.kind === 'AI Agent' ? Bot : User;
   return (
-    <div className="flex items-center gap-2">
-      <span className="flex items-center justify-center shrink-0 rounded-full" style={{ width: '24px', height: '24px', backgroundColor: owner.kind === 'AI Agent' ? 'var(--primary-light)' : 'var(--surface-soft)', color: owner.kind === 'AI Agent' ? 'var(--primary)' : 'var(--status-amber)' }}>
+    <div className="flex min-w-0 items-center gap-1.5" title={`${owner.name} · ${owner.kind}`}>
+      <span aria-label={owner.kind} className="flex items-center justify-center shrink-0 rounded-full" style={{ width: '20px', height: '20px', backgroundColor: owner.kind === 'AI Agent' ? 'var(--primary-light)' : 'var(--surface-soft)', color: owner.kind === 'AI Agent' ? 'var(--primary)' : 'var(--status-amber)' }}>
         <Icon className="h-3.5 w-3.5" />
       </span>
-      <div>
-        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{owner.name}</div>
-        <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{owner.kind}</div>
-      </div>
+      <span className="min-w-0 truncate" style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-primary)' }}>{owner.name}</span>
     </div>
   );
 }
