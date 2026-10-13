@@ -24,9 +24,11 @@ type RouteRow = typeof hroMailboxIngress.$inferSelect;
 export function emailRouteView(row: RouteRow) {
   return { id: row.id, mailboxAddress: row.mailboxAddress, enabled: row.enabled === 1, version: row.revision,
     subjectMarker: `[HRO-INTAKE:${row.token}]`, activatedAt: row.activatedAt?.toISOString() ?? null,
-    backfillFrom: row.backfillFrom?.toISOString() ?? null };
+    backfillFrom: row.backfillFrom?.toISOString() ?? null,
+    retiredAt: row.retiredAt?.toISOString() ?? null, replacementOfId: row.replacementOfId,
+    reviewRequired: Boolean(row.replacementOfId && !row.activatedAt) };
 }
-async function requireReview(tx: Tx, org: string, actor: string, write: boolean, row?: RequestRow) {
+export async function requireReview(tx: Tx, org: string, actor: string, write: boolean, row?: RequestRow) {
   await access(tx, org, actor, write, row?.caseId ?? undefined);
   await confidentialRead(tx, org, actor, row?.fields.work_country, row?.caseId ?? undefined);
   if (write) {
@@ -92,6 +94,15 @@ export async function configureEmailIntake(org: string, actor: string, raw: unkn
       const [old] = await tx.select().from(hroMailboxIngress).where(and(eq(hroMailboxIngress.organizationId, org), eq(hroMailboxIngress.id, text(input.routeId, "routeId")))).for("update");
       if (!old) throw new SeparationError("Route not found in this client.", 404);
       if (!Number.isInteger(input.expectedVersion) || input.expectedVersion !== old.revision) throw new SeparationError("Route changed. Reload before independently reviewing it.", 409);
+      if (old.retiredAt) throw new SeparationError("This marker is permanently retired and cannot be reopened.", 409);
+      if (old.replacementOfId) {
+        const [parent] = await tx.select().from(hroMailboxIngress).where(and(eq(hroMailboxIngress.organizationId, org), eq(hroMailboxIngress.id, old.replacementOfId)));
+        if (!parent?.retiredAt || parent.mailboxAddress !== mailbox || old.mailboxAddress !== mailbox)
+          throw new SeparationError("Replacement review requires the same verified Gmail primary mailbox.", 409);
+        if (actor === old.createdBy)
+          throw new SeparationError("A different verified reviewer must independently approve the replacement binding.", 403);
+        if (input.backfillHours !== 0) throw new SeparationError("Replacement markers admit future mail only. Held requests require explicit re-admission.", 409);
+      }
       const [row] = await tx.update(hroMailboxIngress).set({ approval, enabled: 1, mailboxAddress: mailbox, activatedAt: now,
         backfillFrom: new Date(now.getTime() - Number(input.backfillHours) * 3_600_000), revision: old.revision + 1,
       }).where(eq(hroMailboxIngress.id, old.id)).returning();
@@ -115,6 +126,8 @@ export async function updateEmailRoute(org: string, actor: string, id: string, r
     const [route] = await tx.select().from(hroMailboxIngress).where(and(eq(hroMailboxIngress.id, id), eq(hroMailboxIngress.organizationId, org))).for("update");
     if (!route) throw new SeparationError("Route not found.", 404);
     if (route.revision !== input.expectedVersion) throw new SeparationError("Route changed. Reload before updating.", 409);
+    if (route.retiredAt) throw new SeparationError("This marker is permanently retired and cannot be reopened.", 409);
+    if (route.replacementOfId && !route.activatedAt) throw new SeparationError("Independently review the staged replacement before enabling it.", 409);
     if (typeof input.enabled !== "boolean") throw new SeparationError("Choose enable or pause.", 400);
     if (input.enabled && (!mailbox || mailbox !== route.mailboxAddress || !await currentReceipt(tx, org, route.approval, "")))
       throw new SeparationError("Mailbox or independent routing approval changed. Create a freshly reviewed route.", 409);
@@ -209,7 +222,7 @@ export async function reviewEmailRequest(org: string, actor: string, id: string,
     const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, { organizationId: org, jurisdiction: country });
     if (!gate.allowed) throw new SeparationError("Country collection policy review is required before retaining fields.", 409);
     const [route] = await tx.select().from(hroMailboxIngress).where(and(eq(hroMailboxIngress.organizationId, org), eq(hroMailboxIngress.id, row.ingressId!))).for("update");
-    if (!route?.enabled || !await currentReceipt(tx, org, route.approval, "")) throw new SeparationError("The route must have current independent approval before review can be saved.", 409);
+    if (!route?.enabled || route.retiredAt || !route.activatedAt || !await currentReceipt(tx, org, route.approval, "")) throw new SeparationError("The route must have current independent approval before review can be saved.", 409);
     const [updated] = await tx.update(hroEmailRequests).set({
       templateId: b.templateId, fields, fieldSources: Object.fromEntries(Object.keys(fields).map(k => [k,
         row.fields[k] === fields[k] && row.fieldSources[k] === "email" ? "email" as const : "reviewer" as const])),
@@ -232,7 +245,7 @@ export async function convertEmailRequest(org: string, actor: string, id: string
     if (row.status !== "needs-review" || !row.reviewedBy || !row.templateId) throw new SeparationError("Save reviewed classification and fields before conversion.", 409);
     if (await emailHasOtherOwnership(row.providerMessageId)) throw new SeparationError("This provider message belongs to an existing reply, approval, status or legacy intake consumer. It cannot create another case.", 409);
     const [route] = await tx.select().from(hroMailboxIngress).where(and(eq(hroMailboxIngress.id, row.ingressId!), eq(hroMailboxIngress.organizationId, org))).for("update");
-    if (!route?.enabled || route.revision !== row.routeRevision || route.mailboxAddress !== mailbox || !await currentReceipt(tx, org, route.approval, ""))
+    if (!route?.enabled || route.retiredAt || !route.activatedAt || route.revision !== row.routeRevision || route.mailboxAddress !== mailbox || !await currentReceipt(tx, org, route.approval, ""))
       throw new SeparationError("Mailbox routing is paused, revoked or changed. A fresh route review is required.", 409);
     if (row.attachments.length && b.attachmentsAcknowledged !== true) throw new SeparationError("Acknowledge that private attachments remain quarantined and are not evidence.", 409);
     if (await duplicateCount(tx, org, row) && b.duplicateAcknowledged !== true) throw new SeparationError("Potential independent duplicate requests need explicit review; no requests are automatically merged.", 409);
@@ -345,14 +358,16 @@ export async function resolveEmailTriage(actor: string, id: string, raw: unknown
     }
     if (b.action !== "assign") throw new SeparationError("Choose assign or reject.", 400);
     if (row.reason?.startsWith("Operational-reference ownership is uncertain.")) throw new SeparationError("Operational references must be resolved in the existing reply/status/approval channel, not converted into a new case.", 409);
+    if (row.reason?.startsWith("Permanently retired marker.")) throw new SeparationError("New mail using a retired marker cannot be assigned to a replacement.", 409);
     text(b.reference, "Independently reviewed attribution reference", 240);
     const [route] = await tx.select().from(hroMailboxIngress).where(eq(hroMailboxIngress.id, text(b.routeId, "routeId"))).for("update");
-    if (!route?.enabled || route.mailboxAddress !== row.mailboxAddress || !await currentReceipt(tx, route.organizationId, route.approval, ""))
+    if (!route?.enabled || route.retiredAt || !route.activatedAt || route.mailboxAddress !== row.mailboxAddress || !await currentReceipt(tx, route.organizationId, route.approval, ""))
       throw new SeparationError("A current reviewed route for this exact connected mailbox is required.", 409);
     requireTriage(actor);
     // No provider body is copied by assignment; tenant reviewers supply facts after live collection gates.
     const [updated] = await tx.update(hroEmailRequests).set({
       organizationId: route.organizationId, ingressId: route.id, routeRevision: route.revision,
+      originalIngressId: route.id, originalRouteRevision: route.revision,
       status: "needs-review", reason: "Explicit platform attribution recorded; classification and complete fields require tenant review.",
       reviewedBy: null, version: row.version + 1, updatedAt: new Date(),
     }).where(eq(hroEmailRequests.id, id)).returning();

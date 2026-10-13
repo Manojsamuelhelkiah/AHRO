@@ -77,6 +77,52 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/HroEmailRoute" }
+  /onboarding/email-intake/routes/{routeId}/rotation:
+    get:
+      tags: [Onboarding]
+      operationId: getHroEmailRotation
+      parameters:
+        - { name: routeId, in: path, required: true, schema: { type: string } }
+        - { name: before, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Metadata-only affected request preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailRotationPreview" }
+    post:
+      tags: [Onboarding]
+      operationId: stageHroEmailRotation
+      parameters:
+        - { name: routeId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HroEmailRotationInput" }
+      responses:
+        "201":
+          description: Old marker permanently retired and disabled replacement staged
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailRotationPreview" }
+  /onboarding/email-intake/routes/{routeId}/readmissions:
+    post:
+      tags: [Onboarding]
+      operationId: readmitHroEmailRequests
+      parameters:
+        - { name: routeId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HroEmailReadmissionInput" }
+      responses:
+        "200":
+          description: Selected requests re-bound for fresh review; no effects authorized
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailRotationPreview" }
   /onboarding/email-intake/routes/{routeId}:
     parameters:
       - { name: routeId, in: path, required: true, schema: { type: string } }
@@ -6995,6 +7041,50 @@ components:
         type: integer
         minimum: 1
   schemas:
+    HroEmailRotationInput:
+      type: object
+      required: [expectedVersion, reference, retirementAcknowledged]
+      properties:
+        expectedVersion: { type: integer }
+        reference: { type: string, minLength: 1, maxLength: 240 }
+        retirementAcknowledged: { type: boolean }
+    HroEmailReadmissionSelection:
+      type: object
+      required: [id, expectedVersion]
+      properties:
+        id: { type: string }
+        expectedVersion: { type: integer }
+    HroEmailReadmissionInput:
+      type: object
+      required: [expectedVersion, expectedReplacementVersion, reference, requests]
+      properties:
+        expectedVersion: { type: integer }
+        expectedReplacementVersion: { type: integer }
+        reference: { type: string, minLength: 1, maxLength: 240 }
+        requests:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: "#/components/schemas/HroEmailReadmissionSelection" }
+    HroEmailRotationRequest:
+      type: object
+      required: [id, version, status, receivedAt]
+      properties:
+        id: { type: string }
+        version: { type: integer }
+        status: { type: string }
+        receivedAt: { type: string }
+    HroEmailRotationPreview:
+      type: object
+      required: [route, replacement, requests, nextBefore]
+      properties:
+        route: { $ref: "#/components/schemas/HroEmailRoute" }
+        replacement:
+          anyOf:
+            - { $ref: "#/components/schemas/HroEmailRoute" }
+            - { type: "null" }
+        requests: { type: array, items: { $ref: "#/components/schemas/HroEmailRotationRequest" } }
+        nextBefore: { type: [string, "null"] }
     HroEmailConfiguration:
       type: object
       required: [reference, backfillHours]
@@ -7018,7 +7108,7 @@ components:
         enabled: { type: boolean }
     HroEmailRoute:
       type: object
-      required: [id, mailboxAddress, enabled, version, subjectMarker, activatedAt, backfillFrom]
+      required: [id, mailboxAddress, enabled, version, subjectMarker, activatedAt, backfillFrom, retiredAt, replacementOfId, reviewRequired]
       properties:
         id: { type: string }
         mailboxAddress: { type: [string, "null"] }
@@ -7027,6 +7117,9 @@ components:
         subjectMarker: { type: string }
         activatedAt: { type: [string, "null"] }
         backfillFrom: { type: [string, "null"] }
+        retiredAt: { type: [string, "null"] }
+        replacementOfId: { type: [string, "null"] }
+        reviewRequired: { type: boolean }
     HroEmailTemplate:
       type: object
       required: [template, example]

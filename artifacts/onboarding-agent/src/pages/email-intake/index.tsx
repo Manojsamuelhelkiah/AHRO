@@ -11,6 +11,7 @@ import { Card, Button, Input, Label, PageHeader } from '@/components/ui-shared';
 import { Mail, ShieldAlert, Lock } from 'lucide-react';
 import { CopyButton, ErrorNote, Pill, Skeleton, fmtDate, inputCls, statusTone, useEmailScope } from './common';
 import { ReviewTurnaround } from './turnaround';
+import { MarkerRotation } from './rotation';
 
 function Templates({ data }: { data: HroEmailReadiness }) {
   const [open, setOpen] = useState<string | null>(null);
@@ -54,15 +55,15 @@ function Templates({ data }: { data: HroEmailReadiness }) {
   );
 }
 
-function RouteRow({ route, canConfigure, headers }: { route: HroEmailRoute; canConfigure: boolean; headers: Record<string, string> }) {
+function RouteRow({ route, canConfigure, headers, scope }: { route: HroEmailRoute; canConfigure: boolean; headers: Record<string, string>; scope: string }) {
   const qc = useQueryClient();
   const upd = useUpdateHroEmailRoute({ request: { headers } });
   const toggle = () => upd.mutate({ routeId: route.id, data: { expectedVersion: route.version, enabled: !route.enabled } }, { onSettled: () => qc.invalidateQueries({ queryKey: getGetHroEmailIntakeQueryKey() }) });
   return (
     <li className="space-y-2 p-3" data-testid={`row-route-${route.id}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2"><Pill tone={route.enabled ? 'green' : 'muted'}>{route.enabled ? 'Enabled' : 'Disabled'}</Pill><span className="text-xs text-[var(--text-muted)]">Route version {route.version}</span></div>
-        <Button size="sm" variant="outline" disabled={!canConfigure || upd.isPending} data-testid={`button-toggle-route-${route.id}`} onClick={toggle} title={canConfigure ? undefined : 'Requires configure permission'}>
+        <div className="flex items-center gap-2"><Pill tone={route.enabled ? 'green' : 'muted'}>{route.retiredAt ? 'Permanently retired' : route.reviewRequired ? 'Awaiting independent review' : route.enabled ? 'Enabled' : 'Disabled'}</Pill><span className="text-xs text-[var(--text-muted)]">Route version {route.version}</span></div>
+        <Button size="sm" variant="outline" disabled={!canConfigure || upd.isPending || !!route.retiredAt || route.reviewRequired} data-testid={`button-toggle-route-${route.id}`} onClick={toggle} title={canConfigure ? undefined : 'Requires configure permission'}>
           {upd.isPending ? 'Saving...' : route.enabled ? 'Disable route' : 'Enable route'}
         </Button>
       </div>
@@ -73,6 +74,7 @@ function RouteRow({ route, canConfigure, headers }: { route: HroEmailRoute; canC
         <div><dt className="text-xs text-[var(--text-muted)]">Backfill from</dt><dd className="text-xs">{route.backfillFrom ? fmtDate(route.backfillFrom) : 'None'}</dd></div>
       </dl>
       {upd.isError && <ErrorNote error={upd.error} />}
+      {canConfigure && !route.reviewRequired && <MarkerRotation routeId={route.id} headers={headers} scope={scope} />}
     </li>
   );
 }
@@ -94,7 +96,7 @@ function ConfigForm({ headers, scope, routes }: { headers: Record<string, string
       <Label htmlFor="email-existing-route">Route to review</Label>
       <select id="email-existing-route" value={routeId} className={inputCls} onChange={e => setRouteId(e.target.value)}>
         <option value="">Create a new reviewed route</option>
-        {routes.map(r => <option key={r.id} value={r.id}>{r.mailboxAddress ? 'Reverify' : 'Upgrade legacy separation route'}: {r.id.slice(0, 12)}</option>)}
+        {routes.filter(r => !r.retiredAt && !r.reviewRequired).map(r => <option key={r.id} value={r.id}>{r.mailboxAddress ? 'Reverify' : 'Upgrade legacy separation route'}: {r.id.slice(0, 12)}</option>)}
       </select>
       <p className="text-xs text-[var(--text-muted)]">Legacy separation markers need explicit review before universal intake is enabled. Re-enabling a paused route receives future mail only; saved requests need fresh review.</p>
       <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
@@ -177,7 +179,7 @@ export function EmailIntakePage() {
   const [before, setBefore] = useState<string | undefined>();
   const [previous, setPrevious] = useState<Array<string | undefined>>([]);
   useEffect(() => { setBefore(undefined); setPrevious([]); }, [scope]);
-  const reqs = useListHroEmailRequests(before ? { before } : undefined, { request: { headers }, query: { queryKey: [...getListHroEmailRequestsQueryKey(), scope, before], enabled: Boolean(org) && intake.data?.canReview === true, retry: false } });
+  const reqs = useListHroEmailRequests(before ? { before } : undefined, { request: { headers }, query: { queryKey: [...getListHroEmailRequestsQueryKey(), scope, before], enabled: Boolean(org) && intake.data?.canReview === true, retry: false, refetchInterval: 15_000, staleTime: 0 } });
   const d = intake.data;
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-12">
@@ -207,7 +209,7 @@ export function EmailIntakePage() {
           <Card className="space-y-3 p-4" data-testid="section-routes">
             <h2 className="text-base font-semibold">Client routes</h2>
             <p className="text-xs text-[var(--text-muted)]">Mail is tied to this client by the marker in the subject line sent to the connected address. The marker is the only link; keep it with the request.</p>
-            {d.routes.length ? <ul className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">{d.routes.map((r) => <RouteRow key={r.id} route={r} canConfigure={d.canConfigure} headers={headers} />)}</ul>
+            {d.routes.length ? <ul className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">{d.routes.map((r) => <RouteRow key={`${scope}:${r.id}`} route={r} canConfigure={d.canConfigure} headers={headers} scope={scope} />)}</ul>
               : <p className="rounded-md bg-[var(--surface-alt)] p-4 text-sm text-[var(--text-muted)]">No route exists yet. {d.canConfigure ? 'Create one below.' : 'Ask an administrator with configure permission to create one.'}</p>}
             {d.canConfigure ? <ConfigForm headers={headers} scope={scope} routes={d.routes} /> : <p className="text-xs text-[var(--text-muted)]">Configuration requires the configure permission, which you do not have.</p>}
           </Card>

@@ -84,6 +84,7 @@ import type {
   FlowOverride,
   FlowOverrideInput,
   GetGovernanceAuthorityOptions200,
+  GetHroEmailRotationParams,
   GetOnboardingActionCenterParams,
   GetOnboardingGuardrails200,
   GetOnboardingOutcomeKpisParams,
@@ -146,8 +147,11 @@ import type {
   HroEmailConversion,
   HroEmailPrivateSource,
   HroEmailReadiness,
+  HroEmailReadmissionInput,
   HroEmailRequest,
   HroEmailReview,
+  HroEmailRotationInput,
+  HroEmailRotationPreview,
   HroEmailRoute,
   HroEmailRouteUpdate,
   HroEmailTriage,
@@ -635,6 +639,221 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getConfigureHroEmailIntakeMutationOptions(options));
+    }
+
+export const getGetHroEmailRotationUrl = (routeId: string,
+    params?: GetHroEmailRotationParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/onboarding/email-intake/routes/${routeId}/rotation?${stringifiedParams}` : `/api/onboarding/email-intake/routes/${routeId}/rotation`
+}
+
+export const getHroEmailRotation = async (routeId: string,
+    params?: GetHroEmailRotationParams, options?: RequestInit): Promise<HroEmailRotationPreview> => {
+
+  return customFetch<HroEmailRotationPreview>(getGetHroEmailRotationUrl(routeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetHroEmailRotationQueryKey = (routeId: string,
+    params?: GetHroEmailRotationParams,) => {
+    return [
+    `/api/onboarding/email-intake/routes/${routeId}/rotation`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetHroEmailRotationQueryOptions = <TData = Awaited<ReturnType<typeof getHroEmailRotation>>, TError = ErrorType<unknown>>(routeId: string,
+    params?: GetHroEmailRotationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHroEmailRotation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetHroEmailRotationQueryKey(routeId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHroEmailRotation>>> = ({ signal }) => getHroEmailRotation(routeId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: routeId !== null && routeId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getHroEmailRotation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetHroEmailRotationQueryResult = NonNullable<Awaited<ReturnType<typeof getHroEmailRotation>>>
+export type GetHroEmailRotationQueryError = ErrorType<unknown>
+
+
+
+export function useGetHroEmailRotation<TData = Awaited<ReturnType<typeof getHroEmailRotation>>, TError = ErrorType<unknown>>(
+ routeId: string,
+    params?: GetHroEmailRotationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHroEmailRotation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetHroEmailRotationQueryOptions(routeId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getStageHroEmailRotationUrl = (routeId: string,) => {
+
+
+
+
+  return `/api/onboarding/email-intake/routes/${routeId}/rotation`
+}
+
+export const stageHroEmailRotation = async (routeId: string,
+    hroEmailRotationInput: HroEmailRotationInput, options?: RequestInit): Promise<HroEmailRotationPreview> => {
+
+  return customFetch<HroEmailRotationPreview>(getStageHroEmailRotationUrl(routeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(hroEmailRotationInput)
+  }
+);}
+
+
+
+
+
+export const getStageHroEmailRotationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof stageHroEmailRotation>>, TError,{routeId: string;data: BodyType<HroEmailRotationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof stageHroEmailRotation>>, TError,{routeId: string;data: BodyType<HroEmailRotationInput>}, TContext> => {
+
+const mutationKey = ['stageHroEmailRotation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof stageHroEmailRotation>>, {routeId: string;data: BodyType<HroEmailRotationInput>}> = (props) => {
+          const {routeId,data} = props ?? {};
+
+          return  stageHroEmailRotation(routeId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StageHroEmailRotationMutationResult = NonNullable<Awaited<ReturnType<typeof stageHroEmailRotation>>>
+    export type StageHroEmailRotationMutationBody = BodyType<HroEmailRotationInput>
+    export type StageHroEmailRotationMutationError = ErrorType<unknown>
+
+    export const useStageHroEmailRotation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof stageHroEmailRotation>>, TError,{routeId: string;data: BodyType<HroEmailRotationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof stageHroEmailRotation>>,
+        TError,
+        {routeId: string;data: BodyType<HroEmailRotationInput>},
+        TContext
+      > => {
+      return useMutation(getStageHroEmailRotationMutationOptions(options));
+    }
+
+export const getReadmitHroEmailRequestsUrl = (routeId: string,) => {
+
+
+
+
+  return `/api/onboarding/email-intake/routes/${routeId}/readmissions`
+}
+
+export const readmitHroEmailRequests = async (routeId: string,
+    hroEmailReadmissionInput: HroEmailReadmissionInput, options?: RequestInit): Promise<HroEmailRotationPreview> => {
+
+  return customFetch<HroEmailRotationPreview>(getReadmitHroEmailRequestsUrl(routeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(hroEmailReadmissionInput)
+  }
+);}
+
+
+
+
+
+export const getReadmitHroEmailRequestsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof readmitHroEmailRequests>>, TError,{routeId: string;data: BodyType<HroEmailReadmissionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof readmitHroEmailRequests>>, TError,{routeId: string;data: BodyType<HroEmailReadmissionInput>}, TContext> => {
+
+const mutationKey = ['readmitHroEmailRequests'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof readmitHroEmailRequests>>, {routeId: string;data: BodyType<HroEmailReadmissionInput>}> = (props) => {
+          const {routeId,data} = props ?? {};
+
+          return  readmitHroEmailRequests(routeId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReadmitHroEmailRequestsMutationResult = NonNullable<Awaited<ReturnType<typeof readmitHroEmailRequests>>>
+    export type ReadmitHroEmailRequestsMutationBody = BodyType<HroEmailReadmissionInput>
+    export type ReadmitHroEmailRequestsMutationError = ErrorType<unknown>
+
+    export const useReadmitHroEmailRequests = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof readmitHroEmailRequests>>, TError,{routeId: string;data: BodyType<HroEmailReadmissionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof readmitHroEmailRequests>>,
+        TError,
+        {routeId: string;data: BodyType<HroEmailReadmissionInput>},
+        TContext
+      > => {
+      return useMutation(getReadmitHroEmailRequestsMutationOptions(options));
     }
 
 export const getUpdateHroEmailRouteUrl = (routeId: string,) => {

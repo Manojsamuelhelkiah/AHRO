@@ -52,7 +52,10 @@ export const GetHroEmailIntakeResponse = zod.object({
   "version": zod.number(),
   "subjectMarker": zod.string(),
   "activatedAt": zod.string().nullable(),
-  "backfillFrom": zod.string().nullable()
+  "backfillFrom": zod.string().nullable(),
+  "retiredAt": zod.string().nullable(),
+  "replacementOfId": zod.string().nullable(),
+  "reviewRequired": zod.boolean()
 })),
   "templates": zod.array(zod.object({
   "template": zod.object({
@@ -116,7 +119,157 @@ export const ConfigureHroEmailIntakeResponse = zod.object({
   "version": zod.number(),
   "subjectMarker": zod.string(),
   "activatedAt": zod.string().nullable(),
-  "backfillFrom": zod.string().nullable()
+  "backfillFrom": zod.string().nullable(),
+  "retiredAt": zod.string().nullable(),
+  "replacementOfId": zod.string().nullable(),
+  "reviewRequired": zod.boolean()
+})
+
+
+export const GetHroEmailRotationParams = zod.object({
+  "routeId": zod.coerce.string()
+})
+
+export const GetHroEmailRotationQueryParams = zod.object({
+  "before": zod.coerce.string().optional()
+})
+
+export const GetHroEmailRotationResponse = zod.object({
+  "route": zod.object({
+  "id": zod.string(),
+  "mailboxAddress": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "version": zod.number(),
+  "subjectMarker": zod.string(),
+  "activatedAt": zod.string().nullable(),
+  "backfillFrom": zod.string().nullable(),
+  "retiredAt": zod.string().nullable(),
+  "replacementOfId": zod.string().nullable(),
+  "reviewRequired": zod.boolean()
+}),
+  "replacement": zod.union([zod.object({
+  "id": zod.string(),
+  "mailboxAddress": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "version": zod.number(),
+  "subjectMarker": zod.string(),
+  "activatedAt": zod.string().nullable(),
+  "backfillFrom": zod.string().nullable(),
+  "retiredAt": zod.string().nullable(),
+  "replacementOfId": zod.string().nullable(),
+  "reviewRequired": zod.boolean()
+}),zod.null()]),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "version": zod.number(),
+  "status": zod.string(),
+  "receivedAt": zod.string()
+})),
+  "nextBefore": zod.string().nullable()
+})
+
+
+export const StageHroEmailRotationParams = zod.object({
+  "routeId": zod.coerce.string()
+})
+
+export const stageHroEmailRotationBodyReferenceMax = 240;
+
+
+
+export const StageHroEmailRotationBody = zod.object({
+  "expectedVersion": zod.number(),
+  "reference": zod.string().min(1).max(stageHroEmailRotationBodyReferenceMax),
+  "retirementAcknowledged": zod.boolean()
+})
+
+export const StageHroEmailRotationResponse = zod.object({
+  "route": zod.object({
+  "id": zod.string(),
+  "mailboxAddress": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "version": zod.number(),
+  "subjectMarker": zod.string(),
+  "activatedAt": zod.string().nullable(),
+  "backfillFrom": zod.string().nullable(),
+  "retiredAt": zod.string().nullable(),
+  "replacementOfId": zod.string().nullable(),
+  "reviewRequired": zod.boolean()
+}),
+  "replacement": zod.union([zod.object({
+  "id": zod.string(),
+  "mailboxAddress": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "version": zod.number(),
+  "subjectMarker": zod.string(),
+  "activatedAt": zod.string().nullable(),
+  "backfillFrom": zod.string().nullable(),
+  "retiredAt": zod.string().nullable(),
+  "replacementOfId": zod.string().nullable(),
+  "reviewRequired": zod.boolean()
+}),zod.null()]),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "version": zod.number(),
+  "status": zod.string(),
+  "receivedAt": zod.string()
+})),
+  "nextBefore": zod.string().nullable()
+})
+
+
+export const ReadmitHroEmailRequestsParams = zod.object({
+  "routeId": zod.coerce.string()
+})
+
+export const readmitHroEmailRequestsBodyReferenceMax = 240;
+
+export const readmitHroEmailRequestsBodyRequestsMax = 100;
+
+
+
+export const ReadmitHroEmailRequestsBody = zod.object({
+  "expectedVersion": zod.number(),
+  "expectedReplacementVersion": zod.number(),
+  "reference": zod.string().min(1).max(readmitHroEmailRequestsBodyReferenceMax),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "expectedVersion": zod.number()
+})).min(1).max(readmitHroEmailRequestsBodyRequestsMax)
+})
+
+export const ReadmitHroEmailRequestsResponse = zod.object({
+  "route": zod.object({
+  "id": zod.string(),
+  "mailboxAddress": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "version": zod.number(),
+  "subjectMarker": zod.string(),
+  "activatedAt": zod.string().nullable(),
+  "backfillFrom": zod.string().nullable(),
+  "retiredAt": zod.string().nullable(),
+  "replacementOfId": zod.string().nullable(),
+  "reviewRequired": zod.boolean()
+}),
+  "replacement": zod.union([zod.object({
+  "id": zod.string(),
+  "mailboxAddress": zod.string().nullable(),
+  "enabled": zod.boolean(),
+  "version": zod.number(),
+  "subjectMarker": zod.string(),
+  "activatedAt": zod.string().nullable(),
+  "backfillFrom": zod.string().nullable(),
+  "retiredAt": zod.string().nullable(),
+  "replacementOfId": zod.string().nullable(),
+  "reviewRequired": zod.boolean()
+}),zod.null()]),
+  "requests": zod.array(zod.object({
+  "id": zod.string(),
+  "version": zod.number(),
+  "status": zod.string(),
+  "receivedAt": zod.string()
+})),
+  "nextBefore": zod.string().nullable()
 })
 
 
@@ -136,7 +289,10 @@ export const UpdateHroEmailRouteResponse = zod.object({
   "version": zod.number(),
   "subjectMarker": zod.string(),
   "activatedAt": zod.string().nullable(),
-  "backfillFrom": zod.string().nullable()
+  "backfillFrom": zod.string().nullable(),
+  "retiredAt": zod.string().nullable(),
+  "replacementOfId": zod.string().nullable(),
+  "reviewRequired": zod.boolean()
 })
 
 
@@ -20757,5 +20913,3 @@ export const ApplyFairnessActionResponse = zod.object({
 
 
 export const DownloadFairnessEvidenceReportResponse = zod.record(zod.string(), zod.unknown())
-
-

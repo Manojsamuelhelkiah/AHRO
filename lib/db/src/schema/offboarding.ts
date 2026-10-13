@@ -80,7 +80,13 @@ export const hroMailboxIngress = pgTable("hro_mailbox_ingress", {
   activatedAt: timestamp("activated_at", { withTimezone: true }),
   backfillFrom: timestamp("backfill_from", { withTimezone: true }),
   revision: integer("revision").notNull().default(1),
-}, t => [uniqueIndex("hro_mailbox_token").on(t.token), uniqueIndex("hro_mailbox_ingress_tenant_unique").on(t.organizationId, t.id)]);
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+  replacementOfId: text("replacement_of_id"),
+  rotationReference: text("rotation_reference"),
+}, t => [uniqueIndex("hro_mailbox_token").on(t.token), uniqueIndex("hro_mailbox_ingress_tenant_unique").on(t.organizationId, t.id),
+  uniqueIndex("hro_mailbox_one_replacement").on(t.replacementOfId),
+  foreignKey({ columns: [t.organizationId, t.replacementOfId], foreignColumns: [t.organizationId, t.id], name: "hro_mailbox_replacement_tenant_fk" }).onDelete("restrict"),
+]);
 export const hroMailboxRequests = pgTable("hro_mailbox_requests", {
   id: text("id").primaryKey(), organizationId: text("organization_id").notNull().references(() => organizationsTable.id, { onDelete: "restrict" }),
   ingressId: text("ingress_id").notNull().references(() => hroMailboxIngress.id, { onDelete: "restrict" }),

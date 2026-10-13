@@ -14,3 +14,15 @@ New-request route markers express reviewed mailbox-to-client routing only. They 
 **Why:** Universal intake shares the mailbox with existing reply, approval and status consumers. Receiving or reviewing a request is not permission to execute its requested operation, especially for families with only specialist-review templates.
 
 **How to apply:** Keep routing, confidential collection, family admission and operational release as distinct checks. A missing jurisdiction requires explicit correction under approved collection policy, not a guessed onboarding date or default client. Resume or reverify routing without silently replaying a paused historical inbox.
+
+Marker replacement is a permanent retirement, not a temporary pause. A replacement binding requires a different verified reviewer from the person staging it, on the same verified Gmail primary mailbox. Held-request re-admission never restores sender trust, previous field-review authority, or operational release.
+
+**Why:** The requested recovery workflow must preserve held requests without reopening a compromised marker or turning an old review into permission under a new binding.
+
+**How to apply:** Preserve original message/mailbox/route provenance and private-source/retention holds. Select pre-retirement, same-client held requests explicitly with request and route version fences; leave unselected and post-retirement mail fenced.
+
+Do not retire a replacement while its predecessor still has unreconciled held requests, unless a separately reviewed chain-aware recovery path exists.
+
+**Why:** A selected-only migration otherwise strands the requests left behind when their only approved replacement is later retired.
+
+**How to apply:** Require earlier requests to be re-admitted or rejected before a subsequent rotation; do not silently transfer the remaining backlog.

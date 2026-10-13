@@ -79,7 +79,7 @@ export function resolveEmailRoute(
 ) {
   const tokens = mailboxTokens(subject);
   if (tokens.length !== 1) return null;
-  const matches = routes.filter(r => r.token === tokens[0] && r.enabled === 1 && r.mailboxAddress === mailbox &&
+  const matches = routes.filter(r => r.token === tokens[0] && !r.retiredAt && r.enabled === 1 && r.mailboxAddress === mailbox &&
     r.activatedAt !== null && r.backfillFrom !== null && sentAt >= r.backfillFrom && sentAt.getTime() <= Date.now() + 1000);
   return matches.length === 1 ? matches[0] : null;
 }
@@ -117,6 +117,13 @@ export async function receiveIntakeMessage(mailbox: string, msg: GmailMessage, r
   const timestamp = Number((msg as GmailMessage & { internalDate?: string }).internalDate);
   const sentAt = new Date(timestamp);
   const routes = await db.select().from(hroMailboxIngress);
+  if (routes.some(r => r.retiredAt && mailboxTokens(subject).includes(r.token))) {
+    await db.insert(hroEmailRequests).values({
+      id: randomUUID(), mailboxAddress: mailbox, providerMessageId: msg.id,
+      status: "blocked", reason: "Permanently retired marker. New mail using this marker cannot be attributed or re-admitted.",
+    }).onConflictDoNothing();
+    return;
+  }
   const route = Number.isFinite(timestamp) ? resolveEmailRoute(subject, mailbox, sentAt, routes) : null;
   if (!route) {
     // No sender, subject, body, filename or guessed tenant in platform triage.
@@ -132,7 +139,9 @@ export async function receiveIntakeMessage(mailbox: string, msg: GmailMessage, r
       !await currentReceipt(tx, live.organizationId, live.approval, "")) {
       await tx.insert(hroEmailRequests).values({
         id: randomUUID(), mailboxAddress: mailbox, providerMessageId: msg.id,
-        status: "blocked", reason: "Route approval is unavailable or changed during processing. Platform triage required.",
+        status: "blocked", reason: live?.retiredAt
+          ? "Permanently retired marker. New mail using this marker cannot be attributed or re-admitted."
+          : "Route approval is unavailable or changed during processing. Platform triage required.",
       }).onConflictDoNothing();
       return;
     }
@@ -143,6 +152,7 @@ export async function receiveIntakeMessage(mailbox: string, msg: GmailMessage, r
     const fields = gate.allowed && !content.blocked ? classified.fields : {};
     await tx.insert(hroEmailRequests).values({
       id: randomUUID(), organizationId: live.organizationId, ingressId: live.id, routeRevision: live.revision,
+      originalIngressId: live.id, originalRouteRevision: live.revision,
       mailboxAddress: mailbox, providerMessageId: msg.id, templateId: classified.templateId,
       fields, fieldSources: Object.fromEntries(Object.keys(fields).map(k => [k, "email" as const])),
       attachments: content.attachments,

@@ -153,11 +153,15 @@ test("candidate email defaults, outcomes and retry controls stay clear and usabl
 
     for (const expectedCount of [2, 1, 0]) {
       const retry = page.getByRole("button", { name: "Retry email" }).first();
-      await retry.scrollIntoViewIfNeeded();
-      const retryBox = await retry.boundingBox();
-      expect(retryBox).not.toBeNull();
-      expect(retryBox!.x).toBeGreaterThanOrEqual(0);
-      expect(retryBox!.x + retryBox!.width).toBeLessThanOrEqual(viewport.width);
+      // Refetch after the preceding retry can replace the button during scrolling.
+      // Retry only the read-only layout check, never the delivery mutation.
+      await expect(async () => {
+        await retry.scrollIntoViewIfNeeded();
+        const retryBox = await retry.boundingBox();
+        expect(retryBox).not.toBeNull();
+        expect(retryBox!.x).toBeGreaterThanOrEqual(0);
+        expect(retryBox!.x + retryBox!.width).toBeLessThanOrEqual(viewport.width);
+      }).toPass({ timeout: 10_000 });
       await retry.click();
       await expect(page.getByRole("button", { name: "Retry email" })).toHaveCount(expectedCount);
     }

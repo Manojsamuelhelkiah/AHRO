@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import {
   ConfigureHroEmailIntakeBody, UpdateHroEmailRouteBody, ReviewHroEmailRequestBody, ConvertHroEmailRequestBody, ResolveHroEmailTriageBody,
+  StageHroEmailRotationBody, ReadmitHroEmailRequestsBody, GetHroEmailRotationResponse,
 } from "@workspace/api-zod";
 import {
   emailIntakeReadiness, configureEmailIntake, updateEmailRoute, listEmailRequests, getEmailRequest,
@@ -10,6 +11,7 @@ import { getOrganizationId } from "../lib/organization-scope";
 import { SeparationError } from "../lib/offboarding/model";
 import { logger } from "../lib/logger";
 import { readEmailPrivateBody } from "../lib/hro-email-private-source";
+import { getEmailRotation, stageEmailRotation, readmitEmailRequests } from "../lib/hro-email-rotation";
 const router: IRouter = Router();
 const handle = (fn: (r: Request, s: Response) => Promise<unknown>) => async (r: Request, s: Response) => {
   s.setHeader("Cache-Control", "no-store");
@@ -31,6 +33,9 @@ const actor = (r: Request) => r.authUserId!;
 router.get("/onboarding/email-intake", handle(async (r, s) => s.json(await emailIntakeReadiness(getOrganizationId(r), actor(r)))));
 router.post("/onboarding/email-intake", handle(async (r, s) => s.status(201).json(await configureEmailIntake(getOrganizationId(r), actor(r), parse(ConfigureHroEmailIntakeBody, r.body)))));
 router.patch("/onboarding/email-intake/routes/:routeId", handle(async (r, s) => s.json(await updateEmailRoute(getOrganizationId(r), actor(r), String(r.params.routeId), parse(UpdateHroEmailRouteBody, r.body)))));
+router.get("/onboarding/email-intake/routes/:routeId/rotation", handle(async (r, s) => s.json(GetHroEmailRotationResponse.parse(await getEmailRotation(getOrganizationId(r), actor(r), String(r.params.routeId), typeof r.query.before === "string" ? r.query.before : undefined)))));
+router.post("/onboarding/email-intake/routes/:routeId/rotation", handle(async (r, s) => s.status(201).json(GetHroEmailRotationResponse.parse(await stageEmailRotation(getOrganizationId(r), actor(r), String(r.params.routeId), parse(StageHroEmailRotationBody, r.body))))));
+router.post("/onboarding/email-intake/routes/:routeId/readmissions", handle(async (r, s) => s.json(GetHroEmailRotationResponse.parse(await readmitEmailRequests(getOrganizationId(r), actor(r), String(r.params.routeId), parse(ReadmitHroEmailRequestsBody, r.body))))));
 router.get("/onboarding/email-intake/requests", handle(async (r, s) => s.json(await listEmailRequests(getOrganizationId(r), actor(r), typeof r.query.before === "string" ? r.query.before : undefined))));
 router.get("/onboarding/email-intake/requests/:requestId", handle(async (r, s) => s.json(await getEmailRequest(getOrganizationId(r), actor(r), String(r.params.requestId)))));
 router.get("/onboarding/email-intake/requests/:requestId/source", handle(async (r, s) => s.json(await readEmailPrivateBody(getOrganizationId(r), actor(r), String(r.params.requestId)))));

@@ -10,6 +10,12 @@ export const hroEmailRequests = pgTable("hro_email_requests", {
   organizationId: text("organization_id").references(() => organizationsTable.id, { onDelete: "restrict" }),
   ingressId: text("ingress_id").references(() => hroMailboxIngress.id, { onDelete: "restrict" }),
   routeRevision: integer("route_revision"),
+  originalIngressId: text("original_ingress_id"),
+  originalRouteRevision: integer("original_route_revision"),
+  routingAdmissions: jsonb("routing_admissions").$type<Array<{
+    fromId: string; fromRevision: number; toId: string; toRevision: number;
+    requestVersion: number; actor: string; reference: string; admittedAt: string;
+  }>>().notNull().default([]),
   mailboxAddress: text("mailbox_address").notNull(),
   providerMessageId: text("provider_message_id").notNull(),
   templateId: text("template_id"),
@@ -30,6 +36,7 @@ export const hroEmailRequests = pgTable("hro_email_requests", {
   uniqueIndex("hro_email_case_once").on(t.organizationId, t.caseId),
   index("hro_email_tenant_queue").on(t.organizationId, t.createdAt, t.id),
   foreignKey({ columns: [t.organizationId, t.ingressId], foreignColumns: [hroMailboxIngress.organizationId, hroMailboxIngress.id], name: "hro_email_route_tenant_fk" }).onDelete("restrict"),
+  foreignKey({ columns: [t.organizationId, t.originalIngressId], foreignColumns: [hroMailboxIngress.organizationId, hroMailboxIngress.id], name: "hro_email_original_route_tenant_fk" }).onDelete("restrict"),
   foreignKey({ columns: [t.organizationId, t.caseId], foreignColumns: [onbCases.organizationId, onbCases.id], name: "hro_email_case_tenant_fk" }).onDelete("restrict"),
   check("hro_email_attribution", sql`(${t.organizationId} is null and ${t.ingressId} is null and ${t.fields} = '{}'::jsonb) or (${t.organizationId} is not null and ${t.ingressId} is not null)`),
 ]);

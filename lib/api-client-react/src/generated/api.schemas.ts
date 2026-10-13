@@ -5,6 +5,69 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface HroEmailRotationInput {
+  expectedVersion: number;
+  /**
+     * @minLength 1
+     * @maxLength 240
+     */
+  reference: string;
+  retirementAcknowledged: boolean;
+}
+
+export interface HroEmailReadmissionSelection {
+  id: string;
+  expectedVersion: number;
+}
+
+export interface HroEmailReadmissionInput {
+  expectedVersion: number;
+  expectedReplacementVersion: number;
+  /**
+     * @minLength 1
+     * @maxLength 240
+     */
+  reference: string;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  requests: HroEmailReadmissionSelection[];
+}
+
+export interface HroEmailRotationRequest {
+  id: string;
+  version: number;
+  status: string;
+  receivedAt: string;
+}
+
+export interface HroEmailRoute {
+  id: string;
+  /** @nullable */
+  mailboxAddress: string | null;
+  enabled: boolean;
+  version: number;
+  subjectMarker: string;
+  /** @nullable */
+  activatedAt: string | null;
+  /** @nullable */
+  backfillFrom: string | null;
+  /** @nullable */
+  retiredAt: string | null;
+  /** @nullable */
+  replacementOfId: string | null;
+  reviewRequired: boolean;
+}
+
+export interface HroEmailRotationPreview {
+  route: HroEmailRoute;
+  replacement: HroEmailRoute | null;
+  requests: HroEmailRotationRequest[];
+  /** @nullable */
+  nextBefore: string | null;
+}
+
 export interface HroEmailConfiguration {
   /**
      * @minLength 1
@@ -31,19 +94,6 @@ export interface HroEmailPrivateSource {
 export interface HroEmailRouteUpdate {
   expectedVersion: number;
   enabled: boolean;
-}
-
-export interface HroEmailRoute {
-  id: string;
-  /** @nullable */
-  mailboxAddress: string | null;
-  enabled: boolean;
-  version: number;
-  subjectMarker: string;
-  /** @nullable */
-  activatedAt: string | null;
-  /** @nullable */
-  backfillFrom: string | null;
 }
 
 export type HroBatchColumnKind = typeof HroBatchColumnKind[keyof typeof HroBatchColumnKind];
@@ -10789,6 +10839,10 @@ export type RetiredCapabilityResponse = {
   message: string;
 };
 
+export type GetHroEmailRotationParams = {
+before?: string;
+};
+
 export type ListHroEmailRequestsParams = {
 before?: string;
 };
@@ -11377,4 +11431,3 @@ export type ListSensitiveLifecycleDeletionJobs200 = {
 };
 
 export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
-
