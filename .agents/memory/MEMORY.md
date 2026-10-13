@@ -85,3 +85,4 @@
 - [Controlled offline inventory](offline-inventory-exception.md) — additive Demo-only examples are a narrow one-off exception, not restored creation, reset, execution or authority.
 - [Case pipeline density](case-pipeline-density.md) — desktop cases stay compact and single-line; long narratives belong in detail views or hover text.
 - [Client operating defaults](client-operating-default-boundaries.md) — calendar proposals never reschedule approved obligations; responsibility routing grants neither access nor delivery authority.
+- [Requirements Register retirement](requirements-retirement-boundaries.md) — permanent retirement, not relocation; historical manual coverage never substitutes for objective operational safeguards.

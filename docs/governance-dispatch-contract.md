@@ -1,7 +1,7 @@
 # Governance dispatch fence contract
 
 Any path that performs a real provider/external write based on governance
-decisions, requirement coverage, or effective human permissions **must** wrap that
+decisions, trusted operational evidence, or effective human permissions **must** wrap that
 write in `withGovernanceDispatch`.
 
 ```ts
@@ -28,8 +28,8 @@ await withGovernanceDispatch(
 ```
 
 The wrapper acquires the same per-organization PostgreSQL advisory lock used by
-every governance mutation, snapshots current decision revisions, requirement
-versions, and active verified authority assignments, and commits a durable
+every governance mutation, snapshots current decision revisions (not retired
+coverage rows or historical specialist assignments), and commits a durable
 `dispatching` marker before callback I/O. The database transaction is not held
 over the external call.
 

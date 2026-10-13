@@ -97,8 +97,6 @@ import type {
   GovernanceDecisionsResponse,
   GovernanceHistoryResponse,
   GovernanceReminderDispatchResponse,
-  GovernanceRequirementResponse,
-  GovernanceRequirementsResponse,
   GuardrailEvent,
   HealthStatus,
   HrPolicyAnswerInput,
@@ -353,7 +351,6 @@ import type {
   SystemInfo,
   UatAdmission,
   UatSignInChallenge,
-  UpdateGovernanceRequirementCoverageBody,
   UpdateOnbSettings,
   UpdateOnboardingBgvNotificationsRequest,
   UpdateOrganizationPrimaryCountry200,
@@ -7175,156 +7172,6 @@ export const useReviewGovernanceDecision = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getReviewGovernanceDecisionMutationOptions(options));
-    }
-
-export const getListGovernanceRequirementsUrl = () => {
-
-
-
-
-  return `/api/governance/requirements`
-}
-
-/**
- * Implemented, tested, configured, and approved-for-live remain independent facts.
- * @summary List tenant requirement coverage
- */
-export const listGovernanceRequirements = async ( options?: RequestInit): Promise<GovernanceRequirementsResponse> => {
-
-  return customFetch<GovernanceRequirementsResponse>(getListGovernanceRequirementsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListGovernanceRequirementsQueryKey = () => {
-    return [
-    `/api/governance/requirements`
-    ] as const;
-    }
-
-
-export const getListGovernanceRequirementsQueryOptions = <TData = Awaited<ReturnType<typeof listGovernanceRequirements>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listGovernanceRequirements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListGovernanceRequirementsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listGovernanceRequirements>>> = ({ signal }) => listGovernanceRequirements({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listGovernanceRequirements>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type ListGovernanceRequirementsQueryResult = NonNullable<Awaited<ReturnType<typeof listGovernanceRequirements>>>
-export type ListGovernanceRequirementsQueryError = ErrorType<unknown>
-
-
-/**
- * @summary List tenant requirement coverage
- */
-
-export function useListGovernanceRequirements<TData = Awaited<ReturnType<typeof listGovernanceRequirements>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listGovernanceRequirements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getListGovernanceRequirementsQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getUpdateGovernanceRequirementCoverageUrl = (key: string,) => {
-
-
-
-
-  return `/api/governance/requirements/${key}/coverage`
-}
-
-/**
- * @summary Attest independent coverage facts for one requirement
- */
-export const updateGovernanceRequirementCoverage = async (key: string,
-    updateGovernanceRequirementCoverageBody: UpdateGovernanceRequirementCoverageBody, options?: RequestInit): Promise<GovernanceRequirementResponse> => {
-
-  return customFetch<GovernanceRequirementResponse>(getUpdateGovernanceRequirementCoverageUrl(key),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(updateGovernanceRequirementCoverageBody)
-  }
-);}
-
-
-
-
-
-export const getUpdateGovernanceRequirementCoverageMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateGovernanceRequirementCoverage>>, TError,{key: string;data: BodyType<UpdateGovernanceRequirementCoverageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateGovernanceRequirementCoverage>>, TError,{key: string;data: BodyType<UpdateGovernanceRequirementCoverageBody>}, TContext> => {
-
-const mutationKey = ['updateGovernanceRequirementCoverage'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateGovernanceRequirementCoverage>>, {key: string;data: BodyType<UpdateGovernanceRequirementCoverageBody>}> = (props) => {
-          const {key,data} = props ?? {};
-
-          return  updateGovernanceRequirementCoverage(key,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type UpdateGovernanceRequirementCoverageMutationResult = NonNullable<Awaited<ReturnType<typeof updateGovernanceRequirementCoverage>>>
-    export type UpdateGovernanceRequirementCoverageMutationBody = BodyType<UpdateGovernanceRequirementCoverageBody>
-    export type UpdateGovernanceRequirementCoverageMutationError = ErrorType<void>
-
-    /**
- * @summary Attest independent coverage facts for one requirement
- */
-export const useUpdateGovernanceRequirementCoverage = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateGovernanceRequirementCoverage>>, TError,{key: string;data: BodyType<UpdateGovernanceRequirementCoverageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof updateGovernanceRequirementCoverage>>,
-        TError,
-        {key: string;data: BodyType<UpdateGovernanceRequirementCoverageBody>},
-        TContext
-      > => {
-      return useMutation(getUpdateGovernanceRequirementCoverageMutationOptions(options));
     }
 
 export const getListGovernanceHistoryUrl = (params?: ListGovernanceHistoryParams,) => {

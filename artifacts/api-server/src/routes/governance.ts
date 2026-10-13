@@ -13,19 +13,21 @@ import {
   listGovernanceAssignments,
   listGovernanceDecisions,
   listGovernanceHistory,
-  listGovernanceRequirements,
   reviewGovernanceDecision,
   reconcileGovernanceDispatch,
   requestGovernanceAuthority,
   reviseGovernanceDecision,
   revokeGovernanceAuthority,
-  updateGovernanceRequirementCoverage,
   verifyGovernanceAuthority,
 } from "../lib/onboarding/governance";
 import { GovernanceDispatchBlockedError } from "../lib/onboarding/governance-dispatch";
 
 const router: IRouter = Router();
 router.use((req, res, next) => {
+  if (/^\/governance\/requirements(?:\/|$)/i.test(req.path)) {
+    res.status(410).json({ code: "REQUIREMENTS_REGISTER_RETIRED", message: "The Requirements Register is retired. Historical records are retained and cannot be edited." });
+    return;
+  }
   if (/^\/governance\/(?:assignments|authority-bootstrap|authority-options)(?:\/|$)/i.test(req.path)) {
     res.status(410).json({ code: "SPECIALIST_AUTHORITY_RETIRED", message: "Specialist authority management is retired. Use ordinary access governance; historical records are retained." });
     return;
@@ -120,27 +122,6 @@ router.post("/governance/decisions/:key/reviews", async (req, res, next) => {
     res.json(await reviewGovernanceDecision(
       getOrganizationId(req), actor(req), req.params.key, requestBody(req.body),
     ));
-  } catch (error) {
-    if (clientError(error, res)) return;
-    next(error);
-  }
-});
-
-router.get("/governance/requirements", async (req, res, next) => {
-  try {
-    res.json({ requirements: await listGovernanceRequirements(getOrganizationId(req)) });
-  } catch (error) {
-    if (clientError(error, res)) return;
-    next(error);
-  }
-});
-
-router.put("/governance/requirements/:key/coverage", async (req, res, next) => {
-  try {
-    const requirement = await updateGovernanceRequirementCoverage(
-      getOrganizationId(req), actor(req), req.params.key, requestBody(req.body),
-    );
-    res.json({ requirement });
   } catch (error) {
     if (clientError(error, res)) return;
     next(error);

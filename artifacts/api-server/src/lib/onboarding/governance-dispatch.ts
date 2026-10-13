@@ -5,7 +5,6 @@ import {
   onbGovernanceAuthorityAssignments,
   onbGovernanceDecisions,
   onbGovernanceDispatchMarkers,
-  onbGovernanceRequirements,
 } from "@workspace/db";
 
 type DispatchTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -22,7 +21,6 @@ export type GovernanceDispatchFence = {
   operation: string;
   capturedAt: string;
   decisions: Array<{ key: string; revision: number; status: string; approvedAt: string | null }>;
-  requirements: Array<{ key: string; version: number }>;
   verifiedAuthorities: Array<{ id: number; role: string; assigneeUserId: string; expiresAt: string | null }>;
   /** Passed by a runtime caller from the adopted case snapshot; never replaced with current policy. */
   adoptedCaseSnapshot: Record<string, unknown> | null;
@@ -94,12 +92,6 @@ async function captureFence(
       eq(onbGovernanceDecisions.organizationId, organizationId),
       eq(onbGovernanceDecisions.isCurrent, true),
     )).orderBy(onbGovernanceDecisions.key);
-  const requirements = await tx.select({
-      key: onbGovernanceRequirements.key,
-      version: onbGovernanceRequirements.version,
-    }).from(onbGovernanceRequirements).where(
-      eq(onbGovernanceRequirements.organizationId, organizationId),
-    ).orderBy(onbGovernanceRequirements.key);
   // Historical specialist grants are deliberately absent from every new
   // dispatch fence. The live gate revalidates versioned permission receipts.
   const verifiedAuthorities: Array<{ id: number; role: string; assigneeUserId: string; expiresAt: Date | null }> = [];
@@ -111,7 +103,6 @@ async function captureFence(
       ...row,
       approvedAt: row.approvedAt?.toISOString() ?? null,
     })),
-    requirements,
     verifiedAuthorities: verifiedAuthorities.map((row) => ({
       ...row,
       expiresAt: row.expiresAt?.toISOString() ?? null,

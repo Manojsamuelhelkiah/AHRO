@@ -5,6 +5,7 @@ import { after, before, describe, test } from "node:test";
 import { eq, inArray } from "drizzle-orm";
 import {
   db,
+  accessNamedGrants,
   onbGovernanceAuthorityAssignments,
   onbGovernanceDecisionReviews,
   onbGovernanceDecisions,
@@ -28,7 +29,6 @@ import {
   requestGovernanceAuthority,
   reviseGovernanceDecision,
   revokeGovernanceAuthority,
-  updateGovernanceRequirementCoverage,
   verifyGovernanceAuthority,
   getSensitiveLifecycleAuthorityContext,
 } from "./governance";
@@ -84,6 +84,12 @@ before(async () => {
     { organizationId: otherOrganizationId, clerkUserId: adminId, role: "admin" },
     { organizationId: contextOrganizationId, clerkUserId: contextMemberId, role: "member" },
   ]);
+  await db.insert(accessNamedGrants).values([adminId, specialistId].map(principalId => ({
+    organizationId, principalType: "human" as const, principalId,
+    resourceKey: "tool.policy.manage", resourceType: "tool" as const, scope: "tenant" as const,
+    effect: "allow" as const, status: "active" as const, source: "named" as const,
+    createdByUserId: operatorId, approvedByUserId: operatorId, approvedAt: new Date(),
+  })));
 });
 
 after(async () => {
@@ -176,31 +182,24 @@ describe("governance decision register", { concurrency: false }, () => {
     assert.equal(context.reviewer, null);
   });
 
-  test("rejects admin self-declaration and verifies an owner nomination separately", async () => {
+  test("rejects retired specialist assignment and nomination mutations", async () => {
     await assert.rejects(
       assignGovernanceAuthority(organizationId, admin, {
         role: "Legal", assigneeUserId: adminId, verificationReference: "forged-admin-claim",
       }),
       GovernancePermissionError,
     );
-    const nomination = await requestGovernanceAuthority(organizationId, admin, {
+    await assert.rejects(requestGovernanceAuthority(organizationId, admin, {
       role: "Legal", assigneeUserId: specialistId, assignmentReason: "Legal reviewer nomination",
-    });
-    assert.equal(nomination.verificationStatus, "pending");
-    const assignment = await verifyGovernanceAuthority(
-      organizationId, operator, nomination.id, "operator-verification-001",
-    );
-    assert.equal(assignment.verificationStatus, "verified");
-    assert.equal(assignment.role, "legal");
-    assert.equal(assignment.assigneeUserId, specialistId);
+    }), /retired/);
     assert.deepEqual(await listGovernanceAssignments(otherOrganizationId), []);
   });
 
-  test("requires current revision and active specialist authority for review", async () => {
+  test("requires current revision and live policy permission for review", async () => {
     const key = `GD-${suffix}-revision`;
     await createGovernanceDecision(organizationId, admin, decisionInput(key));
     await assert.rejects(
-      reviseGovernanceDecision(organizationId, admin, key, {
+      reviseGovernanceDecision(organizationId, { userId: contextMemberId, organizationRole: "admin" }, key, {
         expectedRevision: 1, accountableRole: "EHS / Occupational Health",
       }),
       GovernancePermissionError,
@@ -220,8 +219,7 @@ describe("governance decision register", { concurrency: false }, () => {
       }),
       GovernanceConflictError,
     );
-    const assignments = await listGovernanceAssignments(organizationId);
-    await revokeGovernanceAuthority(organizationId, operator, assignments[0]!.id);
+    await db.update(accessNamedGrants).set({ revokedAt: new Date() }).where(eq(accessNamedGrants.principalId, specialistId));
     await assert.rejects(
       reviewGovernanceDecision(organizationId, specialist, key, {
         revision: 2, outcome: "approved", reason: "Authority was revoked.", verificationReference: "legal-review-003",
@@ -230,26 +228,7 @@ describe("governance decision register", { concurrency: false }, () => {
     );
   });
 
-  test("keeps coverage dimensions independent and claims a due reminder once", async () => {
-    await db.insert(onbGovernanceRequirements).values({
-      organizationId,
-      key: `REQ-${suffix}`,
-      title: "Requirement coverage regression",
-      sourceReference: "test-only",
-      reviewOwnerRole: "legal",
-    });
-    const reassigned = await assignGovernanceAuthority(organizationId, operator, {
-      role: "legal", assigneeUserId: specialistId, verificationReference: "operator-verification-002",
-    });
-    assert.ok(reassigned.id > 0);
-    const requirement = await updateGovernanceRequirementCoverage(organizationId, specialist, `REQ-${suffix}`, {
-      expectedVersion: 1, implemented: true, tested: false, configured: false, approvedForLive: false,
-      evidenceReference: "test evidence reference",
-    });
-    assert.deepEqual(requirement.coverage, {
-      implemented: true, tested: false, configured: false, approvedForLive: false,
-    });
-
+  test("claims a due decision reminder once", async () => {
     await createGovernanceDecision(
       organizationId,
       admin,
@@ -349,32 +328,13 @@ describe("governance decision register", { concurrency: false }, () => {
     assert.equal(revised.revision, 2);
   });
 
-  test("picker appointments preserve member IDs, references and actor-attributed history", async () => {
-    const grant = await assignGovernanceAuthority(organizationId, operator, {
-      role: "hr-policy-maintain", assigneeUserId: specialistId, verificationReference: "approved-maintainer-appointment",
-    });
-    assert.equal(grant.assigneeUserId, specialistId);
-    assert.equal(grant.role, "hr-policy-maintain");
-    assert.equal(grant.verificationReference, "approved-maintainer-appointment");
-    assert.equal(grant.verifiedByUserId, operatorId);
-    const [event] = await db.select().from(onbGovernanceHistory).where(eq(onbGovernanceHistory.entityKey, String(grant.id)));
-    assert.equal(event?.actorUserId, operatorId);
-    await assert.rejects(assignGovernanceAuthority(organizationId, operator, {
-      role: "hr-policy-maintain", assigneeUserId: contextMemberId, verificationReference: "wrong-client",
-    }), GovernanceValidationError);
-    await assert.rejects(assignGovernanceAuthority(organizationId, operator, {
-      role: "hr-policy-maintain", assigneeUserId: specialistId, verificationReference: " ",
-    }), GovernanceValidationError);
-    const nomineeId = `picker-nominee-${suffix}`;
-    await db.insert(organizationMembershipsTable).values({ organizationId, clerkUserId: nomineeId, role: "member" });
-    const nomination = await requestGovernanceAuthority(organizationId, admin, {
-      role: "hr-policy-maintain", assigneeUserId: nomineeId, assignmentReason: "Approved nominee to review",
-    });
-    await db.update(organizationMembershipsTable).set({ revokedAt: new Date() }).where(eq(organizationMembershipsTable.clerkUserId, nomineeId));
-    await assert.rejects(verifyGovernanceAuthority(organizationId, operator, nomination.id, "stale-nominee"), GovernanceValidationError);
-    const options = await getGovernanceAuthorityOptions(organizationId, admin, async () => []);
-    assert.ok(!options.members.some((member) => member.clerkUserId === nomineeId));
-    const revoked = await revokeGovernanceAuthority(organizationId, operator, grant.id);
-    assert.equal(revoked.revokedByUserId, operatorId);
+  test("retired specialist mutations cannot change retained history", async () => {
+    const beforeRows = await db.select().from(onbGovernanceAuthorityAssignments).where(eq(onbGovernanceAuthorityAssignments.organizationId, contextOrganizationId));
+    await assert.rejects(assignGovernanceAuthority(contextOrganizationId, operator, {
+      role: "privacy", assigneeUserId: contextMemberId, verificationReference: "stale-client",
+    }), /retired/);
+    await assert.rejects(verifyGovernanceAuthority(contextOrganizationId, operator, beforeRows[0]!.id, "stale-client"), /retired/);
+    await assert.rejects(revokeGovernanceAuthority(contextOrganizationId, operator, beforeRows[0]!.id), /retired/);
+    assert.deepEqual(await db.select().from(onbGovernanceAuthorityAssignments).where(eq(onbGovernanceAuthorityAssignments.organizationId, contextOrganizationId)), beforeRows);
   });
 });

@@ -23,24 +23,6 @@ export interface GovernanceDecision {
   updatedAt: string;
 }
 
-export interface GovernanceRequirement {
-  key: string;
-  title: string;
-  sourceReference: string;
-  reviewOwnerRole: string;
-  version: number;
-  coverageState: "gap" | "partial" | "covered";
-  coverage: {
-    implemented: boolean;
-    tested: boolean;
-    configured: boolean;
-    approvedForLive: boolean;
-  };
-  relatedImplementation?: string;
-  evidenceReference?: string;
-  updatedAt: string;
-}
-
 export interface GovernanceAssignment {
   id: number;
   role: string;
@@ -77,13 +59,11 @@ export interface GovernanceHistoryEvent {
 
 const get = async <T>(url: string): Promise<T> => customFetch<T>(url, { method: "GET" });
 const post = async <T>(url: string, body?: any): Promise<T> => customFetch<T>(url, { method: "POST", body: body ? JSON.stringify(body) : undefined });
-const put = async <T>(url: string, body?: any): Promise<T> => customFetch<T>(url, { method: "PUT", body: body ? JSON.stringify(body) : undefined });
 
 export const keys = {
   all: ["governance"] as const,
   decisions: () => [...keys.all, "decisions"] as const,
   decisionHistory: (key: string) => [...keys.decisions(), key, "history"] as const,
-  requirements: () => [...keys.all, "requirements"] as const,
   assignments: () => [...keys.all, "assignments"] as const,
   history: () => [...keys.all, "history"] as const,
 };
@@ -145,27 +125,6 @@ export function usePostGovernanceDecisionsKeyReviews() {
       qc.invalidateQueries({ queryKey: keys.decisionHistory(vars.key) });
       qc.invalidateQueries({ queryKey: keys.assignments() });
     },
-  });
-}
-
-export function useGetGovernanceRequirements(options?: { query?: { refetchInterval?: number; refetchIntervalInBackground?: boolean } }) {
-  return useQuery({ 
-    queryKey: keys.requirements(), 
-    queryFn: () => get<{ requirements: GovernanceRequirement[] }>("/api/governance/requirements").then(r => r.requirements),
-    ...options?.query
-  });
-}
-
-export function usePutGovernanceRequirementsKeyCoverage() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { key: string; expectedVersion: number; coverage: GovernanceRequirement["coverage"]; relatedImplementation?: string; evidenceReference?: string }) =>
-      put<{ requirement: GovernanceRequirement }>(`/api/governance/requirements/${vars.key}/coverage`, {
-        expectedVersion: vars.expectedVersion, ...vars.coverage,
-        relatedImplementation: vars.relatedImplementation, evidenceReference: vars.evidenceReference,
-      }),
-    onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
-    onError: () => qc.invalidateQueries({ queryKey: keys.requirements() }),
   });
 }
 

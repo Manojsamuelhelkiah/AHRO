@@ -31,7 +31,7 @@ tags:
   - name: onboardingUat
     description: Tenant-scoped, non-authoritative onboarding acceptance runs and evidence
   - name: governance
-    description: Tenant-scoped revisioned decision, requirement coverage, and verified specialist authority register
+    description: Tenant-scoped policy decisions, explicit reviews and retained governance history
   - name: hrPolicyLibrary
     description: Tenant-isolated, governed curated HR policy sources and cited answers; separate from case chat
   - name: organizations
@@ -1397,45 +1397,6 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceDecisionReviewResponse" } } }
         "403": { description: Current policy-management permission required }
         "409": { description: Stale or already-reviewed revision }
-  /governance/requirements:
-    get:
-      operationId: listGovernanceRequirements
-      tags: [governance]
-      summary: List tenant requirement coverage
-      description: Implemented, tested, configured, and approved-for-live remain independent facts.
-      responses:
-        "200":
-          description: Requirements
-          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceRequirementsResponse" } } }
-  /governance/requirements/{key}/coverage:
-    put:
-      operationId: updateGovernanceRequirementCoverage
-      tags: [governance]
-      summary: Attest independent coverage facts for one requirement
-      parameters:
-        - { name: key, in: path, required: true, schema: { type: string } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [expectedVersion]
-              properties:
-                expectedVersion: { type: integer, minimum: 1 }
-                implemented: { type: boolean }
-                tested: { type: boolean }
-                configured: { type: boolean }
-                approvedForLive: { type: boolean }
-                coverageState: { type: string, enum: [gap, partial, covered] }
-                relatedImplementation: { type: [string, "null"] }
-                evidenceReference: { type: [string, "null"] }
-      responses:
-        "200":
-          description: Updated coverage
-          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceRequirementResponse" } } }
-        "403": { description: Verified specialist authority required }
-        "409": { description: Stale coverage version }
   /governance/history:
     get:
       operationId: listGovernanceHistory
@@ -15001,41 +14962,6 @@ components:
       properties:
         decision: { $ref: "#/components/schemas/GovernanceDecision" }
         review: { type: object, additionalProperties: true }
-    GovernanceRequirement:
-      type: object
-      additionalProperties: true
-      required: [key, title, sourceReference, reviewOwnerRole, relatedDecisionKeys, coverage, version, updatedAt]
-      properties:
-        key: { type: string }
-        title: { type: string }
-        sourceReference: { type: string }
-        reviewOwnerRole: { type: string }
-        relatedDecisionKeys: { type: array, items: { type: string } }
-        coverageState: { type: string, enum: [gap, partial, covered] }
-        coverage:
-          type: object
-          required: [implemented, tested, configured, approvedForLive]
-          properties:
-            implemented: { type: boolean }
-            tested: { type: boolean }
-            configured: { type: boolean }
-            approvedForLive: { type: boolean }
-        relatedImplementation: { type: [string, "null"] }
-        evidenceReference: { type: [string, "null"] }
-        version: { type: integer, minimum: 1 }
-        updatedAt: { type: string, format: date-time }
-    GovernanceRequirementsResponse:
-      type: object
-      additionalProperties: false
-      required: [requirements]
-      properties:
-        requirements: { type: array, items: { $ref: "#/components/schemas/GovernanceRequirement" } }
-    GovernanceRequirementResponse:
-      type: object
-      additionalProperties: false
-      required: [requirement]
-      properties:
-        requirement: { $ref: "#/components/schemas/GovernanceRequirement" }
     GovernanceAssignment:
       type: object
       additionalProperties: true

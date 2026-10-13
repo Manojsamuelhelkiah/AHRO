@@ -410,7 +410,7 @@
       "guideTopic": "policy",
       "scenarioIds": [],
       "verification": "manual",
-      "availabilityNote": "Pending/rejected/stale authority cannot publish.",
+      "availabilityNote": "Pending/rejected reviews and revoked permissions cannot publish. Manual coverage management is retired; provider and source-evidence safeguards remain independent.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
     },

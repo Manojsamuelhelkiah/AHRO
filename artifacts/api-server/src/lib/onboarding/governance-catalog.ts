@@ -125,6 +125,7 @@ function requirement(
  * identifies reusable implementation only; it never represents production
  * configuration, legal applicability, provider activation, or live approval.
  */
+/** Historical source traceability only. Never seed or evaluate these as runtime coverage. */
 export const GOVERNANCE_REQUIREMENTS: readonly GovernanceRequirement[] = [
   requirement("REQ-01", "Create an onboarding case and pre-boarding checklist on offer acceptance.", "must",
     ["BRD §8, REQ-01"], "partial",

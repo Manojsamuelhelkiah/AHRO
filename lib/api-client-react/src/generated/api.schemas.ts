@@ -6404,6 +6404,7 @@ export interface OnbApprovalDecision {
   /** @minimum 1 */
   expectedVersion: number;
 }
+
 export type OnbApprovalHistoryEventType = typeof OnbApprovalHistoryEventType[keyof typeof OnbApprovalHistoryEventType];
 
 
@@ -9220,6 +9221,7 @@ export interface GovernanceDecisionInput {
      */
   sourceReference?: string | null;
 }
+
 export interface GovernanceDecisionsResponse {
   decisions: GovernanceDecision[];
 }
@@ -9240,48 +9242,6 @@ export type GovernanceDecisionReviewResponseReview = { [key: string]: unknown };
 export interface GovernanceDecisionReviewResponse {
   decision: GovernanceDecision;
   review: GovernanceDecisionReviewResponseReview;
-}
-
-export type GovernanceRequirementCoverageState = typeof GovernanceRequirementCoverageState[keyof typeof GovernanceRequirementCoverageState];
-
-
-export const GovernanceRequirementCoverageState = {
-  gap: 'gap',
-  partial: 'partial',
-  covered: 'covered',
-} as const;
-
-export type GovernanceRequirementCoverage = {
-  implemented: boolean;
-  tested: boolean;
-  configured: boolean;
-  approvedForLive: boolean;
-};
-
-export interface GovernanceRequirement {
-  key: string;
-  title: string;
-  sourceReference: string;
-  reviewOwnerRole: string;
-  relatedDecisionKeys: string[];
-  coverageState?: GovernanceRequirementCoverageState;
-  coverage: GovernanceRequirementCoverage;
-  /** @nullable */
-  relatedImplementation?: string | null;
-  /** @nullable */
-  evidenceReference?: string | null;
-  /** @minimum 1 */
-  version: number;
-  updatedAt: string;
-  [key: string]: unknown;
- }
-
-export interface GovernanceRequirementsResponse {
-  requirements: GovernanceRequirement[];
-}
-
-export interface GovernanceRequirementResponse {
-  requirement: GovernanceRequirement;
 }
 
 export type GovernanceAssignmentVerificationStatus = typeof GovernanceAssignmentVerificationStatus[keyof typeof GovernanceAssignmentVerificationStatus];
@@ -10995,29 +10955,6 @@ export type ReviewGovernanceDecisionBody = {
   outcome: ReviewGovernanceDecisionBodyOutcome;
   reason: string;
   verificationReference: string;
-};
-
-export type UpdateGovernanceRequirementCoverageBodyCoverageState = typeof UpdateGovernanceRequirementCoverageBodyCoverageState[keyof typeof UpdateGovernanceRequirementCoverageBodyCoverageState];
-
-
-export const UpdateGovernanceRequirementCoverageBodyCoverageState = {
-  gap: 'gap',
-  partial: 'partial',
-  covered: 'covered',
-} as const;
-
-export type UpdateGovernanceRequirementCoverageBody = {
-  /** @minimum 1 */
-  expectedVersion: number;
-  implemented?: boolean;
-  tested?: boolean;
-  configured?: boolean;
-  approvedForLive?: boolean;
-  coverageState?: UpdateGovernanceRequirementCoverageBodyCoverageState;
-  /** @nullable */
-  relatedImplementation?: string | null;
-  /** @nullable */
-  evidenceReference?: string | null;
 };
 
 export type ListGovernanceHistoryParams = {

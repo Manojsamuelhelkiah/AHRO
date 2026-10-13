@@ -8,11 +8,8 @@ import {
   useGetGovernanceDecisionsKeyHistory, 
   usePostGovernanceDecisionsKeyRevisions,
   usePostGovernanceDecisionsKeyReviews,
-  useGetGovernanceRequirements,
-  usePutGovernanceRequirementsKeyCoverage,
   useGetGovernanceHistory,
   type GovernanceDecision,
-  type GovernanceRequirement,
    type GovernanceAssignment,
    type GovernanceDecisionReview
 } from '../hooks/use-governance';
@@ -23,7 +20,7 @@ import {
 import { useOrganizationRole } from '../hooks/use-organization-role';
 import { useHumanPermissions } from '../hooks/use-human-permissions';
 import { useUser } from '@clerk/react';
-import { CheckSquare, Shield, Check, X, AlertTriangle, Clock, History, AlertCircle, FileKey } from 'lucide-react';
+import { Shield, Check, X, AlertTriangle, Clock, History, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 
 function errorMessage(error: unknown, fallback: string) {
@@ -334,149 +331,6 @@ function DecisionCard({ decision, assignments, canDraft }: {
   );
 }
 
-function RequirementCard({ req, assignments, userId }: {
-  req: GovernanceRequirement;
-  assignments: GovernanceAssignment[];
-  userId?: string;
-}) {
-  const updateCoverage = usePutGovernanceRequirementsKeyCoverage();
-  const [isEditing, setIsEditing] = useState(false);
-  const [coverage, setCoverage] = useState(req.coverage);
-  const [coverageRelated, setCoverageRelated] = useState(req.relatedImplementation || '');
-  const [coverageEvidence, setCoverageEvidence] = useState(req.evidenceReference || '');
-  
-  const handleSave = () => {
-    updateCoverage.mutate({
-      key: req.key,
-      expectedVersion: req.version,
-      coverage,
-      relatedImplementation: coverageRelated,
-      evidenceReference: coverageEvidence
-    }, {
-      onSuccess: () => setIsEditing(false)
-    });
-  };
-
-  const isComplete = coverage.implemented && coverage.tested && coverage.configured && coverage.approvedForLive;
-  const permissions = useHumanPermissions();
-  const canAttest = permissions.data?.allows.includes('tool.policy.manage') === true && !permissions.isError;
-  const missingPrerequisites = [
-    !coverage.implemented && 'implemented',
-    !coverage.tested && 'tested',
-    !coverage.configured && 'configured',
-    !coverage.approvedForLive && 'approved for live',
-  ].filter(Boolean);
-
-  return (
-    <div className="flex items-start justify-between p-3 border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-soft)] transition-colors">
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-1">
-          <h4 className="font-semibold text-[var(--text-sm)] text-[var(--text-primary)]">{req.title}</h4>
-          {isComplete ? (
-             <Badge className="bg-[var(--status-green-bg)] text-[var(--status-green-fg)] shadow-none text-[10px] uppercase">Recorded coverage complete</Badge>
-          ) : (
-            <Badge className="bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] shadow-none text-[10px] uppercase">Incomplete Prerequisites</Badge>
-          )}
-        </div>
-        <div className="text-[var(--text-xs)] text-[var(--text-muted)] mb-2 flex items-center gap-2">
-          <span><span className="font-medium">Ref:</span> {req.sourceReference}</span>
-          <span>&bull;</span>
-          <span><span className="font-medium">Owner:</span> {req.reviewOwnerRole}</span>
-           <span>&bull;</span>
-           <span><span className="font-medium">Source coverage:</span> {req.coverageState}</span>
-        </div>
-
-        {isEditing ? (
-          <div className="bg-[var(--surface)] border border-[var(--border)] p-3 rounded-md mt-2 space-y-3">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              <label className="flex items-center gap-2 text-[var(--text-xs)] cursor-pointer">
-                <input type="checkbox" checked={coverage.implemented} onChange={e => setCoverage({...coverage, implemented: e.target.checked})} className="rounded text-[var(--primary)] focus:ring-[var(--primary)]" />
-                Implemented
-              </label>
-              <label className="flex items-center gap-2 text-[var(--text-xs)] cursor-pointer">
-                <input type="checkbox" checked={coverage.tested} onChange={e => setCoverage({...coverage, tested: e.target.checked})} className="rounded text-[var(--primary)] focus:ring-[var(--primary)]" />
-                Tested
-              </label>
-              <label className="flex items-center gap-2 text-[var(--text-xs)] cursor-pointer">
-                <input type="checkbox" checked={coverage.configured} onChange={e => setCoverage({...coverage, configured: e.target.checked})} className="rounded text-[var(--primary)] focus:ring-[var(--primary)]" />
-                Configured
-              </label>
-              <label className="flex items-center gap-2 text-[var(--text-xs)] cursor-pointer">
-                <input type="checkbox" checked={coverage.approvedForLive} onChange={e => setCoverage({...coverage, approvedForLive: e.target.checked})} className="rounded text-[var(--primary)] focus:ring-[var(--primary)]" />
-                Approved for Live
-              </label>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pt-3 border-t border-[var(--border)]">
-              <div>
-                 <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">Related Implementation (PR/Jira)</label>
-                 <input 
-                   type="text" 
-                   value={coverageRelated}
-                   onChange={e => setCoverageRelated(e.target.value)}
-                   className="w-full text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] border border-input outline-none focus:border-[var(--primary)] bg-background"
-                   placeholder="e.g. PR-1234 or JIRA-987"
-                 />
-              </div>
-              <div>
-                 <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">Evidence Reference (Doc/Link)</label>
-                 <input 
-                   type="text" 
-                   value={coverageEvidence}
-                   onChange={e => setCoverageEvidence(e.target.value)}
-                   className="w-full text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] border border-input outline-none focus:border-[var(--primary)] bg-background"
-                   placeholder="e.g. Security Signoff Doc"
-                 />
-              </div>
-            </div>
-            <div className="flex gap-2 justify-end mt-2">
-              <Button size="sm" variant="ghost" onClick={() => { setCoverage(req.coverage); setCoverageRelated(req.relatedImplementation || ''); setCoverageEvidence(req.evidenceReference || ''); setIsEditing(false); }}>Cancel</Button>
-              <Button size="sm" onClick={handleSave} disabled={updateCoverage.isPending} className="bg-[var(--primary)] text-white">Save Evidence</Button>
-            </div>
-            {updateCoverage.isError && (
-                <div className="text-[var(--status-red)] text-[10px] uppercase font-bold text-right mt-1">{errorMessage(updateCoverage.error, 'Could not update coverage.')}</div>
-            )}
-          </div>
-        ) : (
-          <div>
-            <div className="flex flex-wrap gap-4 mt-2">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold">
-                <span className={cn("w-2 h-2 rounded-full", coverage.implemented ? "bg-[var(--status-green)]" : "bg-[var(--border)]")}></span>
-                <span className={coverage.implemented ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}>Implemented</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold">
-                <span className={cn("w-2 h-2 rounded-full", coverage.tested ? "bg-[var(--status-green)]" : "bg-[var(--border)]")}></span>
-                <span className={coverage.tested ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}>Tested</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold">
-                <span className={cn("w-2 h-2 rounded-full", coverage.configured ? "bg-[var(--status-green)]" : "bg-[var(--border)]")}></span>
-                <span className={coverage.configured ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}>Configured</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold">
-                <span className={cn("w-2 h-2 rounded-full", coverage.approvedForLive ? "bg-[var(--status-green)]" : "bg-[var(--border)]")}></span>
-                <span className={coverage.approvedForLive ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}>Live Apprv.</span>
-              </div>
-            </div>
-            {(req.relatedImplementation || req.evidenceReference) && (
-              <div className="flex gap-4 mt-2 text-[var(--text-xs)] text-[var(--text-muted)]">
-                {req.relatedImplementation && <span><span className="font-semibold text-[var(--text-primary)]">Impl:</span> {req.relatedImplementation}</span>}
-                {req.evidenceReference && <span><span className="font-semibold text-[var(--text-primary)]">Evidence:</span> {req.evidenceReference}</span>}
-              </div>
-            )}
-             {!isComplete && <p className="mt-2 text-[var(--text-xs)] text-[var(--status-amber-fg)]">Incomplete launch prerequisites: {missingPrerequisites.join(', ')}.</p>}
-             {isComplete && <p className="mt-2 text-[var(--text-xs)] text-[var(--text-muted)]">These recorded coverage facts do not establish provider activation or source-recorded evidence for a live action.</p>}
-             {!canAttest && <p className="mt-2 text-[var(--text-xs)] text-[var(--text-muted)]">Current policy-management permission is required to attest this coverage.</p>}
-          </div>
-        )}
-      </div>
-       {!isEditing && canAttest && (
-        <Button variant="ghost" size="icon" onClick={() => setIsEditing(true)} className="text-[var(--text-muted)] shrink-0">
-          <CheckSquare className="w-4 h-4" />
-        </Button>
-      )}
-    </div>
-  );
-}
-
 function NewDecisionForm({ canDraft }: { canDraft: boolean }) {
   const createDecision = usePostGovernanceDecisions();
   const [open, setOpen] = useState(false);
@@ -611,12 +465,10 @@ function GovernanceAuditHistory() {
 }
 
 export function PolicyReviewPage() {
-  const [tab, setTab] = useState<'decisions' | 'requirements' | 'history'>('decisions');
-  const { user } = useUser();
+  const [tab, setTab] = useState<'decisions' | 'history'>('decisions');
   const { isHR } = useOrganizationRole();
   
   const { data: decisions, isLoading: isLoadingDecisions } = useGetGovernanceDecisions({ query: { refetchInterval: 30000, refetchIntervalInBackground: true } });
-  const { data: requirements, isLoading: isLoadingReqs } = useGetGovernanceRequirements({ query: { refetchInterval: 30000, refetchIntervalInBackground: true } });
   const permissions = useHumanPermissions();
   const assignments: GovernanceAssignment[] = [];
   const canDraft = isHR && permissions.data?.allows.includes('tool.policy.manage') === true && !permissions.isError;
@@ -625,7 +477,7 @@ export function PolicyReviewPage() {
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <PageHeader 
         title="Governance & Policy Review" 
-        subtitle="Manage platform decisions, view requirement coverage, and track pending policy reviews." 
+        subtitle="Manage platform decisions and track pending policy reviews."
       />
 
       <div className="grid grid-cols-2 gap-x-3 border-b border-[var(--border)] sm:flex sm:flex-wrap sm:gap-4" role="tablist" aria-label="Policy review sections">
@@ -636,14 +488,6 @@ export function PolicyReviewPage() {
           className={cn("min-w-0 pb-2 text-left text-[var(--text-sm)] font-semibold transition-colors border-b-2", tab === 'decisions' ? "border-[var(--primary)] text-[var(--primary)]" : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]")}
         >
           Policy Decisions
-        </button>
-        <button 
-          onClick={() => setTab('requirements')}
-          role="tab"
-          aria-selected={tab === 'requirements'}
-          className={cn("min-w-0 pb-2 text-left text-[var(--text-sm)] font-semibold transition-colors border-b-2", tab === 'requirements' ? "border-[var(--primary)] text-[var(--primary)]" : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]")}
-        >
-          Requirements Register
         </button>
         <button
           onClick={() => setTab('history')}
@@ -669,27 +513,6 @@ export function PolicyReviewPage() {
               </div>
             )}
           </div>
-        )}
-
-        {tab === 'requirements' && (
-          <Card>
-            <div className="p-[var(--space-md)] bg-[var(--surface-alt)] border-b border-[var(--border)]">
-              <h3 className="font-bold text-[var(--text-base)] text-[var(--text-primary)] flex items-center gap-2">
-                <FileKey className="w-4 h-4 text-[var(--primary)]" /> Requirements Register
-              </h3>
-              <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">
-                Track implementation and evidence for platform prerequisites. Independent coverage checks required.
-              </p>
-            </div>
-            <div className="divide-y divide-[var(--border)] bg-[var(--surface)]">
-              {isLoadingReqs ? <div className="p-4"><LoadingBlock>Loading requirements...</LoadingBlock></div> : (
-                 requirements?.map(r => <RequirementCard key={r.key} req={r} assignments={assignments || []} userId={user?.id} />)
-              )}
-              {!isLoadingReqs && !requirements?.length && (
-                <div className="p-8 text-center text-[var(--text-muted)]">No requirements registered.</div>
-              )}
-            </div>
-          </Card>
         )}
 
          {tab === 'history' && <GovernanceAuditHistory />}

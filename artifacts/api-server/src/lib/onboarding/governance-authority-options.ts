@@ -1,7 +1,7 @@
 import { clerkClient } from "@clerk/express";
 import { and, eq, isNull } from "drizzle-orm";
-import { db, organizationMembershipsTable, onbGovernanceDecisions, onbGovernanceRequirements } from "@workspace/db";
-import { GOVERNANCE_DECISIONS, GOVERNANCE_REQUIREMENTS } from "./governance-catalog";
+import { db, organizationMembershipsTable, onbGovernanceDecisions } from "@workspace/db";
+import { GOVERNANCE_DECISIONS } from "./governance-catalog";
 import { GovernancePermissionError, isVerifiedGovernanceOperator, type GovernanceActor } from "./governance";
 import { canonicalAuthorityRoleId } from "./workforce-policies";
 
@@ -19,7 +19,6 @@ export function authorityRoleOptions(extraRoles: string[] = []) {
   const roles = new Map<string, string>(POLICY_AUTHORITY_ROLES.map(({ id, label }) => [id, label]));
   for (const raw of [
     ...GOVERNANCE_DECISIONS.map((item) => item.accountableReviewRole),
-    ...GOVERNANCE_REQUIREMENTS.map((item) => item.reviewOwner),
     ...extraRoles,
   ]) {
     const id = canonicalAuthorityRoleId(raw);
@@ -65,13 +64,10 @@ export async function getGovernanceAuthorityOptions(
       throw new GovernanceDirectoryUnavailableError("Could not load client member names from the identity directory. Retry before appointing an authority.");
     }
   }
-  const [decisions, requirements] = await Promise.all([
-    db.select({ role: onbGovernanceDecisions.accountableRole }).from(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, organizationId)),
-    db.select({ role: onbGovernanceRequirements.reviewOwnerRole }).from(onbGovernanceRequirements).where(eq(onbGovernanceRequirements.organizationId, organizationId)),
-  ]);
+  const decisions = await db.select({ role: onbGovernanceDecisions.accountableRole }).from(onbGovernanceDecisions).where(eq(onbGovernanceDecisions.organizationId, organizationId));
   return {
     organizationId, canNominate, canVerify,
     members: members.map((member) => ({ ...member, name: labels.get(member.clerkUserId)?.name ?? null, email: labels.get(member.clerkUserId)?.email ?? null })),
-    roles: authorityRoleOptions([...decisions, ...requirements].map((item) => item.role)),
+    roles: authorityRoleOptions(decisions.map((item) => item.role)),
   };
 }

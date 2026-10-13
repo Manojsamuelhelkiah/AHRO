@@ -84,7 +84,7 @@ describe("governance runtime execution gates", () => {
     assert.equal(preservedProviderDeny.blockers[0]?.kind, "provider-policy-denied");
   });
 
-  test("keeps live approval, provider configuration, evidence, and provider denies separate", () => {
+  test("keeps provider configuration, source evidence, and provider denies independent of coverage", () => {
     const result = evaluateGovernanceExecutionGate({
       workflow: "it-identity-access",
       execution: executionContextForStoredCase({ isolatedSimulation: false }),
@@ -92,10 +92,9 @@ describe("governance runtime execution gates", () => {
         ...legalAccess,
         status: "approved",
       }],
-      requirements: [{
+      safeguards: [{
         key: "iam-production",
         impactedWorkflows: ["it-identity-access"],
-        coverage: { implemented: true, tested: true, configured: true, approvedForLive: false },
         providerConfigured: false,
         realEvidenceAvailable: false,
       }],
@@ -103,8 +102,6 @@ describe("governance runtime execution gates", () => {
     });
     assert.deepEqual(result.blockers.map((blocker) => blocker.kind), [
       "provider-policy-denied",
-      "requirement-not-approved-for-live",
-      "requirement-not-configured",
       "provider-not-configured",
       "evidence-not-available",
     ]);

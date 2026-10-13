@@ -6,13 +6,11 @@ import {
   onbGovernanceDecisions,
   onbGovernanceHistory,
   onbGovernanceReminders,
-  onbGovernanceRequirements,
   organizationMembershipsTable,
   type GovernanceDecisionStatus,
 } from "@workspace/db";
 import {
   GOVERNANCE_DECISIONS,
-  GOVERNANCE_REQUIREMENTS,
 } from "./governance-catalog";
 import { canonicalAuthorityRoleId } from "./workforce-policies";
 import { isPlatformSuperAdmin } from "../private-platform-admin";
@@ -178,27 +176,6 @@ function decisionPublic(
     approvedAt: row.approvedAt?.toISOString() ?? null,
     approvedRevision,
     createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
-function requirementPublic(row: typeof onbGovernanceRequirements.$inferSelect) {
-  return {
-    key: row.key,
-    title: row.title,
-    sourceReference: row.sourceReference,
-    reviewOwnerRole: row.reviewOwnerRole,
-    relatedDecisionKeys: row.relatedDecisionKeys,
-    coverageState: row.coverageState,
-    coverage: {
-      implemented: row.implemented,
-      tested: row.tested,
-      configured: row.configured,
-      approvedForLive: row.approvedForLive,
-    },
-    relatedImplementation: row.relatedImplementation,
-    evidenceReference: row.evidenceReference,
-    version: row.version,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -379,21 +356,6 @@ export async function ensureGovernanceSeeded(organizationId: string): Promise<vo
         organizationId, decisionKey: key, decisionRevision: 1, dueAt: reviewDueAt,
       }).onConflictDoNothing();
     }
-    }
-    for (const entry of GOVERNANCE_REQUIREMENTS) {
-    await tx.insert(onbGovernanceRequirements).values({
-      organizationId,
-      key: governanceKey(entry.id),
-      title: cleanText(entry.title, "catalog requirement title")!,
-      sourceReference: cleanText(entry.sourceRefs.join("; "), "catalog source reference")!,
-      reviewOwnerRole: governanceRole(entry.reviewOwner),
-      relatedDecisionKeys: [],
-      coverageState: entry.coverage,
-      // Existing source/test references are provenance, not a claim that a
-      // tenant has configured or approved the requirement for live use.
-      relatedImplementation: entry.implementationRefs.join("; ") || null,
-      evidenceReference: entry.evidenceRefs.join("; ") || null,
-    }).onConflictDoNothing();
     }
   });
 }
@@ -663,75 +625,6 @@ export async function getGovernanceDecisionHistory(organizationId: string, keyIn
       verificationReference: row.verificationReference, createdAt: row.createdAt.toISOString(),
     })),
   };
-}
-
-export async function listGovernanceRequirements(organizationId: string) {
-  await ensureGovernanceSeeded(organizationId);
-  const rows = await db.select().from(onbGovernanceRequirements).where(
-    eq(onbGovernanceRequirements.organizationId, organizationId),
-  ).orderBy(asc(onbGovernanceRequirements.key));
-  return rows.map(requirementPublic);
-}
-
-export async function updateGovernanceRequirementCoverage(
-  organizationId: string,
-  actor: GovernanceActor,
-  keyInput: unknown,
-  input: {
-    expectedVersion?: unknown; implemented?: unknown; tested?: unknown; configured?: unknown;
-    approvedForLive?: unknown; coverageState?: unknown; relatedImplementation?: unknown; evidenceReference?: unknown;
-  },
-) {
-  const key = governanceKey(keyInput);
-  const expectedVersion = Number(input.expectedVersion);
-  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
-    throw new GovernanceValidationError("expectedVersion must be a positive integer.");
-  }
-  const updated = await db.transaction(async (tx) => {
-    await assertGovernanceMutationAllowed(tx, organizationId);
-    const [requirement] = await tx.select().from(onbGovernanceRequirements).where(and(
-      eq(onbGovernanceRequirements.organizationId, organizationId), eq(onbGovernanceRequirements.key, key),
-    )).for("update");
-    if (!requirement) throw new GovernanceNotFoundError("Requirement not found.");
-    if (requirement.version !== expectedVersion) {
-      throw new GovernanceConflictError(`Requirement changed since version ${expectedVersion}; reload before retrying.`);
-    }
-    const authority = await activeAuthorityInTransaction(tx, organizationId, actor.userId, requirement.reviewOwnerRole, requirement.version + 1);
-    if (!authority) throw new GovernancePermissionError("Current policy-management permission is required to attest requirement coverage.");
-    const bool = (value: unknown, current: boolean, field: string) => {
-      if (value === undefined) return current;
-      if (typeof value !== "boolean") throw new GovernanceValidationError(`${field} must be boolean.`);
-      return value;
-    };
-    const coverageState = input.coverageState === undefined
-      ? requirement.coverageState
-      : input.coverageState === "gap" || input.coverageState === "partial" || input.coverageState === "covered"
-        ? input.coverageState
-        : (() => { throw new GovernanceValidationError("coverageState must be gap, partial, or covered."); })();
-    const [next] = await tx.update(onbGovernanceRequirements).set({
-      implemented: bool(input.implemented, requirement.implemented, "implemented"),
-      tested: bool(input.tested, requirement.tested, "tested"),
-      configured: bool(input.configured, requirement.configured, "configured"),
-      approvedForLive: bool(input.approvedForLive, requirement.approvedForLive, "approvedForLive"),
-      coverageState,
-      relatedImplementation: input.relatedImplementation === undefined
-        ? requirement.relatedImplementation : cleanText(input.relatedImplementation, "relatedImplementation", false),
-      evidenceReference: input.evidenceReference === undefined
-        ? requirement.evidenceReference : cleanText(input.evidenceReference, "evidenceReference", false),
-      version: requirement.version + 1, updatedByUserId: actor.userId, updatedAt: new Date(),
-    }).where(and(
-      eq(onbGovernanceRequirements.organizationId, organizationId),
-      eq(onbGovernanceRequirements.key, key),
-      eq(onbGovernanceRequirements.version, expectedVersion),
-    )).returning();
-    if (!next) throw new GovernanceConflictError("Requirement changed; reload before retrying.");
-    await tx.insert(onbGovernanceHistory).values({
-      organizationId, entityType: "requirement", entityKey: key, eventType: "coverage-updated",
-      actorUserId: actor.userId, detail: { version: next.version, authorityAssignmentId: authority.id },
-    });
-    return next;
-  });
-  return requirementPublic(updated);
 }
 
 export async function assignGovernanceAuthority(

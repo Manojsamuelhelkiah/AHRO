@@ -97,7 +97,9 @@ export const onbGovernanceAuthorityAssignments = pgTable("onb_governance_authori
   check("onb_governance_authority_verification_status_check", sql`${t.verificationStatus} in ('pending', 'verified')`),
 ]);
 
-/** Requirement coverage records retain four independent, non-implying states. */
+/** Retired register: retained historical coverage and source references only.
+ * No application seeding, management, or execution authority uses these rows.
+ */
 export const onbGovernanceRequirements = pgTable("onb_governance_requirements", {
   organizationId: text("organization_id").notNull().references(() => organizationsTable.id),
   key: text("key").notNull(),

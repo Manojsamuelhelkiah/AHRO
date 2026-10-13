@@ -7,7 +7,6 @@ import {
   onbGovernanceAuthorityAssignments,
   onbGovernanceDecisions,
   onbGovernanceDecisionReviews,
-  onbGovernanceRequirements,
   onbReadinessSlaAttestations,
   onbReadinessSlaCaseState,
   onbSystemChecks,
@@ -71,17 +70,9 @@ export type GovernanceDecisionRuntimeRevision = {
   reviewerAuthorityActive?: boolean;
 };
 
-export type GovernanceRequirementCoverage = {
-  implemented: boolean;
-  tested: boolean;
-  configured: boolean;
-  approvedForLive: boolean;
-};
-
-export type GovernanceRequirementRuntimeState = {
+export type GovernanceOperationalSafeguard = {
   key: string;
   impactedWorkflows: readonly string[];
-  coverage: GovernanceRequirementCoverage;
   /** A provider being selected or named is not proof it is configured. */
   providerConfigured?: boolean;
   /** Evidence is a distinct source-recorded fact, never inferred from config. */
@@ -97,8 +88,6 @@ export type GovernanceGateBlocker = {
     | "unapproved-sensitive-decision"
     | "reviewer-authority-inactive"
     | "case-governance-snapshot-missing"
-    | "requirement-not-approved-for-live"
-    | "requirement-not-configured"
     | "provider-not-configured"
     | "evidence-not-available"
     | "provider-policy-denied"
@@ -233,7 +222,7 @@ export function evaluateGovernanceExecutionGate(input: {
   workflow: string;
   execution: GovernanceExecutionContext;
   decisions: readonly GovernanceDecisionRuntimeRevision[];
-  requirements?: readonly GovernanceRequirementRuntimeState[];
+  safeguards?: readonly GovernanceOperationalSafeguard[];
   standardHireAccess?: StandardHireAccessFacts;
   /** Preserve an existing provider deny; governance can only add denials. */
   providerDispatchDenied?: boolean;
@@ -290,58 +279,28 @@ export function evaluateGovernanceExecutionGate(input: {
       });
     }
   }
-  for (const requirement of input.requirements ?? []) {
-    if (!requirement.key.trim() || !workflowMatches(requirement.impactedWorkflows, input.workflow)) {
+  for (const safeguard of input.safeguards ?? []) {
+    if (!safeguard.key.trim() || !workflowMatches(safeguard.impactedWorkflows, input.workflow)) {
       continue;
     }
-    // Each prerequisite remains independent. In particular, configured is not
-    // used as a proxy for evidence or live approval.
-    if (!requirement.coverage.approvedForLive) {
-      blockers.push({
-        kind: "requirement-not-approved-for-live",
-        key: requirement.key,
-        message: `${requirement.key} is not approved for live use.`,
-      });
-    }
-    // Tenant requirement configuration is not complete until both its
-    // governance coverage record and any required provider are configured.
-    // Keep the provider-specific blocker below as a distinct diagnostic.
-    if (!requirement.coverage.configured || requirement.providerConfigured === false) {
-      blockers.push({
-        kind: "requirement-not-configured",
-        key: requirement.key,
-        message: `${requirement.key} is not configured for this live action.`,
-      });
-    }
-    if (requirement.providerConfigured !== undefined && !requirement.providerConfigured) {
+    if (safeguard.providerConfigured === false) {
       blockers.push({
         kind: "provider-not-configured",
-        key: requirement.key,
-        message: `${requirement.key} has no configured provider for this live action.`,
+        key: safeguard.key,
+        message: `${safeguard.key} has no trusted configured provider for this live action.`,
       });
     }
-    if (requirement.realEvidenceAvailable !== undefined && !requirement.realEvidenceAvailable) {
+    if (safeguard.realEvidenceAvailable === false) {
       blockers.push({
         kind: "evidence-not-available",
-        key: requirement.key,
-        message: `${requirement.key} has no required source-recorded evidence for this live action.`,
+        key: safeguard.key,
+        message: `${safeguard.key} has no required source-recorded evidence for this live action.`,
       });
     }
   }
   blockers.push(...standardHireBlockers(input.workflow, input.standardHireAccess));
   return { allowed: blockers.length === 0, execution: input.execution.kind, blockers };
 }
-
-const GOVERNANCE_REQUIREMENT_WORKFLOWS: Record<string, readonly string[]> = {
-  "REQ-02": ["worker-record-documents"],
-  "REQ-03": ["background-verification"],
-  "REQ-05": ["it-identity-access"],
-  "REQ-06": ["it-identity-access", "assets-workplace"],
-  "REQ-07": ["payroll-benefits"],
-  "REQ-09": ["it-identity-access", "assets-workplace"],
-  "REQ-15": ["worker-record-documents", "background-verification"],
-  "APP-A-09": ["payroll-benefits"],
-};
 
 function sensitiveDecisionDomain(row: {
   key: string;
@@ -431,16 +390,11 @@ async function currentGovernanceRows(
   organizationId: string,
   tx: Pick<typeof db, "select"> = db,
 ) {
-  const [decisions, requirements] = await Promise.all([
-    tx.select().from(onbGovernanceDecisions).where(and(
+  const decisions = await tx.select().from(onbGovernanceDecisions).where(and(
       eq(onbGovernanceDecisions.organizationId, organizationId),
       eq(onbGovernanceDecisions.isCurrent, true),
-    )),
-    tx.select().from(onbGovernanceRequirements).where(
-      eq(onbGovernanceRequirements.organizationId, organizationId),
-    ),
-  ]);
-  return { decisions, requirements };
+    ));
+  return { decisions };
 }
 
 /**
@@ -483,7 +437,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
   });
   // A missing historical snapshot is never permission to issue a new live
   // effect. The case stays immutable, but current sensitive decisions and
-  // provider/requirement facts still gate this future dispatch.
+  // trusted provider and source evidence still gate this future dispatch.
   const adoptedSnapshot = governanceDecisionSnapshotFromPolicy(
     (input.caseRow.processPolicySnapshot ?? {}) as Record<string, unknown>,
   );
@@ -492,7 +446,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
     connector: input.connector!,
     operation: input.operation ?? "",
   });
-  const { decisions, requirements } = await currentGovernanceRows(organizationId);
+  const { decisions } = await currentGovernanceRows(organizationId);
   const providerKey = providerKeyForWorkflow(workflow);
   const [provider, checks, hrisState, activeAuthorities, allDecisionRevisions, decisionReviews, currentCase] = await Promise.all([
     providerKey
@@ -589,25 +543,16 @@ export async function evaluateStoredCaseGovernanceGate(input: {
         ),
       };
     }),
-    requirements: requirements
-      .filter((requirement) => (GOVERNANCE_REQUIREMENT_WORKFLOWS[requirement.key] ?? [])
-        .some((scope) => scope === workflow))
-      .map((requirement) => ({
-        key: requirement.key,
-        impactedWorkflows: GOVERNANCE_REQUIREMENT_WORKFLOWS[requirement.key] ?? [],
-        coverage: {
-          implemented: requirement.implemented,
-          tested: requirement.tested,
-          configured: requirement.configured,
-          approvedForLive: requirement.approvedForLive,
-        },
-        // A selected "connected" label is not provider configuration. A live
-        // source must have completed a server-recorded synchronization.
-        providerConfigured: providerKey ? hasTrustedProviderConfiguration(provider[0]) : undefined,
-        realEvidenceAvailable: workflow === "it-identity-access"
-          ? hasTrustedBgvClearanceEvidence(checks) || vaultBgvClear
-          : undefined,
-      })),
+    // Workflow-owned objective facts are evaluated even when no historical
+    // coverage record exists. No manual attestation can substitute for them.
+    safeguards: [{
+      key: workflow,
+      impactedWorkflows: [workflow],
+      providerConfigured: providerKey ? hasTrustedProviderConfiguration(provider[0]) : undefined,
+      realEvidenceAvailable: workflow === "it-identity-access"
+        ? hasTrustedBgvClearanceEvidence(checks) || vaultBgvClear
+        : undefined,
+    }],
     standardHireAccess: {
       standardNewHire: standardNewHireForStoredCase(input.caseRow),
       bgvClear: hasTrustedBgvClearanceEvidence(checks) || vaultBgvClear,

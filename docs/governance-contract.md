@@ -21,21 +21,12 @@ export interface GovernanceDecisionCatalogEntry {
   reviewDueDate: string | null;
   sourceRefs: readonly string[];
 }
-export interface GovernanceRequirementCatalogEntry {
-  id: string;
-  title: string;
-  sourceRefs: readonly string[];
-  reviewOwner: string;
-  implementationRefs: readonly string[];
-  evidenceRefs: readonly string[];
-}
 export const GOVERNANCE_DECISIONS: readonly GovernanceDecisionCatalogEntry[];
-export const GOVERNANCE_REQUIREMENTS: readonly GovernanceRequirementCatalogEntry[];
 ```
 
 Catalog entries are only seeded where a tenant has no record for that key.
 They must use explicit provisional status/defaults and must not overwrite a
-tenant's decisions, requirement coverage, or policies.
+tenant's decisions or policies. Requirements Register rows are never seeded.
 
 ## Resource shapes
 
@@ -46,11 +37,12 @@ approved | rejected | superseded`), `proposedValue`, `rationale`, `risk`,
 when later superseded), `createdAt`, and `updatedAt`. A decision update creates a new immutable
 revision; the former revision becomes `superseded`.
 
-`Requirement` has `key`, `title`, `sourceReference`, `reviewOwnerRole`,
-catalog-derived `coverageState` (`gap | partial | covered`), and `coverage`
-with independent booleans `implemented`, `tested`, `configured`,
-and `approvedForLive`, plus `relatedImplementation`, `evidenceReference`,
-and `updatedAt`. No coverage flag implies another.
+The Requirements Register is retired, not relocated. Existing coverage records,
+source references and immutable audit events are historical-only. No manual
+implementation, test, configuration or live-approval flag blocks or authorizes
+future effects. Trusted provider configuration and applicable source evidence
+are checked directly by workflow, independently of historical rows. Retirement
+does not continue held cases, approve work, replay effects or send messages.
 
 An owner/admin may nominate an assignment (`verificationStatus: "pending"`),
 but it is not authority. Verified authority grants have
@@ -66,8 +58,8 @@ but it is not authority. Verified authority grants have
 - `POST /governance/decisions/:key/revisions` (requires current revision)
 - `POST /governance/decisions/:key/reviews` (requires verified active
   authority for the accountable role; stale revision returns 409)
-- `GET /governance/requirements` → `{ requirements: Requirement[] }`
-- `PUT /governance/requirements/:key/coverage` → `{ requirement: Requirement }`
+- All methods below `/governance/requirements` return 410 without reading,
+  seeding or changing retained data; listing/editing contracts are retired.
 - `GET|POST /governance/assignments` → `{ assignments | assignment }`;
   `POST /governance/assignments/:id/verify` upgrades an owner nomination only
   when called by a server-verified operator;
@@ -87,8 +79,8 @@ Policy work requires a named active client member's live `tool.policy.manage`
 permission and an explicit current-revision review. Membership, mailbox
 personas and display-role labels are not permission grants or qualifications.
 
-Mutation concurrency tokens are `expectedRevision` for decision revisions and
-`expectedVersion` for requirement coverage. Reviews use `outcome: "approved"
+Mutation concurrency tokens are `expectedRevision` for decision revisions.
+Reviews use `outcome: "approved"
 | "rejected"` and require a non-empty `verificationReference`. The UI must not
 substitute `approve/reject`, a browser-selected authority, or a local role for
 these values.
@@ -105,9 +97,9 @@ Provider/runtime integrations must also follow
 `docs/governance-dispatch-contract.md`; active or ambiguous durable dispatches
 block governance mutation until verified reconciliation.
 
-Consumers should display statuses and due dates as review work, show affected
-workflows, and treat `approvedForLive` as separate from implementation,
-testing, configuration, provider activation, and evidence.
+Consumers should display statuses and due dates as review work and show affected
+workflows. Provider activation and source evidence remain independent of policy
+approval; historical coverage flags establish none of these facts.
 
 ## Case adoption, impact, and rebase
 

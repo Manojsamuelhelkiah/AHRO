@@ -36,7 +36,7 @@ cannot become the candidate by knowing an ID or matching an email.
 
 HRO owners can turn consumption on/off in Settings. The default is **off**.
 Owners are not thereby authorized to read BGV/medical/identity/payroll records,
-approve governance requirements, issue verification results, or dispatch
+make policy decisions, issue verification results, or dispatch
 providers. Disabling consumption invalidates active reuse and closes old
 requests; re-enabling does not revive old grants. Employee accounts remain.
 
