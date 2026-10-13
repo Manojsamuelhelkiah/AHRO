@@ -27,6 +27,7 @@ import {
 } from './case-presentation';
 
 type OnbCase = ApiOnbCase;
+import { ONBOARDING_STAGE_NAMES, lifecycleStageText, stageStatusText } from '../../lib/lifecycle-stage-presentation';
 
 /* ------------------------- HRO case model mapping ------------------------- */
 /* Existing records are onboarding cases; map them into the neutral HRO case
@@ -122,15 +123,15 @@ function CaseTypeBadge({ type }: { type: string }) {
   );
 }
 
-function CompactGates({ gateways }: { gateways?: { a?: any; b?: any; c?: any } }) {
+export function CompactGates({ gateways }: { gateways?: { a?: any; b?: any; c?: any } }) {
   if (!gateways) return null;
   const gates = [
-    { key: 'A', g: gateways.a },
-    { key: 'B', g: gateways.b },
-    { key: 'C', g: gateways.c },
+    { key: 'a' as const, g: gateways.a },
+    { key: 'b' as const, g: gateways.b },
+    { key: 'c' as const, g: gateways.c },
   ];
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex flex-col items-start gap-1 min-w-0">
       {gates.map(({ key, g }) => {
         if (!g) return null;
         let bg = 'var(--surface-alt)';
@@ -141,12 +142,9 @@ function CompactGates({ gateways }: { gateways?: { a?: any; b?: any; c?: any } }
         else if (g.status === 'human-review') { bg = 'var(--status-amber-bg)'; fg = 'var(--status-amber-fg)'; Icon = Clock; }
         else if (g.status === 'pending') { bg = 'var(--primary-light)'; fg = 'var(--primary)'; Icon = Clock; }
         return (
-          <div key={key} title={`${key}: ${g.label} - ${g.status}`} className="flex items-center justify-center rounded-sm relative" style={{ width: '22px', height: '22px', backgroundColor: bg, color: fg, border: '1px solid var(--border)' }}>
-            <span className="sr-only">Gateway {key}: {g.label} - {g.status}</span>
-            <span className="absolute -top-1.5 -right-1.5 rounded-full bg-[var(--surface)]" style={{ padding: '1px', border: '1px solid var(--border)' }}>
-              {Icon && <Icon className="w-2 h-2" style={{ color: fg }} />}
-            </span>
-            <span className="font-mono" style={{ fontSize: '10px', fontWeight: 700 }}>{key}</span>
+          <div key={key} title={`${ONBOARDING_STAGE_NAMES[key]}: ${stageStatusText(g.status)} — ${lifecycleStageText(g.reason || g.label)}`} className="flex items-start gap-1 rounded px-1.5 py-1 text-[10px] break-words" style={{ backgroundColor: bg, color: fg, border: '1px solid var(--border)' }}>
+            {Icon && <Icon aria-hidden className="w-3 h-3 shrink-0" />}
+            <span>{ONBOARDING_STAGE_NAMES[key]}: <strong>{stageStatusText(g.status)}</strong></span>
           </div>
         );
       })}
@@ -545,10 +543,10 @@ export function CasesPage() {
           <table className="w-full text-left" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
-                {['Case / Program', 'Worker / Population', 'Work Item Type', 'Effective Date', 'Gates', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
+                {['Case / Program', 'Worker / Population', 'Work Item Type', 'Effective Date', 'Business Stages', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
                   <th
                     key={h}
-                    className={cn((h === 'Effective Date' || h === 'Owner / Agent' || h === 'Gates') && 'hidden lg:table-cell')}
+                    className={cn((h === 'Effective Date' || h === 'Owner / Agent' || h === 'Business Stages') && 'hidden lg:table-cell')}
                     style={{ padding: '10px var(--space-lg)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: i === 7 ? 'right' : 'left' }}
                   >
                     {h}

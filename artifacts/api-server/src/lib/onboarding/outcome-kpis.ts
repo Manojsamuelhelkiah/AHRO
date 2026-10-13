@@ -590,7 +590,7 @@ export function calculateOutcomeKpis(
     .filter((value): value is number => value !== null && Number.isFinite(value));
 
   const cycleNote =
-    `${AGENT_FILTER_NOTE} Average is measured only from HR-recorded offer acceptance and a Gate C completion event whose current final approval is approved and case lifecycle is complete; missing, negative, future, simulation, or inconsistent/reopened evidence is conservatively unknown.`;
+    `${AGENT_FILTER_NOTE} Average is measured only from HR-recorded offer acceptance and a Day-1 Readiness completion event whose current final approval is approved and case lifecycle is complete; missing, negative, future, simulation, or inconsistent/reopened evidence is conservatively unknown.`;
   const bgvNote =
     `${AGENT_FILTER_NOTE} Average is initiation tracking to receipt of a verified vendor result, not provider execution duration. Only non-simulated email-source timestamps are verifiable here; legacy push/poll simulation and missing provider timestamps are excluded, not treated as target success.`;
   const enpsValues = surveys === undefined

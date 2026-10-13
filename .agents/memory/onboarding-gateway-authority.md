@@ -14,3 +14,9 @@ Final Day-1 confirmation authorizes the evidence HR reviewed, not any future evi
 **Why:** Retrying a previously approved final review after an unsafe-to-safe transition can otherwise finish onboarding without a fresh human decision, especially when both changes occur between watcher ticks.
 
 **How to apply:** Preserve an audit of the old decision, require fresh HR confirmation after invalidation, and derive visible readiness from current mandatory requirements and live evidence. Optional requirements remain non-blocking.
+
+Business-stage terminology is a presentation boundary, not a rename of operational authority or recorded evidence. Use Offer-Acceptance Package, Background Checks, and Day-1 Readiness in current product copy; separation stages retain their own business purpose.
+
+**Why:** Approval rules and historical completion event titles participate in matching and outcome evidence. Renaming those identifiers during a copy change could silently break authorization or invalidate historical reporting.
+
+**How to apply:** Translate only at display and new-message composition boundaries. Keep rule references, idempotency keys, matching predicates, stored source documents, already-sent payloads, and historical records unchanged.

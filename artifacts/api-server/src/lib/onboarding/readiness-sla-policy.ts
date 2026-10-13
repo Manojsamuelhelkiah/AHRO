@@ -562,7 +562,7 @@ export async function getReadinessSlaView(
       history: [],
       reason: c.lifecycleStage === "complete"
         ? "Historical completed case is grandfathered and was not replay-enrolled"
-        : "Case has not been enrolled yet; enrollment is required before Gate C uses this score",
+        : "Case has not been enrolled yet; enrollment is required before Day-1 Readiness uses this score",
     };
   }
   const streams = await resolveStreamResults(organizationId, c, enrollment.snapshot);
@@ -758,7 +758,7 @@ export async function readinessSlaGateForCase(
       history: [],
       reason: c.lifecycleStage === "complete"
         ? "Historical completed case is grandfathered"
-        : "Readiness SLA enrollment is missing; Gate C fails closed",
+        : "Readiness SLA enrollment is missing; Day-1 Readiness fails closed",
     };
   }
   const [snapshot] = await tx.select().from(onbReadinessSlaSnapshots).where(and(
@@ -766,7 +766,7 @@ export async function readinessSlaGateForCase(
     eq(onbReadinessSlaSnapshots.caseId, caseId),
     eq(onbReadinessSlaSnapshots.snapshotVersion, state.snapshotVersion),
   ));
-  if (!snapshot) throw new Error("Readiness SLA snapshot missing for Gate C");
+  if (!snapshot) throw new Error("Readiness SLA snapshot missing for Day-1 Readiness");
   const streams = await resolveStreamResults(organizationId, c, snapshot, tx);
   const score = calculateReadinessSlaScore(streams);
   return {
@@ -852,7 +852,7 @@ export async function rebaseReadinessSlaCase(input: {
       tx,
       input.organizationId,
       input.caseId,
-      `Gate C reopened because the readiness policy snapshot was rebased: ${reason}`,
+      `Day-1 Readiness reopened because the readiness policy snapshot was rebased: ${reason}`,
       input.changedBy,
     );
     await tx.insert(onbEvents).values({
@@ -993,7 +993,7 @@ export async function recordReadinessSlaAttestation(input: {
         tx,
         input.organizationId,
         input.caseId,
-        "Gate C reopened because HRIS readiness regressed; fresh readiness review is required.",
+        "Day-1 Readiness reopened because HRIS readiness regressed; fresh readiness review is required.",
         input.attestedBy,
       );
     }

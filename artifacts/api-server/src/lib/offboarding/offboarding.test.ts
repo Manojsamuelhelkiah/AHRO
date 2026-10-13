@@ -44,7 +44,7 @@ test("calendar and all five paths compile without invented closure conditions", 
   assert.ok(client.find(t => t.id === "client-continuity")?.prerequisites.includes("client-communication"));
   assert.ok(client.some(t => t.id === "manager-reassignment"));
   assert.ok(client.every(t => !["12", "C"].includes(t.activity)));
-  assert.throws(() => compilePlan(base, { ...s, gatewayA: "restricted" }, policy), /Gateway A|confirm/);
+  assert.throws(() => compilePlan(base, { ...s, gatewayA: "restricted" }, policy), /Separation Screening|confirm/);
   assert.equal(s.closureBlocker, "section-4.6-pending");
 });
 
@@ -92,7 +92,7 @@ test("dedicated lifecycle reaches 01–11, fences conflicts, source intake, priv
     assert.equal(conflict[0].caseId, id); assert.equal(conflict[0].conflict, true);
     await act(id, "screen", { sensitiveTriggers: [] });
     assert.equal((await row(id)).state.gatewayA, "restricted");
-    await assert.rejects(act(id, "classify", { confirmed: true, classification: "cannot bypass", urgency: "Standard", flags }), /Gateway A/);
+    await assert.rejects(act(id, "classify", { confirmed: true, classification: "cannot bypass", urgency: "Standard", flags }), /Separation Screening/);
     await act(id, "hrbp-reconcile", { facts: same.facts });
     const p = await draft();
     await plan(id, p, { flags: { ...flags, clientFacing: true, peopleManager: true } });

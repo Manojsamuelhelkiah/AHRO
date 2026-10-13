@@ -60,7 +60,7 @@ export function ConnectedReadinessSla({ caseId }: { caseId: number }) {
         <div>
           <h2 className="text-[var(--text-lg)] font-bold text-[var(--text-primary)]">Readiness SLA</h2>
           <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">
-            Tracking critical streams against target deadlines. Score must be ≥ {data.thresholds?.amberMinimum ?? 80}% to clear Gateway C.
+            Tracking critical streams against target deadlines. The ≥ {data.thresholds?.amberMinimum ?? 80}% score threshold is only one requirement for Day-1 Readiness. Current mandatory evidence and a fresh authorized HR final review are still required; a score alone never authorizes completion.
           </p>
         </div>
         <SlaScoreBadge score={data.score} thresholds={data.thresholds || { green: 100, amberMinimum: 80 }} />

@@ -392,7 +392,7 @@ export function analyzeCohortLearning(input: {
       },
       cohortDefinition: `Same-tenant cases created in the ${input.windowDays}-day window for ${group.target.name} across profile versions, retaining the identical historical executable learning policy.`,
       compatibilityDefinition: `Same tenant, same canonical profile ID (${group.target.profileId}), and an identical parsed manager-led learning policy. Profile versions are wider context only and are not treated as interchangeable for publication.`,
-      outcomeDefinition: "Days from case creation to a dated, human-recorded Gate C Day-1 readiness confirmation.",
+      outcomeDefinition: "Days from case creation to a dated, human-recorded Day-1 Readiness confirmation.",
       window: base,
       sample: {
         candidateCases: rows.length,
@@ -414,8 +414,8 @@ export function analyzeCohortLearning(input: {
       },
       missingness: [
         "Demo and simulation cases are excluded from outcomes.",
-        "Cases without a final, dated HR Gate C confirmation are missing outcome evidence.",
-        "A Gate C confirmation invalidated by a later live-evidence reopen is missing until a fresh later human confirmation is recorded.",
+        "Cases without a final, dated HR Day-1 Readiness confirmation are missing outcome evidence.",
+        "A Day-1 Readiness confirmation invalidated by a later live-evidence reopen is missing until a fresh later human confirmation is recorded.",
       ],
       uncertainty: "Descriptive wider-scope evidence only; it is not causal, does not establish confidence for this profile version, and cannot be published or adopted.",
     }];
@@ -443,8 +443,8 @@ export function analyzeCohortLearning(input: {
     const policy = group.policy;
     const evidenceCore = {
       methodologyVersion: "learning-cohort-v1" as const,
-      cohortDefinition: `Cases created in the ${input.windowDays}-day window, matched to ${target.name} v${target.version}, with an explicit historical learning policy and a final HR Gate C outcome.`,
-      outcomeDefinition: "Days from case creation to a dated, human-recorded Gate C Day-1 readiness confirmation.",
+      cohortDefinition: `Cases created in the ${input.windowDays}-day window, matched to ${target.name} v${target.version}, with an explicit historical learning policy and a final HR Day-1 Readiness outcome.`,
+      outcomeDefinition: "Days from case creation to a dated, human-recorded Day-1 Readiness confirmation.",
       window: base,
       sample: {
         candidateCases: cohortCandidateCases,
@@ -459,8 +459,8 @@ export function analyzeCohortLearning(input: {
         caseReferences: rows.map(({ c }) => c.id).sort((a, b) => a - b),
       },
       missingness: [
-        "Cases without a final, dated HR Gate C confirmation are excluded from the outcome denominator.",
-        "A Gate C confirmation invalidated by a later live-evidence reopen is missing until a fresh later human confirmation is recorded.",
+        "Cases without a final, dated HR Day-1 Readiness confirmation are excluded from the outcome denominator.",
+        "A Day-1 Readiness confirmation invalidated by a later live-evidence reopen is missing until a fresh later human confirmation is recorded.",
         "Cases with a learning policy outside the executable workforce-step runtime contract are not proposed.",
       ],
       uncertainty: "Descriptive historical association only; this non-randomized cohort does not establish that the learning policy caused the observed outcome.",

@@ -112,7 +112,7 @@ export function ContactDialog({ caseId, open, onOpenChange }: { caseId: number, 
               </div>
               <div>
                 <span className="text-[var(--text-muted)] font-bold text-[10px] uppercase tracking-wider block mb-1">Status</span>
-                <div className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Gate A: {data.gate?.gateAComplete ? 'Complete' : 'Pending'}</div>
+                <div className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Offer-Acceptance Package: {data.gate?.gateAComplete ? 'Complete' : 'Pending'}</div>
                 {data.recentContact?.present && (
                   <div className="flex items-center gap-1.5 mt-1 text-[var(--status-amber)]">
                     <Clock className="w-3.5 h-3.5" /> Recently contacted ({data.recentContact.channel})

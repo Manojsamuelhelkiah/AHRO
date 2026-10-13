@@ -383,15 +383,15 @@ export const GOVERNANCE_DECISIONS: readonly GovernanceDecision[] = [
     "Preserve Documentation 20%, BGV 25%, HRIS 15%, IT & assets 20%, Payroll 20%; Green 100%, Amber 80–99%, Red below 80%.",
     "The working policy baseline states these readiness weights and tiers, which match the current scoring implementation.",
     ["A score can be mistaken for safety, legal, provider, or approval clearance"],
-    "HR Process Owner", ["readiness SLA", "Gateway C", "alerts"],
+    "HR Process Owner", ["readiness SLA", "Day-1 Readiness", "alerts"],
     ["BRD §4.6", "BRD §8, REQ-08 and REQ-13"], "development-and-simulation",
   ),
   provisionalDecision(
     "GD-03", "Standard Day-1 evidence and final approval",
     "Require complete mandatory evidence and a fresh HR final approval before a real Day-1 release.",
-    "The source document requires mandatory workstreams and BGV at Gateway C; current approval versioning already reopens changed evidence.",
+    "The source document requires mandatory workstreams and BGV at Day-1 Readiness; current approval versioning already reopens changed evidence.",
     ["Evidence or approval may be stale", "a readiness score alone could be treated as release authority"],
-    "HR Process Owner", ["Gateway C", "access release", "asset release", "Day-1 review"],
+    "HR Process Owner", ["Day-1 Readiness", "access release", "asset release", "Day-1 review"],
     ["BRD §8, REQ-09", "BRD §10, BR-04 and BR-07"], "affected-live-actions-blocked",
   ),
   provisionalDecision(
@@ -399,7 +399,7 @@ export const GOVERNANCE_DECISIONS: readonly GovernanceDecision[] = [
     "Disable conditional-join exceptions until an approved tenant policy defines them.",
     "The source document permits a conditional join only when approved by policy; none is supplied by the working policy baseline.",
     ["Uncleared workers receiving real access or assets", "unreviewed employment or safety decisions"],
-    "HR Compliance", ["BGV", "access provisioning", "asset release", "Gateway C"],
+    "HR Compliance", ["BGV", "access provisioning", "asset release", "Day-1 Readiness"],
     ["BRD §4.4, BGV delayed exception", "BRD §10, BR-01"], "affected-live-actions-blocked",
   ),
   provisionalDecision(
@@ -407,7 +407,7 @@ export const GOVERNANCE_DECISIONS: readonly GovernanceDecision[] = [
     "For standard new hires, require BGV clearance and an active HRIS record before real access or asset release.",
     "This source-document control preserves the current BGV/HRIS readiness separation.",
     ["Provider status may be simulated or stale", "HRIS may not be an active integration"],
-    "HR Process Owner", ["BGV", "HRIS", "IT/asset provisioning", "Gateway C"],
+    "HR Process Owner", ["BGV", "HRIS", "IT/asset provisioning", "Day-1 Readiness"],
     ["BRD §10, BR-01", "BRD §8, REQ-05, REQ-06, and REQ-09"], "affected-live-actions-blocked",
   ),
   provisionalDecision(
@@ -463,7 +463,7 @@ export const GOVERNANCE_DECISIONS: readonly GovernanceDecision[] = [
     "Do not silently rewrite active cases. Approved changes apply prospectively; a rebase requires version checks, locks, impact visibility, and fresh approval when the affected gate requires it.",
     "Existing readiness policy and approval code already establishes snapshots, optimistic version checks, case locks, and re-approval on changed evidence.",
     ["Historical policy replay", "stale approvals", "racing an external provider dispatch"],
-    "HR Process Owner", ["policy publication", "case rebase", "Gateway C", "provider dispatch"],
+    "HR Process Owner", ["policy publication", "case rebase", "Day-1 Readiness", "provider dispatch"],
     ["BRD §10, BR-02, BR-06, and BR-07", "Product governance requirement: revision impact assessment and controlled activation"], "affected-live-actions-blocked",
   ),
 ] as const;

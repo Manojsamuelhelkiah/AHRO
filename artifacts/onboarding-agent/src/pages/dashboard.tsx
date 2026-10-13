@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { lifecycleStageText } from '../lib/lifecycle-stage-presentation';
 import {
   useGetOnboardingDashboard,
   useListOnboardingCases,
@@ -163,7 +164,7 @@ export function DashboardPage() {
             icon={AlertOctagon}
             tone={metrics.blocked.length > 0 ? 'red' : 'green'}
           />
-          <StageSummaryCard loading={casesQ.isLoading} title="Offer Intake" metrics={stageMetrics.a} />
+          <StageSummaryCard loading={casesQ.isLoading} title="Offer-Acceptance Package" metrics={stageMetrics.a} />
           <StageSummaryCard loading={casesQ.isLoading} title="Background Checks" metrics={stageMetrics.b} />
           <StageSummaryCard loading={casesQ.isLoading} title="Day-1 Readiness" metrics={stageMetrics.c} />
         </div>
@@ -492,8 +493,8 @@ function ActivityRow({ event, last }: { event: OnbEvent; last: boolean }) {
     <div className="flex items-start gap-3" style={{ padding: '10px var(--space-lg)', borderBottom: last ? 'none' : '1px solid var(--border)' }}>
       <div className="shrink-0 mt-0.5"><EngineBadge engine={event.engine} /></div>
       <div className="min-w-0 flex-1">
-        <p className="truncate" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{event.title}</p>
-        <p className="line-clamp-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>{event.detail}</p>
+        <p className="truncate" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{lifecycleStageText(event.title)}</p>
+        <p className="line-clamp-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>{lifecycleStageText(event.detail)}</p>
         <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '3px' }}>
           {domain} · {event.agent} · {ago(event.createdAt)} ago
         </p>
@@ -506,7 +507,7 @@ function ActivityRow({ event, last }: { event: OnbEvent; last: boolean }) {
   return (
     <li>
       {event.caseId != null ? (
-        <Link href={`/cases/${event.caseId}`} className="block transition-colors hover:bg-[var(--surface-alt)]" aria-label={`Open case ${event.caseId}: ${event.title}`}>
+        <Link href={`/cases/${event.caseId}`} className="block transition-colors hover:bg-[var(--surface-alt)]" aria-label={`Open case ${event.caseId}: ${lifecycleStageText(event.title)}`}>
           {inner}
         </Link>
       ) : inner}
@@ -530,7 +531,7 @@ function AttentionRow({ approval, last }: { approval: OnbApproval; last: boolean
             </p>
             {isSla && <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-muted)] border border-[var(--border)] px-1.5 py-0.5 rounded bg-[var(--surface)] shrink-0">SLA Alert</span>}
           </div>
-          <p className="line-clamp-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>{approval.recommendation}</p>
+          <p className="line-clamp-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>{lifecycleStageText(approval.recommendation)}</p>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '3px' }}>
             Onboarding · <span style={{ color: pColor, fontWeight: 600 }}>{priority}</span> · {ago(approval.createdAt)}
           </p>

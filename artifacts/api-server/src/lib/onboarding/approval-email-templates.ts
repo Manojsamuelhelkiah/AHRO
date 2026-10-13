@@ -1,4 +1,5 @@
 import { approvalRef, approvalVersion } from "./approval-version";
+import { lifecycleStageText } from "./lifecycle-stage-presentation";
 import {
   formatEmailIdentityLines,
   identityForRole,
@@ -83,8 +84,8 @@ export function composeApprovalRequestEmail(
       "",
       ...identity,
       "",
-      `Recommendation: ${input.recommendation}`,
-      `Rationale: ${input.rationale}`,
+      `Recommendation: ${lifecycleStageText(input.recommendation)}`,
+      `Rationale: ${lifecycleStageText(input.rationale)}`,
       "",
        input.emailResponderAuthorized
           ? `Email decisions require a valid DNS-backed DKIM signature from the exact governance-authorized Clerk-verified member address. The signature must cover From, Subject, and the entire body (no partial-body signature); include ${reference} and "approve" or "reject" in the body. A stale, revoked, expired, unscoped, non-member, or SoD-conflicted sender is not applied.`
@@ -137,8 +138,8 @@ export function composeApprovalDecisionEmail(
       "",
       ...identity,
       "",
-      "This reports the approval record only. An approval does not by itself claim that a gateway was released.",
-      "Any Gate A or Gate C release is reported separately after current-evidence reconciliation.",
+      "This reports the approval record only. An approval does not by itself claim that a stage was released.",
+      "Any Offer-Acceptance Package or Day-1 Readiness release is reported separately after current-evidence reconciliation.",
     ].join("\n"),
   };
 }

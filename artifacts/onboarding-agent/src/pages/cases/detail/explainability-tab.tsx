@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
+import { lifecycleStageText } from '../../../lib/lifecycle-stage-presentation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { customFetch, getPinnedOrganizationIdForPage } from '@workspace/api-client-react';
 import { cn, Button } from '@/components/ui-shared';
@@ -298,7 +299,7 @@ export function ExplainabilityTab({ caseId, userId }: { caseId: number, userId?:
                     <div className="space-y-3 text-[var(--text-primary)] leading-relaxed">
                       {msg.explanation.paragraphs.map((p, i) => (
                         <p key={i}>
-                          {p.text}
+                          {lifecycleStageText(p.text)}
                           {p.kind === 'not-recorded' && (
                             <span className="inline-flex items-center gap-1 ml-2 text-[10px] uppercase font-bold tracking-wider text-[var(--status-amber)] bg-[var(--status-amber-bg)] px-1.5 py-0.5 rounded">
                               Not recorded
@@ -334,7 +335,7 @@ export function ExplainabilityTab({ caseId, userId }: { caseId: number, userId?:
                                 <div className="font-mono text-[var(--primary)] font-bold mt-0.5 shrink-0">[{i + 1}]</div>
                                 <div className="min-w-0">
                                   <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                                    <span className="font-bold text-[var(--text-primary)]">{src.title}</span>
+                                     <span className="font-bold text-[var(--text-primary)]">{lifecycleStageText(src.title)}</span>
                                     <span className="px-1.5 py-0.5 bg-[var(--surface)] rounded border border-[var(--border)] text-[9px] uppercase tracking-wider text-[var(--text-muted)] font-mono">{src.kind}</span>
                                     {src.occurredAt && <span className="text-[10px] text-[var(--text-muted)]">{new Date(src.occurredAt).toLocaleString()}</span>}
                                   </div>
@@ -360,7 +361,7 @@ export function ExplainabilityTab({ caseId, userId }: { caseId: number, userId?:
                           </summary>
                           <div className="absolute bottom-full left-0 mb-2 w-64 bg-[var(--surface)] border border-[var(--border)] shadow-lg rounded-[var(--radius-md)] p-3 hidden group-open:block z-10">
                             <ul className="list-disc pl-4 space-y-1 text-[var(--text-secondary)]">
-                              {msg.explanation.limitations.map((lim, i) => <li key={i}>{lim}</li>)}
+                               {msg.explanation.limitations.map((lim, i) => <li key={i}>{lifecycleStageText(lim)}</li>)}
                             </ul>
                           </div>
                         </details>

@@ -52,7 +52,7 @@ export function endOfLwd(day: string, clock: string, timeZone: string): string {
 const task = (id: string, activity: string, label: string, stream: string, scope: string, prerequisites: string[] = []): SeparationTask =>
   ({ id, activity, label, stream, scope, prerequisites, owner: null, dueAt: null, notBeforeAt: null, status: "pending", evidence: null, details: {} });
 export function compilePlan(f: SeparationFacts, s: SeparationState, p: SeparationPolicy): SeparationTask[] {
-  if (s.gatewayA !== "clear" || !s.flags || !s.urgency || !s.classification) throw new SeparationError("Gateway A and confirmed classification are required.");
+  if (s.gatewayA !== "clear" || !s.flags || !s.urgency || !s.classification) throw new SeparationError("Separation Screening and confirmed classification are required.");
   if (p.country !== f.country || p.role !== f.role || p.workerCategory !== f.workerCategory || p.timeZone !== f.timeZone) throw new SeparationError("Approved country/role/category/time-zone policy does not match.");
   const immediate = s.flags.privileged || s.flags.highRisk || s.urgency === "High";
   const tasks = [

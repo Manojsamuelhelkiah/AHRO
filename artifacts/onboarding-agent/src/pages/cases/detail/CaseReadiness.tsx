@@ -450,7 +450,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
                 <div className="p-3 rounded-[var(--radius-md)] bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border border-[var(--status-amber)]/30 text-[var(--text-sm)]">
                   <AlertTriangle className="w-4 h-4 mb-1" />
                   <p className="font-bold">Legacy governance adoption</p>
-                  <p className="mt-1">No valid adopted snapshot exists. This rebase will create the explicit version-0 adoption boundary and reopen Gate C for fresh final approval.</p>
+                  <p className="mt-1">No valid adopted snapshot exists. This rebase will create the explicit version-0 adoption boundary and reopen Day-1 Readiness for fresh final approval.</p>
                 </div>
               )}
               {governanceImpact?.impacts.length ? (

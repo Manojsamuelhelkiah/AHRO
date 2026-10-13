@@ -111,7 +111,7 @@ export async function separationDetail(org: string, actor: string, id: number) {
         ...(!t.owner ? ["Verified accountable owner required"] : []),
         ...t.prerequisites.filter(p => row.state.tasks.find(x => x.id === p)?.status !== "verified").map(p => `Prerequisite: ${p}`),
         ...(t.status === "verified" && !fresh ? ["Evidence or authority is stale"] : []),
-        ...(!standardCurrent && !special ? ["Current approved policy, classification and unpaused Gateway A required"] : []),
+        ...(!standardCurrent && !special ? ["Current approved policy, classification and unpaused Separation Screening required"] : []),
       ] });
     }
     const [adopted] = row.state.policyId ? await tx.select().from(offbPolicies).where(and(eq(offbPolicies.organizationId, org), eq(offbPolicies.id, row.state.policyId), eq(offbPolicies.version, row.state.policyVersion!))) : [];
@@ -135,7 +135,7 @@ async function planCurrent(tx: Tx, row: SeparationCase) {
   const restrictedManual = s.gatewayA === "restricted" && s.restrictedManual === true;
   if (!["active", "restricted", "closure-preparation"].includes(row.status) || (s.gatewayA !== "clear" && !restrictedManual) || s.conflict || s.pauseReason) throw new SeparationError("Work is held, sensitive without a reviewed human-led plan, paused, cancelled or obsolete.");
   if (restrictedManual && (!await currentReceipt(tx, row.organizationId, s.hrBpDisposition, row.facts.country, row.id) || !await freshTask(tx, row, "ethics-review") || !await freshTask(tx, row, "legal-review"))) throw new SeparationError("Restricted human-led work requires current HRBP, Ethics and Legal review; standard automation remains prohibited.");
-  if (!await currentReceipt(tx, row.organizationId, s.screening, row.facts.country, row.id) || !await currentReceipt(tx, row.organizationId, s.policyReceipt, row.facts.country)) throw new SeparationError("Gateway A or approved policy authority is no longer current.");
+  if (!await currentReceipt(tx, row.organizationId, s.screening, row.facts.country, row.id) || !await currentReceipt(tx, row.organizationId, s.policyReceipt, row.facts.country)) throw new SeparationError("Separation Screening or approved policy authority is no longer current.");
   if (!await currentReceipt(tx, row.organizationId, s.classificationReceipt ?? null, row.facts.country, row.id)) throw new SeparationError("Classification authority is missing or revoked.");
   const [policy] = await tx.select().from(offbPolicies).where(and(eq(offbPolicies.organizationId, row.organizationId), eq(offbPolicies.id, s.policyId!), eq(offbPolicies.version, s.policyVersion!)));
   if (policy?.status !== "approved" || policy.approval?.authorityId !== s.policyReceipt?.authorityId) throw new SeparationError("Adopted policy approval was withdrawn.");
@@ -195,7 +195,7 @@ export async function actionSeparation(org: string, actor: string, id: number, i
       generation++; s.tasks = []; s.policyReceipt = null; s.policyId = null; s.policyVersion = null; s.restrictedManual = false;
       // Both submitted sources remain immutable; the HRBP reference attests comparison to the system of record.
     } else if (action === "classify") {
-      if (!["clear", "restricted"].includes(s.gatewayA) || s.conflict || s.sensitiveTriggers.includes("unknown") || !await currentReceipt(tx, org, s.screening, f.country, id)) throw new SeparationError("Fresh Gateway A screening and resolved ambiguity are required.");
+      if (!["clear", "restricted"].includes(s.gatewayA) || s.conflict || s.sensitiveTriggers.includes("unknown") || !await currentReceipt(tx, org, s.screening, f.country, id)) throw new SeparationError("Fresh Separation Screening and resolved ambiguity are required.");
       if (s.gatewayA === "restricted" && !await currentReceipt(tx, org, s.hrBpDisposition, f.country, id)) throw new SeparationError("Restricted classification requires a current HRBP human-led disposition.");
       const decision = await r("hr-compliance-approve");
       if (b.confirmed !== true) throw new SeparationError("Uncertain classification needs HRBP disposition.");
@@ -220,7 +220,7 @@ export async function actionSeparation(org: string, actor: string, id: number, i
       const policyId = text(b.policyId, "policyId", 160);
       const [policy] = await tx.select().from(offbPolicies).where(and(eq(offbPolicies.organizationId, org), eq(offbPolicies.id, policyId), eq(offbPolicies.version, Number(b.policyVersion))));
       if (!policy || policy.status !== "approved" || !await currentReceipt(tx, org, policy.approval, f.country)) throw new SeparationError("A current approved versioned offboarding policy is required.");
-      if (!await currentReceipt(tx, org, s.screening, f.country, id)) throw new SeparationError("Fresh Gateway A review is required.");
+      if (!await currentReceipt(tx, org, s.screening, f.country, id)) throw new SeparationError("Fresh Separation Screening review is required.");
       if (!await currentReceipt(tx, org, s.classificationReceipt ?? null, f.country, id)) throw new SeparationError("Fresh confirmed classification is required.");
       s.policyId = policyId; s.policyVersion = policy.version; s.policyReceipt = policy.approval;
       const reviews = restricted ? s.tasks.filter(t => t.activity === "02") : [];

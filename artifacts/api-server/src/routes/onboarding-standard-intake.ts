@@ -494,8 +494,8 @@ router.post("/onboarding/cases/:caseId/standard-intake/release", async (req, res
       await tx.insert(onbEvents).values({
         organizationId, caseId, agent: "standard-intake-review", engine: "human",
         hitlPattern: "approve-before-act", ruleRef: "Standard intake release",
-        title: "Standard intake case released for Gate A",
-        detail: `An authorized administrator reviewed the restricted TA source evidence reference and released this ${row.eventType} case to the existing onboarding engine. Gate A remains required before any downstream onboarding work.`,
+        title: "Standard intake case released for Offer-Acceptance Package",
+        detail: `An authorized administrator reviewed the restricted TA source evidence reference and released this ${row.eventType} case to the existing onboarding engine. Offer-Acceptance Package remains required before any downstream onboarding work.`,
         idempotencyKey: `standard-intake-release:${row.sourceId}:${row.sourceEventId}`,
       }).onConflictDoNothing();
       return { kind: "released" as const, case: released };

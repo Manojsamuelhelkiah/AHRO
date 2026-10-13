@@ -432,7 +432,7 @@ router.post("/onboarding/batch-intake/:batchId/cases/:caseId/release", async (re
     }));
     if (outcome.kind === "not-found") return void res.status(404).json({ message: "Batch case not found in this organization." });
     if (outcome.kind === "specialist-review-only") return void res.status(409).json({ message: "This is a specialist-review request, not an onboarding case. Batch release cannot authorize external changes." });
-    if (outcome.kind === "gate-a-required") return void res.status(409).json({ message: "This case requires the dedicated Gate A offer-acceptance confirmation; batch release cannot bypass it." });
+    if (outcome.kind === "gate-a-required") return void res.status(409).json({ message: "This case requires the dedicated Offer-Acceptance Package confirmation; batch release cannot bypass it." });
     if (outcome.kind === "policy-rebase-required") return void res.status(409).json({ message: "This batch case has a pending workforce context correction. Rebase its policy before explicit release." });
     if (outcome.kind === "already-released") return void res.status(409).json({ message: `This case is no longer held for batch review (status: ${outcome.status}).` });
     if (outcome.kind === "lifecycle-blocked") return void res.status(409).json({ message: outcome.message });

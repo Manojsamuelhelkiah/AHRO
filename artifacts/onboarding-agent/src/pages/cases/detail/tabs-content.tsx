@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { lifecycleStageText } from '../../../lib/lifecycle-stage-presentation';
 import { format } from 'date-fns';
 import { CheckCircle2, Clock, AlertTriangle, XCircle, FileText, FileCheck2, MessageSquare, Phone, Smartphone, Mail, Send, PhoneCall, Archive, Star, RotateCcw } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, cn, Input } from '@/components/ui-shared';
@@ -93,8 +94,8 @@ export function ActivityTab({ events }: { events: any[] }) {
                   <EngineBadge engine={e.engine} />
                   <span className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--surface-alt)] px-1.5 py-0.5 rounded border border-[var(--border)]">{format(new Date(e.createdAt), 'MMM d, HH:mm:ss')}</span>
                 </div>
-                <p className="text-[var(--text-sm)] font-bold mb-1 leading-snug text-[var(--text-primary)]">{e.title}</p>
-                <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mb-3 leading-relaxed">{e.detail}</p>
+                <p className="text-[var(--text-sm)] font-bold mb-1 leading-snug text-[var(--text-primary)]">{lifecycleStageText(e.title)}</p>
+                <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mb-3 leading-relaxed">{lifecycleStageText(e.detail)}</p>
               </div>
             ))}
             {!events?.length && <div className="p-[var(--space-xl)] text-center text-[var(--text-sm)] text-[var(--text-muted)]">No events logged.</div>}
@@ -334,13 +335,13 @@ export function AuditTab({ events, approvals, records }: any) {
                     <td className="p-4 text-[var(--text-xs)] font-mono text-[var(--text-secondary)] whitespace-nowrap align-top">{format(new Date(e.createdAt), 'HH:mm:ss.SSS')}</td>
                     <td className="p-4 align-top"><EngineBadge engine={e.engine} /></td>
                     <td className="p-4 align-top min-w-[250px]">
-                      <p className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">{e.title}</p>
-                      <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-1">{e.detail}</p>
+                      <p className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">{lifecycleStageText(e.title)}</p>
+                      <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-1">{lifecycleStageText(e.detail)}</p>
                     </td>
                     <td className="p-4 align-top space-y-2 min-w-[180px]">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-[9px] bg-[var(--surface)] text-[var(--text-secondary)] px-1.5 py-0.5 rounded font-mono border border-[var(--border)]">{e.agent}</span>
-                        {e.ruleRef && <span className="text-[9px] bg-[var(--surface)] text-[var(--text-secondary)] px-1.5 py-0.5 rounded font-mono border border-[var(--border)]">{e.ruleRef}</span>}
+                        {e.ruleRef && <span className="text-[9px] bg-[var(--surface)] text-[var(--text-secondary)] px-1.5 py-0.5 rounded font-mono border border-[var(--border)]">{lifecycleStageText(e.ruleRef)}</span>}
                       </div>
                       {e.hitlPattern && <div><HitlBadge pattern={e.hitlPattern} /></div>}
                     </td>

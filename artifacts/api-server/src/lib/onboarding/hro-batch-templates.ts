@@ -46,7 +46,7 @@ export const HRO_BATCH_TEMPLATES: IntakeTemplate[] = [
      column("last_working_date", "Last working day", "date"), column("termination_date", "Termination date", "date"),
      column("time_zone", "IANA time zone"), column("role", "Role"), column("worker_category", "Worker category"),
      column("manager_name", "Manager"), column("notice_reference", "Source provenance reference"),
-   ]), version: 2, description: "Creates a held dedicated separation case. Gateway A and approved offboarding policy are required. Final closure is unavailable pending section 4.6." },
+   ]), version: 2, description: "Creates a held dedicated separation case. Separation Screening and approved offboarding policy are required. Final closure is unavailable pending section 4.6." },
   template("hr-helpdesk-letter", "HR Helpdesk", "Employment-letter request", [...service, column("letter_type", "Letter type", "choice", true, "", ["employment-confirmation", "experience", "other"]), column("purpose_reference", "Purpose reference")]),
   template("it-access-request", "IT Access", "Application-access request", [...service, column("application_reference", "Application reference"), column("access_role", "Requested access role"), column("access_end_date", "Access end date", "date"), column("business_justification_reference", "Business justification reference")]),
   template("learning-certification", "Learning", "Certification / course assignment request", [...service, column("course_reference", "Course / certification reference"), column("due_date", "Due date", "date")]),

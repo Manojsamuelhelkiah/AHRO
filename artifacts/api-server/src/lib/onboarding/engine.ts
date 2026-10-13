@@ -173,10 +173,10 @@ export async function enforceOfferAcceptanceGate(
       ? "Resolve the blocked/uncertain offer-acceptance package email and confirm package completion"
       : "Confirm offer-acceptance package completion after HR evidence review",
     rationale: standardIntakeEvidence
-      ? "A trusted TA source event supplied an acceptance evidence reference. An authorized HR reviewer must verify that restricted source reference and use the dedicated Gate A confirmation action; generic approvals cannot release this gate."
+      ? "A trusted TA source event supplied an acceptance evidence reference. An authorized HR reviewer must verify that restricted source reference and use the dedicated Offer-Acceptance Package confirmation action; generic approvals cannot release this gate."
       : blocked
       ? `The mandatory email-only offer package request is ${deliveryStatus}${deliveryFailureReason ? `: ${deliveryFailureReason}` : ""}. No WhatsApp fallback is permitted; HR must resolve this before onboarding.`
-      : "The offer-acceptance package request was durably dispatched. HR must review the returned evidence and use the dedicated Gate A confirmation action; generic approvals cannot release this gate.",
+      : "The offer-acceptance package request was durably dispatched. HR must review the returned evidence and use the dedicated Offer-Acceptance Package confirmation action; generic approvals cannot release this gate.",
     // This gate has its own atomic confirmation route. A generic approval may
     // document review, but must never become an orchestration bypass.
     resumeAction: "none",
@@ -202,9 +202,9 @@ export async function enforceOfferAcceptanceGate(
     caseId,
     "offer-acceptance-gate",
     "rules",
-    "Gate A blocked onboarding pending offer acceptance",
+    "Offer-Acceptance Package blocked onboarding pending offer acceptance",
     standardIntakeEvidence
-      ? "A trusted TA source event is retained in the restricted intake register. HR must review its acceptance evidence reference and use the dedicated Gate A confirmation; no acceptance-request message was sent and no downstream onboarding action was started."
+      ? "A trusted TA source event is retained in the restricted intake register. HR must review its acceptance evidence reference and use the dedicated Offer-Acceptance Package confirmation; no acceptance-request message was sent and no downstream onboarding action was started."
       : blocked
       ? "Offer-package email is blocked or has an uncertain outcome. A human queue item was created; no downstream onboarding action was started."
       : "Offer-package email was sent first. A human queue item was created; no downstream onboarding action was started.",
@@ -2004,7 +2004,7 @@ export function resumeAfterDecision(opts: {
       const decisionTitle = isStandaloneAcknowledgement
         ? "Review acknowledged — source completion/mandatory gates still required"
         : opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE
-        ? "Gate A review decision recorded — dedicated confirmation still required"
+        ? "Offer-Acceptance Package review decision recorded — dedicated confirmation still required"
         : isHardBlock
         ? opts.approved
           ? "Hard-block resolved by human owner"
@@ -2015,7 +2015,7 @@ export function resumeAfterDecision(opts: {
       const decisionDetail = isStandaloneAcknowledgement
         ? `${opts.decidedBy} acknowledged the ${opts.approved ? "approval" : "rejection"} review for ${opts.ruleRef ?? "the standalone escalation"}: "${opts.recommendation}"${opts.comment ? ` — ${opts.comment}` : ""}. Review acknowledged; source completion/mandatory gates still required. No lifecycle transition or downstream authorization occurred.`
         : opts.ruleRef === OFFER_ACCEPTANCE_GATE_RULE
-        ? `${opts.decidedBy} recorded a Gate A review decision. The offer package remains blocked until the dedicated HR confirmation action records completion; no onboarding continuation occurred.`
+        ? `${opts.decidedBy} recorded an Offer-Acceptance Package review decision. The offer package remains blocked until the dedicated HR confirmation action records completion; no onboarding continuation occurred.`
         : `${opts.decidedBy} ${opts.approved ? (isHardBlock ? "resolved the hard-block and authorised onboarding to proceed" : "approved") : (isHardBlock ? "upheld the hard-block" : "rejected")}: "${opts.recommendation}"${opts.comment ? ` — ${opts.comment}` : ""}. ${isHardBlock ? "Decision made under human authority; no automated adverse action was taken." : ""}`;
       await logEvent(opts.caseId, "human", "human",
         decisionTitle,
@@ -2064,7 +2064,7 @@ export function resumeAfterDecision(opts: {
               opts.caseId,
               "day1-readiness-gate",
               "rules",
-              "Gate C confirmation did not release onboarding",
+              "Day-1 Readiness confirmation did not release onboarding",
               "The human decision was recorded, but current mandatory readiness or malware evidence no longer passed. The case remains blocked for human resolution.",
               { hitlPattern: "hard-block", ruleRef: DAY1_READINESS_GATE_RULE, idempotencyKey: `gateway-c:${opts.caseId}:approval-stale` },
             );

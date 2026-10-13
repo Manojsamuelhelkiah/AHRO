@@ -82,7 +82,7 @@ export function Slide04() {
     <Header section="Stakeholder value" title="Each role gets a clearer job to do" />
     <div className="my-[4vh] grid flex-1 grid-cols-2 gap-[2vw]">
       <Card title="Employees and managers">A visible request path, fewer repeated updates, transparent next steps and accountable follow-up.</Card>
-      <Card title="HR operations">A shared queue, gateway readiness, exception handling, assignments and a record of what changed.</Card>
+      <Card title="HR operations">A shared queue, stage readiness, exception handling, assignments and a record of what changed.</Card>
       <Card title="Specialists">Named, scoped review for legal, privacy, compliance, medical, payroll and transfer decisions.</Card>
       <Card title="Leaders and auditors">Aggregate operational reporting, traceable approvals, retention-aware recovery and a defensible rollout record.</Card>
     </div>
@@ -94,7 +94,7 @@ export function Slide05() {
   return <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg px-[5vw] py-[6vh]">
     <Header section="All-HR service portfolio" title="Twelve case categories make the portfolio visible" note="Current Cases already holds service categories and scenario definitions; demo-safe sample coverage is being persisted for operational visibility." />
     <div className="my-[4vh] grid flex-1 grid-cols-3 gap-[1.4vw]">
-      <Card title="Hire">Offer intake, candidate portal, documents, checks and readiness gateways.</Card>
+      <Card title="Hire">Offer intake, candidate portal, documents, checks and readiness stages.</Card>
       <Card title="Onboard">Day-1 coordination, access and asset tasks, communications, early-tenure plans and evidence.</Card>
       <Card title="Grow and move">Job-context changes, learning, compliance obligations, workforce transfers and controlled handoffs.</Card>
       <Card title="Pay and benefits" tone="amber">Case intake, ownership and readiness evidence now; provider execution only after a configured connection.</Card>
@@ -109,7 +109,7 @@ export function Slide06() {
   return <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg px-[6vw] py-[6vh]">
     <Header section="Current product surface" title="The control tower is implemented as connected views" />
     <div className="my-[4vh] grid flex-1 grid-cols-3 gap-[1.6vw]">
-      <Card title="Operate">Cases, case detail, readiness gateways, operational requests and Action Center.</Card>
+      <Card title="Operate">Cases, case detail, readiness stages, operational requests and Action Center.</Card>
       <Card title="Configure">Client Setup, checklists, job profiles, SLA/readiness, early tenure, privacy and membership settings.</Card>
       <Card title="Govern">Policy Assistant, policy library, policy review, guardrails, specialist authority and audit.</Card>
       <Card title="Observe">Analytics, bottleneck simulation, outcome KPIs, systems health, alerts and recommendations.</Card>
@@ -139,7 +139,7 @@ export function Slide08() {
     <Header section="Execution boundary" title="Orchestrate the work before claiming provider completion" />
     <div className="my-[5vh] grid flex-1 grid-cols-2 gap-[2vw]">
       <Card title="Implemented case orchestration">
-        <p>Cases, work items, due state, assignments, escalation, evidence, gateway checks and audit events are managed in the product.</p>
+        <p>Cases, work items, due state, assignments, escalation, evidence, stage checks and audit events are managed in the product.</p>
         <p className="mt-[2vh] text-accent">Action Center supports accountable human actions and case-linked work.</p>
       </Card>
       <Card title="Provider execution is not assumed" tone="amber">
@@ -171,9 +171,9 @@ export function Slide10() {
   return <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg px-[6vw] py-[6vh]">
     <Header section="Onboarding and early tenure" title="Readiness is a sequence of evidence-backed gates" />
     <div className="my-[4vh] grid flex-1 grid-cols-3 gap-[1.6vw]">
-      <Card title="Gateway A · intake">Complete required facts and documents; return deficiencies to intake with a visible path.</Card>
-      <Card title="Gateway B · review">Route background-check or other sensitive exceptions to HR and Compliance; no self-disposition.</Card>
-      <Card title="Gateway C · Day 1">Review mandatory workstreams and fresh approval before release; a score is not a release decision.</Card>
+      <Card title="Offer-Acceptance Package">Verify offer-acceptance evidence and obtain dedicated HR confirmation; dispatch alone is not acceptance.</Card>
+      <Card title="Background Checks">Route background-check or other sensitive exceptions to HR and Compliance; no self-disposition.</Card>
+      <Card title="Day-1 Readiness">Review mandatory workstreams and fresh approval before release; a score is not a release decision.</Card>
       <Card title="Early tenure">Policy-configured Day-1, 30/60/90 and probation work is anchored to actual joining, not a planned date.</Card>
       <Card title="Candidate portal">Limited submission journey; portal data stays scoped to the associated case and confidential review.</Card>
       <Card title="Alerts and recovery">Surface overdue, stale, duplicate or conflicting work; preserve completed evidence when future work is rescheduled.</Card>
@@ -225,7 +225,7 @@ export function Slide14() {
   return <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg px-[6vw] py-[6vh]">
     <Header section="Management measurement" title="Measure service performance without exposing sensitive individuals" />
     <div className="my-[4vh] grid flex-1 grid-cols-3 gap-[1.6vw]">
-      <Card title="Flow">Intake completeness, gateway aging, cycle time, overdue work, rework and escalation volume.</Card>
+      <Card title="Flow">Intake completeness, stage aging, cycle time, overdue work, rework and escalation volume.</Card>
       <Card title="Readiness">Mandatory-work completion, Day-1 readiness, provider evidence state and exception resolution.</Card>
       <Card title="Experience">Appropriate aggregate feedback, case updates, first-response timeliness and manager visibility.</Card>
       <Card title="Quality and risk">Approval freshness, policy exceptions, blocked actions, audit completeness and recovery outcomes.</Card>
@@ -317,7 +317,7 @@ export function Slide20() {
     <Header section="Appendix · implementation boundary" title="Control-plane capability is ahead of provider execution" />
     <div className="my-[4vh] grid flex-1 grid-cols-2 gap-[2vw]">
       <Card title="Implemented in the current application">
-        <p>Onboarding cases and readiness gateways</p><p className="mt-[1vh]">Action Center work and approvals</p><p className="mt-[1vh]">Workforce transfers and frontline controls</p><p className="mt-[1vh]">Policy, AI guardrails, privacy, audit, reporting and Test Center</p>
+        <p>Onboarding cases and readiness stages</p><p className="mt-[1vh]">Action Center work and approvals</p><p className="mt-[1vh]">Workforce transfers and frontline controls</p><p className="mt-[1vh]">Policy, AI guardrails, privacy, audit, reporting and Test Center</p>
       </Card>
       <Card title="Requires future connection and evidence" tone="amber">
         <p>Payroll provider write-back or correction</p><p className="mt-[1vh]">Benefits enrollment or provider change</p><p className="mt-[1vh]">Leave-provider execution and other external service effects</p><p className="mt-[1vh]">Any provider result not actually configured and observed</p>

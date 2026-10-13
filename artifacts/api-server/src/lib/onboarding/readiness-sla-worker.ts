@@ -123,7 +123,7 @@ async function reopenGateCIfNeeded(
       tx,
       organizationId,
       caseId,
-      "Gate C reopened because weighted readiness regressed; fresh readiness review is required.",
+      "Day-1 Readiness reopened because weighted readiness regressed; fresh readiness review is required.",
       READINESS_SLA_WORKER,
     );
     await tx.update(onbCases).set({
@@ -141,8 +141,8 @@ async function reopenGateCIfNeeded(
       engine: "rules",
       hitlPattern: "hard-block",
       ruleRef: "Gate C — weighted readiness regression",
-      title: "Gate C reopened after readiness regression",
-      detail: `${action.label} is ${action.status}; weighted readiness is no longer complete. A fresh human Gate C review is required.`,
+      title: "Day-1 Readiness reopened after readiness regression",
+      detail: `${action.label} is ${action.status}; weighted readiness is no longer complete. A fresh human Day-1 Readiness review is required.`,
       idempotencyKey: `readiness-sla:${caseId}:gate-c-regression:${view.snapshotVersion}:${action.key}`,
     }).onConflictDoNothing({
       target: [onbEvents.organizationId, onbEvents.idempotencyKey],

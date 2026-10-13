@@ -1008,7 +1008,7 @@ export async function rebaseGovernanceCase(input: {
       tx,
       input.organizationId,
       input.caseId,
-      `Gate C reopened because governance decisions were rebased: ${reason}`,
+      `Day-1 Readiness reopened because governance decisions were rebased: ${reason}`,
       input.changedBy,
     );
     await tx.insert(onbEvents).values({

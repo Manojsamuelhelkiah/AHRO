@@ -32,13 +32,14 @@ for (const file of ["deliverables/onboarding-control-tower-learning-guide.html",
 }
 const html = readFileSync(resolve(root, "deliverables/onboarding-control-tower-learning-guide.html"), "utf8");
 const matrix = readFileSync(resolve(root, "deliverables/onboarding-uat-traceability-matrix.csv"), "utf8");
-assert.match(html, /M&amp;A \/ TUPE \/ transfer pathway/);
-assert.match(html, /Frontline \/ blue-collar safety pathway/);
-assert.match(html, /Reference coverage/);
-assert.match(html, /Executed assertions recorded by this static catalog:<\/strong> features 0; requirements 0/);
-assert.match(html, /run-owned linked case, candidate portal, or evaluator/);
-assert.match(html, /not an auto-verified negative-content outcome/);
+assert.match(html, /Workforce transfers/);
+assert.match(html, /Workforce context, frontline release and early tenure/);
+assert.match(html, /no executed assertions are claimed by this document/);
+assert.match(html, /Historical test records are restricted, read-only and permanently non-operational/);
+assert.match(html, /A score or status label never substitutes for authority or safety gates/);
+for (const label of ["Offer-Acceptance Package", "Background Checks", "Day-1 Readiness"]) assert.ok(html.includes(label));
+assert.doesNotMatch(html, /\b(?:Gateway|Gate) [ABC]\b/);
 assert.match(matrix, /"APP-A-22"/);
 assert.match(matrix, /"APP-B-12"/);
-assert.match(matrix, /"reference_coverage"/);
-assert.match(matrix, /"execution_assertion_status"/);
+assert.match(matrix, /"verification"/);
+assert.match(matrix, /"independent observation required"/);

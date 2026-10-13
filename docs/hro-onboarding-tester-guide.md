@@ -16,12 +16,12 @@ Evidence:
 Limits:
 - Shared demo identities cannot create cases or acquire real workflow authority.
 
-## Intake and onboarding gates
-Ordinary authenticated intake uses real case facts and explicit governance grants.
+## Intake and onboarding stages
+Ordinary authenticated intake uses real case facts and explicit governance grants. The business stages are Offer-Acceptance Package, Background Checks, and Day-1 Readiness.
 
 - Create a case only with current case-flow and profile-edit access.
-- Confirm offer acceptance through its dedicated evidence-backed gate.
-- Resolve mandatory workstreams before requesting final human readiness review.
+- Confirm the Offer-Acceptance Package through its dedicated evidence-backed review.
+- Resolve Background Checks and mandatory workstreams before requesting the fresh human Day-1 Readiness review.
 
 Evidence:
 - Approved policy snapshot

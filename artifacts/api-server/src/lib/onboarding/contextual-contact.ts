@@ -470,7 +470,7 @@ function availableOption(
     !gate.pendingDocsOfferPackageAllowed
   ) {
     reasons.push(
-      "Gate A must be confirmed before candidate contact that advances preboarding.",
+      "Offer-Acceptance Package must be confirmed before candidate contact that advances preboarding.",
     );
   }
   if (context.requiresSlaAction && !context.slaActionId) {
@@ -1458,7 +1458,7 @@ async function revalidateClaimBeforeDispatch(
     ) {
       error = new ContextualContactError(
         "gate_changed",
-        "Gate A changed before the provider boundary; no contact was sent.",
+        "Offer-Acceptance Package changed before the provider boundary; no contact was sent.",
         409,
       );
     }

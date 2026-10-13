@@ -841,7 +841,12 @@ async function serializeCase(
   caseAccess: CaseGovernanceAccess = NO_CASE_GOVERNANCE_ACCESS,
   presentation?: CasePresentationReads,
 ) {
-  const gateways = caseAccess.readinessRead && caseAccess.flowRead ? await deriveGateways(row, presentation) : undefined;
+  const rawGateways = caseAccess.readinessRead && caseAccess.flowRead ? await deriveGateways(row, presentation) : undefined;
+  const gateways = rawGateways ? {
+    a: { ...rawGateways.a, label: "Offer-Acceptance Package" },
+    b: { ...rawGateways.b, label: "Background Checks" },
+    c: { ...rawGateways.c, label: "Day-1 Readiness" },
+  } : undefined;
   const canReadProfile = caseAccess.profileRead && caseAccess.flowRead;
   const canReadNotes = caseAccess.notesRead && caseAccess.flowRead;
   const intakeRequest = readHroBatchRequest(row.processPolicySnapshot);
@@ -1395,7 +1400,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
     }
     if (body.offerAcceptanceComplete) {
       res.status(400).json({
-        message: "Offer acceptance cannot be attested during case creation. Create the case, then use the dedicated Gate A confirmation endpoint.",
+        message: "Offer acceptance cannot be attested during case creation. Create the case, then use the dedicated Offer-Acceptance Package confirmation endpoint.",
       });
       return;
     }
@@ -1419,7 +1424,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
       return;
     }
     if (body.offerAcceptanceComplete && body.hireType !== "internal-transfer") {
-      res.status(400).json({ message: "Gate A offer acceptance cannot be asserted during case creation. It requires the dedicated authority-checked confirmation and durable evidence." });
+      res.status(400).json({ message: "Offer acceptance cannot be asserted during case creation. It requires the dedicated authority-checked Offer-Acceptance Package confirmation and durable evidence." });
       return;
     }
     // Duplicate-trigger prevention (spec §1.3): same person with an active case.
@@ -1593,7 +1598,7 @@ router.get("/onboarding/cases/:id/access-permissions", async (req, res, next) =>
 
 router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => {
   try {
-    if (!requireHrChecklistRole(req, res, "Only organization owners and admins may confirm Gate A.")) return;
+    if (!requireHrChecklistRole(req, res, "Only organization owners and admins may confirm Offer-Acceptance Package.")) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) {
       res.status(400).json({ message: "Valid case id is required." });
@@ -1716,7 +1721,7 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
         decisionActor,
         body.note.trim() || null,
         decidedAt,
-        "Dedicated Gate A confirmation recorded",
+        "Dedicated Offer-Acceptance Package confirmation recorded",
       );
       const [row] = await tx.update(onbCases).set({
         offerAcceptanceComplete: true,
@@ -1740,8 +1745,8 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
         engine: "human",
         hitlPattern: "hard-block",
         ruleRef: "Gate A — offer-acceptance package",
-        title: "Gate A offer-acceptance package confirmed by HR",
-        detail: `${decisionActor} confirmed the offer-acceptance package. Note: ${body.note.trim()}. The dedicated Gate A confirmation releases onboarding; generic approvals do not.`,
+        title: "Offer-Acceptance Package confirmed by HR",
+        detail: `${decisionActor} confirmed the offer-acceptance package. Note: ${body.note.trim()}. The dedicated Offer-Acceptance Package confirmation releases onboarding; generic approvals do not.`,
         idempotencyKey: `gateway-a:${id}:confirmed`,
       }).onConflictDoNothing({
         target: [onbEvents.organizationId, onbEvents.idempotencyKey],
@@ -1757,15 +1762,15 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
       return;
     }
     if (outcome.kind === "unauthorized") {
-      res.status(403).json({ message: "A current HR/compliance specialist authority assignment is required to confirm Gate A." });
+      res.status(403).json({ message: "A current HR/compliance specialist authority assignment is required to confirm Offer-Acceptance Package." });
       return;
     }
     if (outcome.kind === "authority-evidence-missing") {
-      res.status(409).json({ message: "Gate A requires a current, pending authority-bound review. Historical or already-decided evidence cannot be retrofitted or replayed." });
+      res.status(409).json({ message: "Offer-Acceptance Package requires a current, pending authority-bound review. Historical or already-decided evidence cannot be retrofitted or replayed." });
       return;
     }
     if (outcome.kind === "not-applicable") {
-      res.status(409).json({ message: "Gate A is not applicable to this onboarding pathway." });
+      res.status(409).json({ message: "Offer-Acceptance Package is not applicable to this onboarding pathway." });
       return;
     }
     if (outcome.kind === "confirmed" && candidateEmailAuthorization(outcome.row).allowed) {
@@ -4822,7 +4827,7 @@ router.get("/onboarding/approvals/:id/history", async (req, res, next) => {
       });
       if (!readinessAccess.allows.includes("data.case.readiness.read")) {
         res.status(403).json({
-          message: "An explicit readiness-read grant is required to review Gate C approval history.",
+          message: "An explicit readiness-read grant is required to review Day-1 Readiness approval history.",
           code: "CASE_READINESS_ACCESS_REQUIRED",
         });
         return;
@@ -4945,7 +4950,7 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
     }
       if (a.ruleRef === OFFER_ACCEPTANCE_GATE_RULE) {
         res.status(409).json({
-          message: "Gate A requires dedicated offer-acceptance confirmation; generic approval decisions cannot release this gate.",
+          message: "Offer-Acceptance Package requires dedicated offer-acceptance confirmation; generic approval decisions cannot release this stage.",
           code: "dedicated_offer_acceptance_confirmation_required",
         });
         return;

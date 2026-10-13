@@ -8,6 +8,7 @@ import { Link } from 'wouter';
 import { StatusBadgeText } from './components';
 import { useApprovalCapability } from '../../../hooks/use-approval-action';
 import { RestrictedActionNotice, useCaseAccess } from './case-access';
+import { ONBOARDING_STAGE_NAMES, lifecycleStageText } from '../../../lib/lifecycle-stage-presentation';
 
 type GateApprovalTarget = {
   id: number;
@@ -57,9 +58,9 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
   if (!c.gateways) return null;
 
   const gates = [
-    { key: 'a', title: 'Gateway A: Offer-Acceptance Package', g: c.gateways.a },
-    { key: 'b', title: 'Gateway B: Background Checks', g: c.gateways.b },
-    { key: 'c', title: 'Gateway C: Day-1 Readiness', g: c.gateways.c },
+    { key: 'a', title: ONBOARDING_STAGE_NAMES.a, g: c.gateways.a },
+    { key: 'b', title: ONBOARDING_STAGE_NAMES.b, g: c.gateways.b },
+    { key: 'c', title: ONBOARDING_STAGE_NAMES.c, g: c.gateways.c },
   ];
 
   const handleConfirm = () => {
@@ -96,9 +97,9 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
   return (
     <div className="mb-8">
     {(!access?.access.flowEdit || !access?.access.notesEdit || !access?.sensitive.identity.edit) && (
-      <div className="mb-3"><RestrictedActionNotice>Gateway release and confirmation controls are restricted by your current case permissions.</RestrictedActionNotice></div>
+      <div className="mb-3"><RestrictedActionNotice>Stage release and confirmation controls are restricted by your current case permissions.</RestrictedActionNotice></div>
     )}
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {gates.map(({ key, title, g }) => {
         if (!g) return null;
         const isA = key === 'a';
@@ -114,14 +115,12 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
 
         return (
           <div key={key} className="flex flex-col p-4 rounded-[var(--radius-lg)] shadow-[var(--shadow-sm)] border-l-4 bg-[var(--surface)] relative" style={{ borderTop: '1px solid var(--border)', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)', borderLeftColor: border }}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="flex items-center justify-center rounded-sm font-mono text-[10px] font-bold" style={{ width: '22px', height: '22px', backgroundColor: iconBg, color: iconFg }}>{key.toUpperCase()}</span>
+            <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+              <div className="min-w-0">
                 <span className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">{title}</span>
               </div>
               <StatusBadgeText status={g.status} />
             </div>
-            <p className="text-[var(--text-xs)] text-[var(--text-secondary)] flex-1">{g.label}</p>
             {isA && <p className="text-[11px] text-[var(--text-secondary)] mt-1">A deliverable candidate address enables email by default, including with WhatsApp selected. Email sending does not confirm offer acceptance.</p>}
             {isA && !standardIntakeEvidence && !c.offerAcceptanceComplete && g.status !== 'not-applicable' &&
               access?.access.flowEdit && access?.sensitive.identity.edit && access?.sensitive.medical.edit &&
@@ -149,13 +148,13 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
                 {emailFeedback && <p role="status" className="mt-1 text-[11px] break-words">{emailFeedback}</p>}
               </div>
             )}
-            {g.reason && <p className="text-[11px] text-[var(--text-muted)] mt-1">{g.reason}</p>}
+            {g.reason && <p className="text-[11px] text-[var(--text-muted)] mt-1">{lifecycleStageText(g.reason)}</p>}
              {isA && standardIntakeEvidence && (
                <div className="mt-3 rounded border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-2 text-[11px] text-[var(--status-amber-fg)]">
-                 <p className="font-semibold">TA source acceptance evidence — review before Gate A</p>
+                 <p className="font-semibold">TA source acceptance evidence — review before Offer-Acceptance Package confirmation</p>
                  <p className="mt-1">Source: {standardIntakeEvidence.sourceIdentity} · event {standardIntakeEvidence.sourceEventId}</p>
                  <p className="mt-1 break-all">Reference: {standardIntakeEvidence.acceptanceEvidenceReference}</p>
-                 <p className="mt-1">This is a source-system reference, not an uploaded offer artifact. Verify it in the approved TA source before confirming Gate A.</p>
+                 <p className="mt-1">This is a source-system reference, not an uploaded offer artifact. Verify it in the approved TA source before confirming the Offer-Acceptance Package.</p>
                  {standardIntakeEvidence.eventType === 'scheduled-preboarding' && (
                    <p className="mt-1 font-medium">Scheduled HR review due: {standardIntakeEvidence.activationDueAt ? new Date(standardIntakeEvidence.activationDueAt).toLocaleString() : 'not available'} · {standardIntakeEvidence.activationStatus}</p>
                  )}
@@ -164,8 +163,8 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
              {isA && standardIntakeEvidence && c.orchestrationStatus === 'standard-intake-pending-review' &&
                 (standardIntakeEvidence.eventType !== 'scheduled-preboarding' || standardIntakeEvidence.activationStatus === 'due-review') && access?.access.flowEdit && (
                <div className="mt-3 border-t border-[var(--border)] pt-3">
-                 <Button size="sm" variant="outline" className="w-full text-xs h-7" onClick={handleStandardRelease} disabled={releaseStandardIntake.isPending}>
-                   Release to existing Gate A review
+                  <Button size="sm" variant="outline" className="w-full text-xs h-auto min-h-7 whitespace-normal" onClick={handleStandardRelease} disabled={releaseStandardIntake.isPending}>
+                    Release to Offer-Acceptance Package review
                  </Button>
                  {releaseError && <p role="alert" className="mt-1 text-[11px] text-[var(--status-red)]">{releaseError}</p>}
                </div>
@@ -187,7 +186,7 @@ export function GatewaysStrip({ c, gateApproval, standardIntakeEvidence }: {
                     </div>
                   </div>
                 ) : (
-                  <Button size="sm" variant="outline" className="w-full text-xs h-7" onClick={() => setShowConfirm(true)}>Confirm Offer Package</Button>
+                  <Button size="sm" variant="outline" className="w-full text-xs h-auto min-h-7 whitespace-normal" onClick={() => setShowConfirm(true)}>Confirm Offer-Acceptance Package</Button>
                 )}
               </div>
             )}

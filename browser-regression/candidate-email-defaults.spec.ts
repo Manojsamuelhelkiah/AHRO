@@ -120,7 +120,19 @@ test("candidate email defaults, outcomes and retry controls stay clear and usabl
     const sentBeforeOpen = sendRequests.length;
     const retriesBeforeOpen = retryRequests.length;
     await page.goto(`/cases/${CASE_ID}?tab=communications`);
-    await expect(page.getByText("Gateway A: Offer-Acceptance Package", { exact: true })).toBeVisible();
+    await expect(page.getByText("Offer-Acceptance Package", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Background Checks", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Day-1 Readiness", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/Gateway [ABC]|Gate [ABC]/)).toHaveCount(0);
+    const stageBoxes = await Promise.all(["Offer-Acceptance Package", "Background Checks", "Day-1 Readiness"]
+      .map(label => page.getByText(label, { exact: true }).first().locator("xpath=../..").boundingBox()));
+    for (const box of stageBoxes) {
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+      expect(box!.width).toBeGreaterThan(180);
+    }
+    if (viewport.width < 1024) expect(stageBoxes[0]!.x).toBe(stageBoxes[1]!.x);
     await expect(page.getByText(/A deliverable candidate address enables email by default, including with WhatsApp selected/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Request offer-package email" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Communication History" })).toBeVisible();

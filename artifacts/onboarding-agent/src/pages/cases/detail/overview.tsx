@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { lifecycleStageText } from '../../../lib/lifecycle-stage-presentation';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CaseReadiness } from './CaseReadiness';
 import { ConnectedReadinessSla } from './ConnectedReadinessSla';
@@ -119,7 +120,7 @@ export function AttentionPanel({ approval, caseId, offlineSample = false }: any)
       <div className="bg-[var(--status-amber-bg)] px-4 py-3 border-b border-[var(--status-amber)] flex items-start justify-between gap-2">
         <div>
           <h3 className="text-[var(--status-amber-fg)] font-bold text-[10px] uppercase tracking-wider mb-1">Approval Required</h3>
-          <p className="text-[var(--status-amber-fg)] font-semibold text-[var(--text-sm)]">{approval.recommendation}</p>
+          <p className="text-[var(--status-amber-fg)] font-semibold text-[var(--text-sm)]">{lifecycleStageText(approval.recommendation)}</p>
         </div>
         <div className="text-[9px] font-mono font-bold text-[var(--status-amber-fg)] opacity-80 uppercase bg-[var(--status-amber-bg)] px-1.5 py-0.5 rounded border border-[var(--status-amber)]">
           AP-{approval.id}-{versionLabel}
@@ -128,7 +129,7 @@ export function AttentionPanel({ approval, caseId, offlineSample = false }: any)
       <div className="p-4 space-y-4">
         <div>
           <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Why this matters</p>
-          <p className="text-[var(--text-sm)] text-[var(--text-secondary)] leading-relaxed">{approval.rationale}</p>
+          <p className="text-[var(--text-sm)] text-[var(--text-secondary)] leading-relaxed">{lifecycleStageText(approval.rationale)}</p>
         </div>
         <div>
           <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Agent recommendation</p>
@@ -198,7 +199,7 @@ export function AttentionPanel({ approval, caseId, offlineSample = false }: any)
         </button>
         {expanded && (
            <div className="text-[11px] text-[var(--text-muted)] bg-[var(--surface-alt)] p-3 rounded-[var(--radius-md)] border border-[var(--border)] space-y-2">
-             {approval.ruleRef && <div><strong>Policy Rule:</strong> <span className="font-mono">{approval.ruleRef}</span></div>}
+             {approval.ruleRef && <div><strong>Policy Rule:</strong> <span className="font-mono">{lifecycleStageText(approval.ruleRef)}</span></div>}
              {approval.recordsEvidence?.map((e: any, i: number) => (
                 <div key={i}>
                   <strong className="block text-[var(--text-secondary)]">{e.question}</strong>
@@ -367,8 +368,8 @@ function RecentActivitySummary({ events }: any) {
                 <EngineBadge engine={e.engine} />
               </div>
               <div>
-                <p className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">{e.title}</p>
-                <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-0.5 leading-relaxed">{e.detail}</p>
+                <p className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">{lifecycleStageText(e.title)}</p>
+                <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-0.5 leading-relaxed">{lifecycleStageText(e.detail)}</p>
                 <p className="text-[10px] font-mono text-[var(--text-muted)] mt-1.5">{formatDistanceToNow(new Date(e.createdAt), {addSuffix: true})}</p>
               </div>
             </div>

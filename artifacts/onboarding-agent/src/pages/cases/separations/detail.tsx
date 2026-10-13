@@ -107,7 +107,7 @@ function TaskCard({ t, caseId, version, run, busy, ktRequired }: { ktRequired: b
 }
 
 const ACTIONS = [
-  ['screen', 'Gateway A screening'], ['classify', 'Confirm classification'], ['adopt-policy', 'Adopt approved policy'], ['pause', 'Pause'],
+  ['screen', 'Separation Screening'], ['classify', 'Confirm classification'], ['adopt-policy', 'Adopt approved policy'], ['pause', 'Pause'],
   ['hrbp-disposition', 'HRBP disposition of pause'], ['hrbp-reconcile', 'HRBP reconcile conflict'], ['context-change', 'Context change'],
   ['emergency-security-plan', 'Emergency security plan (restricted only)'], ['sensitive-flag', 'Raise sensitive flag'], ['legal-hold', 'Legal hold'], ['settlement-version', 'Settlement version'],
 ] as const;
@@ -191,7 +191,7 @@ function CasePanel({ d, run, busy }: { d: SeparationDetail; run: (a: Omit<Separa
         </div>
       )}
       {restricted && action === 'classify' && <label className="flex items-start gap-2 text-sm"><input type="checkbox" data-testid="check-hrbp-done" className="mt-1" checked={hrbpDone} onChange={(e) => setHrbpDone(e.target.checked)} /> A fresh HRBP reconciliation reference has been recorded for this case. The server verifies it.</label>}
-      {restricted && action === 'adopt-policy' && <div className="space-y-1"><p className="text-xs font-semibold">Human-led adoption (restricted)</p><p className="text-xs text-[var(--text-muted)]">Retains Ethics and Legal reviews and generates a manual-only plan. Gateway A stays restricted and sensitive triggers stay in place. Standard automation is never authorized.</p><label className="flex items-center gap-2 text-sm"><input type="checkbox" data-testid="check-adopt-confirmed" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> I confirm human-led adoption</label></div>}
+      {restricted && action === 'adopt-policy' && <div className="space-y-1"><p className="text-xs font-semibold">Human-led adoption (restricted)</p><p className="text-xs text-[var(--text-muted)]">Retains Ethics and Legal reviews and generates a manual-only plan. Separation Screening stays restricted and sensitive triggers stay in place. Standard automation is never authorized.</p><label className="flex items-center gap-2 text-sm"><input type="checkbox" data-testid="check-adopt-confirmed" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> I confirm human-led adoption</label></div>}
       {action === 'adopt-policy' && <Field label="Approved policy" hint={pol.isError ? 'Policies could not be loaded.' : approved.length ? 'Exact country, role, category and time zone must match; the server checks.' : 'No approved policy exists.'}><select data-testid="select-policy" className={selectCls} value={policyKey} onChange={(e) => setPolicyKey(e.target.value)}><option value="">Choose</option>{approved.map((p) => <option key={`${p.id}@${p.version}`} value={`${p.id}@${p.version}`}>{p.policy.country} / {p.policy.role} / {p.policy.workerCategory} / {p.policy.timeZone} v{p.version}</option>)}</select></Field>}
       {action === 'hrbp-disposition' && <Field label="Disposition" hint="Requires a paused case. Resume restarts review only; no access is restored."><select data-testid="select-disposition" className={selectCls} value={disp} onChange={(e) => setDisp(e.target.value)}><option value="">Choose</option><option value="cancel">Cancel separation</option><option value="convert-to-transfer">Convert to transfer review</option><option value="resume">Resume review</option></select></Field>}
       {restricted && action === 'hrbp-reconcile' && <p className="text-xs text-[var(--text-muted)]">Allowed for known restricted cases with full facts and a reference. Re-screening afterwards retains sensitive triggers. Next: re-screen, classify, assign and evidence Ethics and Legal tasks, then adopt policy.</p>}
@@ -236,10 +236,10 @@ export function SeparationDetailPage() {
           <header className="flex flex-wrap items-start justify-between gap-3">
             <div><h1 className="text-2xl font-semibold" data-testid="text-worker-name">{d.facts.workerName}</h1>
               <p className="text-sm text-[var(--text-muted)]">Case {d.id} · {d.facts.employeeId} · {d.facts.role} · {d.facts.country} · LWD {d.facts.lastWorkingDay} ({d.facts.timeZone}) · v{d.version} gen {d.generation}</p></div>
-            <div className="flex flex-wrap gap-2"><Pill tone={statusTone(d.status)}>{d.status}</Pill><Pill tone={statusTone(d.state.gatewayA)}>Gateway A {d.state.gatewayA}</Pill>{d.state.conflict && <Pill tone="red">source conflict</Pill>}</div>
+            <div className="flex flex-wrap gap-2"><Pill tone={statusTone(d.status)}>{d.status}</Pill><Pill tone={statusTone(d.state.gatewayA)}>Separation Screening {d.state.gatewayA}</Pill>{d.state.conflict && <Pill tone="red">source conflict</Pill>}</div>
           </header>
           <ClosureWarning />
-          <div className="flex flex-wrap gap-2 text-xs"><Pill>Gateway C {d.gatewayC}</Pill><Pill>Activity 12 {d.activity12}</Pill><Pill tone="blue">manual, source-backed, no remote actions</Pill></div>
+          <div className="flex flex-wrap gap-2 text-xs"><Pill>Final Closure {d.gatewayC}</Pill><Pill>Activity 12 {d.activity12}</Pill><Pill tone="blue">manual, source-backed, no remote actions</Pill></div>
           {d.state.pauseReason && <div role="status" data-testid="banner-pause" className="rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-sm text-[var(--status-amber-fg)]">Paused for HRBP review: {d.state.pauseReason}. Use the HRBP disposition action to cancel, convert to transfer, or resume.</div>}
           {d.state.holds.length > 0 && <div role="status" className="rounded-md border border-[var(--status-red)] bg-[var(--status-red-bg)] p-3 text-sm text-[var(--status-red-fg)]">Holds: {d.state.holds.join('; ')}. Deletion and archival are prohibited.</div>}
           {stale && <div role="alert" className="flex items-center justify-between gap-2 rounded-md bg-[var(--status-amber-bg)] p-3 text-sm text-[var(--status-amber-fg)]">The case changed since you loaded it. <Button size="sm" variant="outline" onClick={() => q.refetch()}>Reload</Button></div>}
@@ -260,7 +260,7 @@ export function SeparationDetailPage() {
               </Card>
               <section aria-label="Workstreams" className="space-y-3">
                 <h2 className="font-semibold">Activities and workstreams</h2>
-                {streams.length === 0 ? <div className="rounded-md border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--text-muted)]">No checklist yet. Complete Gateway A screening, classification, then adopt an approved policy.</div> : streams.map(([s, ts]) => (
+                {streams.length === 0 ? <div className="rounded-md border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--text-muted)]">No checklist yet. Complete Separation Screening, classification, then adopt an approved policy.</div> : streams.map(([s, ts]) => (
                   <div key={s} className="space-y-2"><h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">{s} <span className="font-normal">({ts.filter((t) => t.status === 'verified').length}/{ts.length} verified)</span></h3>
                     {ts.map((t) => <TaskCard ktRequired={d.state.tasks.some((x) => x.id === 'kt-access-exception' && x.details.exceptionRequired === true)} key={`${t.id}-${d.generation}-${d.version}`} t={t} caseId={caseId} version={d.version} busy={act.isPending} run={(a) => { void run(a); }} />)}</div>
                 ))}
@@ -269,7 +269,7 @@ export function SeparationDetailPage() {
                 {d.state.decisions.length === 0 ? <p className="text-sm text-[var(--text-muted)]">{d.privateVisible ? 'No decisions recorded.' : 'Decision history is restricted.'}</p> : d.state.decisions.map((r, i) => <div key={i} className="border-b border-[var(--border)] pb-2 last:border-0"><Receipt r={r} /></div>)}</Card>
               <Card className="space-y-2 p-4"><h2 className="font-semibold">Settlement versions</h2>
                 {d.state.settlementVersions.length === 0 ? <p className="text-sm text-[var(--text-muted)]">None recorded.</p> : d.state.settlementVersions.map((s, i) => <pre key={i} className="overflow-x-auto rounded bg-[var(--surface-alt)] p-2 text-xs">{JSON.stringify({ revision: s.revision, currency: s.currency, items: s.items, rulesReference: s.rulesReference }, null, 1)}</pre>)}</Card>
-              {d.state.restrictedManual && <div role="status" data-testid="banner-restricted-manual" className="rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-sm text-[var(--status-amber-fg)]">Restricted manual plan: human-led tasks only. Gateway A remains restricted; no standard automation is authorized.</div>}
+              {d.state.restrictedManual && <div role="status" data-testid="banner-restricted-manual" className="rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-sm text-[var(--status-amber-fg)]">Restricted manual plan: human-led tasks only. Separation Screening remains restricted; no standard automation is authorized.</div>}
               <Card className="space-y-2 p-4" data-testid="panel-settlement-review"><h2 className="font-semibold">Settlement review (numeric)</h2>
                 {d.settlementReview.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No numeric settlement versions visible. Requires current Payroll authority.</p> : d.settlementReview.map((r) => <div key={r.revision} className="rounded bg-[var(--surface-alt)] p-2 text-xs"><div className="mb-1 flex flex-wrap gap-2"><b>Revision {r.revision}</b><span>{r.currency}</span><span>{new Date(r.recordedAt).toLocaleString()}</span><Pill tone={r.authorityCurrent ? 'green' : 'red'}>{r.authorityCurrent ? 'authority current' : 'authority not current'}</Pill></div>{Object.entries(r.items).map(([k, v]) => <span key={k} className="mr-3">{k}: {String(v)}</span>)}</div>)}</Card>
               <Card className="space-y-2 p-4" data-testid="panel-history"><h2 className="font-semibold">Revision history (private)</h2>
@@ -278,7 +278,7 @@ export function SeparationDetailPage() {
                 {!d.privateVisible ? <p className="text-sm text-[var(--text-muted)]">Source narratives are visible only to verified HR and Legal readers.</p> : d.sources.map((s, i) => <div key={i} className="text-xs"><b>{s.channel}</b> · {s.sourceReference} · {s.actor} · <span className="text-[var(--text-muted)]">{s.provenance}</span></div>)}</Card>
             </div>
             <aside className="space-y-4">{!d.privateVisible && <Card className="p-4 text-xs text-[var(--text-muted)]" data-testid="text-privacy-explainer">Restricted sources, receipts, decisions and history are hidden. Viewing them requires current verified HR, Legal, Payroll and Occupational Health authorities (all four) and all-sensitive field grants (not one or the other). Nothing here weakens that check.</Card>}<CasePanel key={`${scope}-${d.privateVisible}-${d.version}-${d.generation}`} d={d} run={run} busy={act.isPending} />
-              <Card className="p-4 text-xs text-[var(--text-muted)]">Final closure, Gateway C and Activity 12 are unavailable. No override exists.</Card></aside>
+              <Card className="p-4 text-xs text-[var(--text-muted)]">Final Closure and Activity 12 are unavailable. No override exists.</Card></aside>
           </div>
         </>
       )}

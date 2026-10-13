@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { lifecycleStageText } from '../lib/lifecycle-stage-presentation';
 import { useListOnboardingApprovals, getListOnboardingApprovalsQueryKey, useGetOnboardingApprovalHistory, getGetOnboardingApprovalHistoryQueryKey, type OnbApproval } from '@workspace/api-client-react';
 import { Card, Button, Badge, cn, Input, Label, PageHeader } from '@/components/ui-shared';
 import { useUser } from '@clerk/react';
@@ -190,14 +191,14 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
               <span style={{ color: 'var(--text-muted)' }}>•</span>
               <EngineBadge engine={approval.agent} />
               <HitlBadge pattern={approval.hitlPattern} />
-              {approval.ruleRef && <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{approval.ruleRef}</span>}
+              {approval.ruleRef && <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{lifecycleStageText(approval.ruleRef)}</span>}
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }} className="md:ml-auto">{format(new Date(approval.createdAt), 'MMM d, HH:mm')}</span>
             </div>
 
-            <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginTop: '12px', marginBottom: '8px' }}>{approval.recommendation}</h3>
+            <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginTop: '12px', marginBottom: '8px' }}>{lifecycleStageText(approval.recommendation)}</h3>
 
             <div style={{ backgroundColor: 'var(--surface-alt)', border: '1px solid var(--border)', borderLeft: '3px solid var(--primary)', borderRadius: 'var(--radius-md)', padding: '12px 16px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-              {approval.rationale}
+              {lifecycleStageText(approval.rationale)}
               {approval.ruleRef?.includes('sla') && (
                 <div className="mt-3 pt-3 border-t border-[var(--border)] flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-mono">
                   <span className="text-[var(--primary)]">SLA Monitor Active</span>
@@ -283,8 +284,8 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
           <div style={{ borderTop: '1px solid var(--border)', marginTop: '16px', paddingTop: '16px' }}>
             {isGateA ? (
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[var(--text-sm)] text-[var(--text-secondary)] m-0">Gate A can only be released through its dedicated case confirmation.</p>
-                <Link href={`/cases/${approval.caseId}`}><Button size="sm">Open Gate A confirmation</Button></Link>
+                <p className="text-[var(--text-sm)] text-[var(--text-secondary)] m-0">Offer-Acceptance Package can only be released through its dedicated case confirmation.</p>
+                <Link href={`/cases/${approval.caseId}`}><Button size="sm" className="h-auto whitespace-normal">Open Offer-Acceptance Package confirmation</Button></Link>
               </div>
             ) : (
             <div className="flex flex-col lg:flex-row items-start lg:items-end gap-6">
