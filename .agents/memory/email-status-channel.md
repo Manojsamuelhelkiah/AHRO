@@ -3,6 +3,12 @@ name: Email as a status-change channel
 description: Guardrails when inbound email drives workflow state (watch-mailbox tracking)
 ---
 
+The user states that the original product design emails every Action Center event or case to its action owner and lets that owner perform the action by email.
+
+**Why:** Email is intended to be an operational action channel, not merely a candidate intake channel or a notification linking back to the app.
+
+**How to apply:** Assess owner notification and reply-to-action coverage separately for each Action Center item type. Do not claim that candidate-email defaults, case intake or approval-specific handling provide universal coverage. Preserve verified owner identity, current authority, exact tenant/item/version correlation and duplicate/stale-reply protection when extending email actions.
+
 Email is an unauthenticated channel — never let a raw inbound email complete or escalate workflow state.
 
 **Why:** anyone who can reach the mailbox and quote a known reference could forge a "completed" status; a review flagged this as a blocking integrity flaw.
