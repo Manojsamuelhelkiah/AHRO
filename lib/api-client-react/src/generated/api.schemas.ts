@@ -5,6 +5,224 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface HroEmailConfiguration {
+  /**
+     * @minLength 1
+     * @maxLength 240
+     */
+  reference: string;
+  /**
+     * @minimum 0
+     * @maximum 48
+     */
+  backfillHours: number;
+  routeId?: string;
+  expectedVersion?: number;
+}
+
+export interface HroEmailPrivateSource {
+  state: string;
+  /** @nullable */
+  subject: string | null;
+  /** @nullable */
+  body: string | null;
+}
+
+export interface HroEmailRouteUpdate {
+  expectedVersion: number;
+  enabled: boolean;
+}
+
+export interface HroEmailRoute {
+  id: string;
+  /** @nullable */
+  mailboxAddress: string | null;
+  enabled: boolean;
+  version: number;
+  subjectMarker: string;
+  /** @nullable */
+  activatedAt: string | null;
+  /** @nullable */
+  backfillFrom: string | null;
+}
+
+export type HroBatchColumnKind = typeof HroBatchColumnKind[keyof typeof HroBatchColumnKind];
+
+
+export const HroBatchColumnKind = {
+  text: 'text',
+  date: 'date',
+  email: 'email',
+  country: 'country',
+  choice: 'choice',
+} as const;
+
+export interface HroBatchColumn {
+  key: string;
+  label: string;
+  required: boolean;
+  description: string;
+  kind: HroBatchColumnKind;
+  values?: string[];
+}
+
+export interface HroBatchTemplate {
+  id: string;
+  version: number;
+  family: string;
+  name: string;
+  description: string;
+  hireType?: string;
+  columns: HroBatchColumn[];
+}
+
+export interface HroEmailTemplate {
+  template: HroBatchTemplate;
+  example: string;
+}
+
+/**
+ * Health of the background Gmail inbox poller that ingests real email replies
+ */
+export interface OnbInboundEmailMonitor {
+  /** Whether the poll loop has been started in this server process */
+  running: boolean;
+  /** True only when state is "healthy" — a poll succeeded recently and nothing failed since */
+  healthy: boolean;
+  /** healthy | initializing | broken | stopped */
+  state: string;
+  pollIntervalSeconds: number;
+  /**
+     * When the most recent poll attempt started (ISO)
+     * @nullable
+     */
+  lastPollAt: string | null;
+  /**
+     * When the most recent poll completed successfully (ISO)
+     * @nullable
+     */
+  lastSuccessAt: string | null;
+  /**
+     * Error message from the most recent failed poll, cleared on success
+     * @nullable
+     */
+  lastError: string | null;
+  /** @nullable */
+  lastErrorAt: string | null;
+}
+
+export interface HroEmailReadiness {
+  /** @nullable */
+  mailboxAddress: string | null;
+  ready: boolean;
+  routes: HroEmailRoute[];
+  templates: HroEmailTemplate[];
+  monitor: OnbInboundEmailMonitor;
+  /** @nullable */
+  lastSuccessAt: string | null;
+  /** @nullable */
+  lastError: string | null;
+  backlog: number;
+  blocked: number;
+  paginationPending: boolean;
+  attachmentPolicy: string;
+  canConfigure: boolean;
+  canReview: boolean;
+  canTriage: boolean;
+}
+
+export type HroEmailRequestStatus = typeof HroEmailRequestStatus[keyof typeof HroEmailRequestStatus];
+
+
+export const HroEmailRequestStatus = {
+  received: 'received',
+  'needs-review': 'needs-review',
+  blocked: 'blocked',
+  converted: 'converted',
+  rejected: 'rejected',
+} as const;
+
+export type HroEmailRequestFields = {[key: string]: string};
+
+export type HroEmailRequestFieldSources = {[key: string]: 'email' | 'reviewer'};
+
+export interface HroEmailAttachment {
+  name: string;
+  status: string;
+}
+
+export interface HroEmailRequest {
+  reviewed?: boolean;
+  id: string;
+  /** @nullable */
+  templateId: string | null;
+  /** @nullable */
+  family: string | null;
+  status: HroEmailRequestStatus;
+  /** @nullable */
+  reason: string | null;
+  fields: HroEmailRequestFields;
+  fieldSources: HroEmailRequestFieldSources;
+  missingFields: string[];
+  version: number;
+  receivedAt: string;
+  attachments: HroEmailAttachment[];
+  /** @nullable */
+  caseId: number | null;
+  /** @nullable */
+  caseKind: string | null;
+  sourceUrl: string;
+  potentialDuplicates: number;
+}
+
+export type HroEmailReviewAction = typeof HroEmailReviewAction[keyof typeof HroEmailReviewAction];
+
+
+export const HroEmailReviewAction = {
+  save: 'save',
+  reject: 'reject',
+} as const;
+
+export type HroEmailReviewFields = {[key: string]: string};
+
+export interface HroEmailReview {
+  expectedVersion: number;
+  action: HroEmailReviewAction;
+  templateId?: string;
+  fields?: HroEmailReviewFields;
+}
+
+export interface HroEmailConversion {
+  expectedVersion: number;
+  attachmentsAcknowledged: boolean;
+  duplicateAcknowledged: boolean;
+}
+
+export interface HroEmailTriage {
+  id: string;
+  status: string;
+  /** @nullable */
+  reason: string | null;
+  receivedAt: string;
+  version: number;
+}
+
+export type HroEmailTriageDecisionAction = typeof HroEmailTriageDecisionAction[keyof typeof HroEmailTriageDecisionAction];
+
+
+export const HroEmailTriageDecisionAction = {
+  assign: 'assign',
+  reject: 'reject',
+} as const;
+
+export interface HroEmailTriageDecision {
+  expectedVersion: number;
+  action: HroEmailTriageDecisionAction;
+  routeId?: string;
+  /** @maxLength 240 */
+  reference?: string;
+}
+
 export interface SeparationFacts {
   employeeId: string;
   workerName: string;
@@ -411,36 +629,6 @@ export interface UatAdmission {
   userId: string;
   sessionId: string;
   expiresAt: string;
-}
-
-export type HroBatchColumnKind = typeof HroBatchColumnKind[keyof typeof HroBatchColumnKind];
-
-
-export const HroBatchColumnKind = {
-  text: 'text',
-  date: 'date',
-  email: 'email',
-  country: 'country',
-  choice: 'choice',
-} as const;
-
-export interface HroBatchColumn {
-  key: string;
-  label: string;
-  required: boolean;
-  description: string;
-  kind: HroBatchColumnKind;
-  values?: string[];
-}
-
-export interface HroBatchTemplate {
-  id: string;
-  version: number;
-  family: string;
-  name: string;
-  description: string;
-  hireType?: string;
-  columns: HroBatchColumn[];
 }
 
 export interface HroBatchDataRow {[key: string]: string}
@@ -5509,6 +5697,10 @@ export type OnbCaseGateways = {
 };
 
 export interface OnbCase {
+  /** @nullable */
+  intakeSource?: string | null;
+  /** @nullable */
+  intakeSourceUrl?: string | null;
   /** Retained historical case; cannot dispatch, simulate, or resume operations. */
   readonly controllerRetired?: boolean;
   /** @nullable */
@@ -6939,36 +7131,6 @@ export interface OnbBlockedPublishBackupReadiness {
   /** Non-secret phone setting categories whose values are not valid E.164 numbers */
   invalid: string[];
   note: string;
-}
-
-/**
- * Health of the background Gmail inbox poller that ingests real email replies
- */
-export interface OnbInboundEmailMonitor {
-  /** Whether the poll loop has been started in this server process */
-  running: boolean;
-  /** True only when state is "healthy" — a poll succeeded recently and nothing failed since */
-  healthy: boolean;
-  /** healthy | initializing | broken | stopped */
-  state: string;
-  pollIntervalSeconds: number;
-  /**
-     * When the most recent poll attempt started (ISO)
-     * @nullable
-     */
-  lastPollAt: string | null;
-  /**
-     * When the most recent poll completed successfully (ISO)
-     * @nullable
-     */
-  lastSuccessAt: string | null;
-  /**
-     * Error message from the most recent failed poll, cleared on success
-     * @nullable
-     */
-  lastError: string | null;
-  /** @nullable */
-  lastErrorAt: string | null;
 }
 
 export interface OnbChannelStatus {
@@ -10588,6 +10750,20 @@ export interface StandardOperationsView {
 
 export type RetiredCapabilityResponseCode = typeof RetiredCapabilityResponseCode[keyof typeof RetiredCapabilityResponseCode];
 
+
+export const RetiredCapabilityResponseCode = {
+  CASE_TEST_CAPABILITY_RETIRED: 'CASE_TEST_CAPABILITY_RETIRED',
+} as const;
+
+export type RetiredCapabilityResponse = {
+  code: RetiredCapabilityResponseCode;
+  message: string;
+};
+
+export type ListHroEmailRequestsParams = {
+before?: string;
+};
+
 export type GetGovernanceAuthorityOptions200MembersItemRole = typeof GetGovernanceAuthorityOptions200MembersItemRole[keyof typeof GetGovernanceAuthorityOptions200MembersItemRole];
 
 
@@ -11173,12 +11349,3 @@ export type ListSensitiveLifecycleDeletionJobs200 = {
 
 export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
 
-
-export const RetiredCapabilityResponseCode = {
-  CASE_TEST_CAPABILITY_RETIRED: 'CASE_TEST_CAPABILITY_RETIRED',
-} as const;
-
-export type RetiredCapabilityResponse = {
-  code: RetiredCapabilityResponseCode;
-  message: string;
-};

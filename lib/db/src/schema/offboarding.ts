@@ -76,6 +76,10 @@ export const hroMailboxIngress = pgTable("hro_mailbox_ingress", {
   token: text("token").notNull(), allowedSenders: jsonb("allowed_senders").$type<string[]>().notNull(),
   approval: jsonb("approval").$type<SeparationReceipt>().notNull(),
   createdBy: text("created_by").notNull(), enabled: integer("enabled").notNull().default(1),
+  mailboxAddress: text("mailbox_address"),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+  backfillFrom: timestamp("backfill_from", { withTimezone: true }),
+  revision: integer("revision").notNull().default(1),
 }, t => [uniqueIndex("hro_mailbox_token").on(t.token), uniqueIndex("hro_mailbox_ingress_tenant_unique").on(t.organizationId, t.id)]);
 export const hroMailboxRequests = pgTable("hro_mailbox_requests", {
   id: text("id").primaryKey(), organizationId: text("organization_id").notNull().references(() => organizationsTable.id, { onDelete: "restrict" }),

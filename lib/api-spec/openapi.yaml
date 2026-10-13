@@ -43,6 +43,139 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /onboarding/email-intake/requests/{requestId}/source:
+    get:
+      operationId: getHroEmailPrivateSource
+      tags: [onboarding]
+      parameters:
+        - { name: requestId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Restricted private source; body unavailable unless current policy and a clean malware verdict hold.
+          content: { application/json: { schema: { $ref: "#/components/schemas/HroEmailPrivateSource" } } }
+  /onboarding/email-intake:
+    get:
+      operationId: getHroEmailIntake
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Connected mailbox, reviewed routes, live health and all request examples.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailReadiness" }
+    post:
+      operationId: configureHroEmailIntake
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HroEmailConfiguration" }
+      responses:
+        "201":
+          description: Reviewed route to the current client and actual connected mailbox.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailRoute" }
+  /onboarding/email-intake/routes/{routeId}:
+    parameters:
+      - { name: routeId, in: path, required: true, schema: { type: string } }
+    patch:
+      operationId: updateHroEmailRoute
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HroEmailRouteUpdate" }
+      responses:
+        "200":
+          description: Version-fenced route pause or reactivation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailRoute" }
+  /onboarding/email-intake/requests:
+    get:
+      operationId: listHroEmailRequests
+      tags: [onboarding]
+      parameters:
+        - { name: before, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: Confidential tenant-pinned intake queue; no raw body, sender, subject or sensitive filename.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/HroEmailRequest" } }
+  /onboarding/email-intake/requests/{requestId}:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getHroEmailRequest
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Restricted reviewed request with provider provenance.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailRequest" }
+    patch:
+      operationId: reviewHroEmailRequest
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HroEmailReview" }
+      responses:
+        "200":
+          description: Version-fenced classification, field correction or rejection.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailRequest" }
+  /onboarding/email-intake/requests/{requestId}/convert:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: convertHroEmailRequest
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HroEmailConversion" }
+      responses:
+        "200":
+          description: Exactly one correctly typed held case; no external contact or release.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailRequest" }
+  /onboarding/email-intake/triage:
+    get:
+      operationId: listHroEmailTriage
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Verified platform administrator only; metadata without client attribution.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/HroEmailTriage" } }
+  /onboarding/email-intake/triage/{requestId}:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: resolveHroEmailTriage
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HroEmailTriageDecision" }
+      responses:
+        "200":
+          description: Privileged explicit attribution to a live reviewed route or rejection.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailTriage" }
   /offboarding/cases:
     get:
       operationId: listSeparationCases
@@ -6862,6 +6995,120 @@ components:
         type: integer
         minimum: 1
   schemas:
+    HroEmailConfiguration:
+      type: object
+      required: [reference, backfillHours]
+      properties:
+        reference: { type: string, minLength: 1, maxLength: 240 }
+        backfillHours: { type: integer, minimum: 0, maximum: 48 }
+        routeId: { type: string }
+        expectedVersion: { type: integer }
+    HroEmailPrivateSource:
+      type: object
+      required: [state, subject, body]
+      properties:
+        state: { type: string }
+        subject: { type: [string, "null"] }
+        body: { type: [string, "null"] }
+    HroEmailRouteUpdate:
+      type: object
+      required: [expectedVersion, enabled]
+      properties:
+        expectedVersion: { type: integer }
+        enabled: { type: boolean }
+    HroEmailRoute:
+      type: object
+      required: [id, mailboxAddress, enabled, version, subjectMarker, activatedAt, backfillFrom]
+      properties:
+        id: { type: string }
+        mailboxAddress: { type: [string, "null"] }
+        enabled: { type: boolean }
+        version: { type: integer }
+        subjectMarker: { type: string }
+        activatedAt: { type: [string, "null"] }
+        backfillFrom: { type: [string, "null"] }
+    HroEmailTemplate:
+      type: object
+      required: [template, example]
+      properties:
+        template: { $ref: "#/components/schemas/HroBatchTemplate" }
+        example: { type: string }
+    HroEmailReadiness:
+      type: object
+      required: [mailboxAddress, ready, routes, templates, monitor, lastSuccessAt, lastError, backlog, blocked, paginationPending, attachmentPolicy, canConfigure, canReview, canTriage]
+      properties:
+        mailboxAddress: { type: [string, "null"] }
+        ready: { type: boolean }
+        routes: { type: array, items: { $ref: "#/components/schemas/HroEmailRoute" } }
+        templates: { type: array, items: { $ref: "#/components/schemas/HroEmailTemplate" } }
+        monitor: { $ref: "#/components/schemas/OnbInboundEmailMonitor" }
+        lastSuccessAt: { type: [string, "null"] }
+        lastError: { type: [string, "null"] }
+        backlog: { type: integer }
+        blocked: { type: integer }
+        paginationPending: { type: boolean }
+        attachmentPolicy: { type: string }
+        canConfigure: { type: boolean }
+        canReview: { type: boolean }
+        canTriage: { type: boolean }
+    HroEmailRequest:
+      type: object
+      required: [id, templateId, family, status, reason, fields, fieldSources, missingFields, version, receivedAt, attachments, caseId, caseKind, sourceUrl, potentialDuplicates]
+      properties:
+        reviewed: { type: boolean }
+        id: { type: string }
+        templateId: { type: [string, "null"] }
+        family: { type: [string, "null"] }
+        status: { type: string, enum: [received, needs-review, blocked, converted, rejected] }
+        reason: { type: [string, "null"] }
+        fields: { type: object, additionalProperties: { type: string } }
+        fieldSources: { type: object, additionalProperties: { type: string, enum: [email, reviewer] } }
+        missingFields: { type: array, items: { type: string } }
+        version: { type: integer }
+        receivedAt: { type: string }
+        attachments: { type: array, items: { $ref: "#/components/schemas/HroEmailAttachment" } }
+        caseId: { type: [integer, "null"] }
+        caseKind: { type: [string, "null"] }
+        sourceUrl: { type: string }
+        potentialDuplicates: { type: integer }
+    HroEmailAttachment:
+      type: object
+      required: [name, status]
+      properties:
+        name: { type: string }
+        status: { type: string }
+    HroEmailReview:
+      type: object
+      required: [expectedVersion, action]
+      properties:
+        expectedVersion: { type: integer }
+        action: { type: string, enum: [save, reject] }
+        templateId: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+    HroEmailConversion:
+      type: object
+      required: [expectedVersion, attachmentsAcknowledged, duplicateAcknowledged]
+      properties:
+        expectedVersion: { type: integer }
+        attachmentsAcknowledged: { type: boolean }
+        duplicateAcknowledged: { type: boolean }
+    HroEmailTriage:
+      type: object
+      required: [id, status, reason, receivedAt, version]
+      properties:
+        id: { type: string }
+        status: { type: string }
+        reason: { type: [string, "null"] }
+        receivedAt: { type: string }
+        version: { type: integer }
+    HroEmailTriageDecision:
+      type: object
+      required: [expectedVersion, action]
+      properties:
+        expectedVersion: { type: integer }
+        action: { type: string, enum: [assign, reject] }
+        routeId: { type: string }
+        reference: { type: string, maxLength: 240 }
     SeparationFacts:
       type: object
       additionalProperties: false
@@ -11779,6 +12026,8 @@ components:
     OnbCase:
       type: object
       properties:
+        intakeSource: { type: [string, "null"] }
+        intakeSourceUrl: { type: [string, "null"] }
         controllerRetired:
           type: boolean
           readOnly: true

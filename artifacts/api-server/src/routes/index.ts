@@ -14,6 +14,7 @@ import sensitivityRouter from "./sensitivity";
 import slideDeckRouter from "./slide-deck";
 import onboardingRouter from "./onboarding";
 import offboardingRouter from "./offboarding";
+import hroEmailIntakeRouter from "./hro-email-intake";
 import { isSeparationOrLegacyExit } from "../lib/onboarding/separation-isolation";
 import onboardingCaseSimulationRouter from "./onboarding-case-simulation";
 import onboardingChecklistProfileDraftRouter from "./onboarding-checklist-profile-draft";
@@ -125,6 +126,7 @@ router.use("/onboarding/cases/:caseId", async (req, res, next) => {
 });
 router.use(hroContextRouter);
 router.use(offboardingRouter);
+router.use(hroEmailIntakeRouter);
 router.use(employeeVaultEmployerRouter);
 router.use(corpusRouter);
 router.use(scenariosRouter);

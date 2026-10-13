@@ -788,6 +788,7 @@ async function serializeCase(
   const canReadProfile = caseAccess.profileRead && caseAccess.flowRead;
   const canReadNotes = caseAccess.notesRead && caseAccess.flowRead;
   const intakeRequest = readHroBatchRequest(row.processPolicySnapshot);
+  const emailIntake = row.processPolicySnapshot?.emailIntake as { requestId?: string } | undefined;
   const canReadReadiness = caseAccess.readinessRead && caseAccess.flowRead;
   // The marker is server-owned. Offline, unauthorized Demo cases are wholly
   // fictional fixtures, so their identity projection does not imply or grant
@@ -805,6 +806,8 @@ async function serializeCase(
     controllerRetired: isHistoricalTestRecord(row) || await isAuthoritativelyUatRunOwnedCase(row),
     caseFamily: canReadProfile ? intakeRequest?.family ?? null : null,
     requestType: canReadProfile ? intakeRequest?.requestType ?? null : null,
+    intakeSource: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) && emailIntake?.requestId ? "Email" : null,
+    intakeSourceUrl: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) && emailIntake?.requestId ? `/email-intake/${encodeURIComponent(emailIntake.requestId)}` : null,
     batchIntake: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) ? intakeRequest : null,
     workerName: canReadIdentity ? row.workerName : "Restricted candidate",
     workerEmail: canReadIdentity ? row.workerEmail : null,

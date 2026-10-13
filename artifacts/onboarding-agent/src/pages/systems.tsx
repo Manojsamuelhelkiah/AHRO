@@ -3,6 +3,7 @@ import { useListOnboardingConnectors, useUpdateOnboardingConnector, useGetOnboar
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Label, cn, PageHeader, SectionHeading, IconTile, LoadingBlock } from '@/components/ui-shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { Server, Zap, Mail, Smartphone, Check, X, ArrowRightLeft, Radio, AlertTriangle, Eye, Webhook, RefreshCw, Clock, Inbox, FlaskConical } from 'lucide-react';
+import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { MalwareScannerStatus } from '@/components/malware-scanner-status';
 import { StandardProvidersPanel } from '@/components/standard-providers-panel';
@@ -44,6 +45,10 @@ export function SystemsPage() {
         title="Systems & Integrations" 
         subtitle="Manage system-of-record adapters and outbound communication channels." 
       />
+
+      <div className="pt-4">
+        <Link href="/email-intake" data-testid="link-systems-email-intake" className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium text-[var(--primary)]">Client email intake: mailbox, routes and request review</Link>
+      </div>
 
       <div className="pt-4">
         <StandardProvidersPanel />

@@ -14,6 +14,7 @@ import {
 import { getSetting, isValidEmail, HR_APPROVER_EMAIL_KEY } from "./settings";
 import { logEvent } from "./engine";
 import { makeSharedTick } from "./shared-tick";
+import { withGmailConsumerCoordination } from "./gmail-consumer-coordination";
 import {
   approvalRef as versionedApprovalRef,
   parseApprovalReference,
@@ -472,7 +473,9 @@ export const runApproverInboxTick = makeSharedTick(async () => {
       .select({ organizationId: onbSettings.organizationId })
       .from(onbSettings)
       .where(eq(onbSettings.key, HR_APPROVER_EMAIL_KEY));
-    for (const { organizationId } of organizations) await pollOnce(organizationId);
+    await withGmailConsumerCoordination(async () => {
+      for (const { organizationId } of organizations) await pollOnce(organizationId);
+    });
   } catch (err) {
     console.error("[approver-email] poll failed:", String(err).slice(0, 300));
   }

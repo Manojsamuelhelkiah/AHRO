@@ -46,6 +46,8 @@ import { SeparationsListPage } from './pages/cases/separations/list';
 import { SeparationNewPage } from './pages/cases/separations/new';
 import { SeparationIntakePage } from './pages/cases/separations/intake';
 import { SeparationPoliciesPage } from './pages/cases/separations/policies';
+import { EmailIntakePage } from './pages/email-intake/index';
+import { EmailRequestDetailPage } from './pages/email-intake/detail';
 import { SeparationDetailPage } from './pages/cases/separations/detail';
 
 const queryClient = new QueryClient();
@@ -354,6 +356,8 @@ function Router() {
       <Route path="/cases/:id">
         <Protected><CaseDetailPage /></Protected>
       </Route>
+      <Route path="/email-intake"><Protected><EmailIntakePage /></Protected></Route>
+      <Route path="/email-intake/:requestId"><Protected><EmailRequestDetailPage /></Protected></Route>
       <Route path="/approvals">
         <Protected><ApprovalsPage /></Protected>
       </Route>

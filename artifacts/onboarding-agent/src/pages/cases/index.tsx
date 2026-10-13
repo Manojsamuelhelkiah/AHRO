@@ -335,6 +335,7 @@ export function CasesPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader title={context.title} subtitle={context.subtitle}>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <Link href="/email-intake"><Button variant="outline" className="gap-2" data-testid="link-email-intake">Email intake</Button></Link>
           <Link href="/cases/separations"><Button variant="outline" className="gap-2" data-testid="link-separations">Separations</Button></Link>
           {!organization.data?.demoProfile && <>
           <Button onClick={() => setShowNew(!showNew)} className="gap-2">
@@ -620,6 +621,7 @@ export function CasesPage() {
                         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</div>
                         {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Example · Offline</span>}
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
+                        {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} className="text-xs underline">Email source history</Link>}
                       </td>
                       <td style={{ padding: '12px var(--space-lg)' }}>
                         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{c.workerName}</div>
@@ -630,7 +632,7 @@ export function CasesPage() {
                         <CaseTypeBadge type={caseTypeOf(c)} />
                       </td>
                       <td className="hidden lg:table-cell whitespace-nowrap" style={{ padding: '12px var(--space-lg)', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                        {format(new Date(c.joiningDate), 'MMM d, yyyy')}
+                        {c.joiningDate && Number.isFinite(Date.parse(c.joiningDate)) ? format(new Date(c.joiningDate), 'MMM d, yyyy') : 'Not applicable'}
                       </td>
                       <td className="hidden lg:table-cell" style={{ padding: '12px var(--space-lg)' }}>
                         {c.gateways ? <CompactGates gateways={c.gateways} /> : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>N/A</span>}
@@ -690,6 +692,7 @@ export function CasesPage() {
                   </div>
                   <div className="flex items-center justify-between gap-2 mt-1">
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
+                    {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} className="text-xs underline">Email source history</Link>}
                     {c.gateways && <CompactGates gateways={c.gateways} />}
                   </div>
                    <WorkforceTags c={c} />

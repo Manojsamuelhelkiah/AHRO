@@ -22,6 +22,7 @@ import {
 import { completeCheck, escalateCheck } from "./system-watcher";
 import { recordGuardrailEvent } from "./guardrails";
 import { makeSharedTick } from "./shared-tick";
+import { withGmailConsumerCoordination } from "./gmail-consumer-coordination";
 import { systemDef } from "./external-systems";
 import {
   withCaseDerivedLifecycleWrite,
@@ -549,7 +550,7 @@ export async function getEmailWatchStatus(organizationId: string): Promise<Email
 export const runEmailWatchTick = makeSharedTick(async () => {
   telemetry.lastPollAt = new Date();
   try {
-    await pollOnce();
+    if (!await withGmailConsumerCoordination(pollOnce)) return;
     telemetry.lastSuccessAt = new Date();
     telemetry.lastError = null;
     telemetry.lastErrorAt = null;

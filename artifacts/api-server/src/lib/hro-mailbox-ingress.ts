@@ -28,6 +28,15 @@ export async function ingestHroMailboxMessage(msg: GmailMessage, sender: string,
   const tokens = mailboxTokens(subject);
   if (tokens.length !== 1) return true;
   const [ingress] = await db.select().from(hroMailboxIngress).where(and(eq(hroMailboxIngress.token, tokens[0]), eq(hroMailboxIngress.enabled, 1)));
+  if (ingress?.activatedAt && ingress.mailboxAddress) {
+    const { receiveIntakeMessage, connectedIntakeMailbox } = await import("./hro-email-ingestion");
+    const connected = await connectedIntakeMailbox();
+    if (!connected || connected !== ingress.mailboxAddress) return true;
+    const { onbSystemChecks } = await import("@workspace/db");
+    const refs = await db.select({ ref: onbSystemChecks.externalRef }).from(onbSystemChecks);
+    await receiveIntakeMessage(connected, msg, refs.flatMap(r => r.ref ? [r.ref] : []));
+    return true;
+  }
   if (!ingress || !ingress.allowedSenders.includes(sender.toLowerCase())) return true;
   await withSensitiveLifecycleFence(ingress.organizationId, () => db.transaction(async tx => {
     const [live] = await tx.select().from(hroMailboxIngress).where(eq(hroMailboxIngress.id, ingress.id)).for("update");

@@ -33,6 +33,9 @@ export const HRO_BATCH_TEMPLATES: IntakeTemplate[] = [
   template("onboarding-external-fte", "Onboarding", "External employee onboarding", onboarding, "external-fte"),
   template("onboarding-contractor", "Onboarding", "Contractor onboarding", [...onboarding, column("engagement_end_date", "Engagement end date", "date"), column("engagement_reference", "Engagement reference")], "contractor"),
   template("onboarding-rehire", "Onboarding", "Rehire onboarding", [...onboarding, column("previous_employee_id", "Previous employee ID"), column("previous_employment_reference", "Previous employment reference")], "rehire"),
+  template("onboarding-campus-cohort", "Onboarding", "Campus cohort onboarding", onboarding, "campus-cohort"),
+  template("onboarding-expedited", "Onboarding", "Expedited onboarding review", onboarding, "expedited"),
+  template("employee-changes-internal-transfer", "Employee Changes", "Internal transfer review", [...service, column("new_role", "New role"), column("new_department", "New department"), column("change_reference", "Transfer request reference")]),
   template("employee-changes-role", "Employee Changes", "Role / department change", [...service, column("new_role", "New role"), column("new_department", "New department"), column("change_reference", "Change request reference")]),
   template("payroll-bank-change", "Payroll", "Bank-detail change request", [...service, column("secure_submission_reference", "Secure bank-details submission reference", "text", true, "Reference only. Never put bank-account numbers into this workbook.")]),
   template("benefits-life-event", "Benefits", "Life-event enrolment request", [...service, column("event_type", "Event type", "choice", true, "", ["marriage", "birth", "adoption", "other"]), column("event_date", "Event date", "date"), column("benefit_plan_reference", "Benefit plan reference"), column("evidence_reference", "Evidence reference", "text", false, "Reference only; no dependent or medical details.")]),
@@ -103,7 +106,7 @@ export function validateHroRows(templateId: unknown, version: unknown, input: un
   return { valid: issues.length === 0, rows, issues: issues.slice(0, 2500) };
 }
 export function hroRequestForRow(definition: IntakeTemplate, row: HroIntakeRow): HroBatchRequest {
-  return { templateId: definition.id, templateVersion: definition.version, family: definition.family, requestType: definition.name, requestId: row.request_id, data: row, fingerprint: canonicalIntakeHash(row), employeeReferenceStatus: definition.hireType ? "not-applicable" : "supplied-not-verified", executionMode: definition.hireType ? "onboarding-review" : "specialist-review-only" };
+  return { templateId: definition.id, templateVersion: definition.version, family: definition.family, requestType: definition.name, requestId: row.request_id, data: row, fingerprint: canonicalIntakeHash(row), employeeReferenceStatus: row.employee_id || row.previous_employee_id ? "supplied-not-verified" : "not-applicable", executionMode: definition.hireType ? "onboarding-review" : "specialist-review-only" };
 }
 export function readHroBatchRequest(snapshot: unknown): HroBatchRequest | null {
   if (!snapshot || typeof snapshot !== "object") return null;

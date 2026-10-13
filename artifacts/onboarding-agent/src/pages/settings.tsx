@@ -559,6 +559,8 @@ function SettingsContent() {
         subtitle="Application-level configuration for the control tower."
       />
 
+      <Link href="/email-intake" data-testid="link-settings-email-intake" className="inline-block text-sm font-medium text-[var(--primary)] underline">Client email intake settings and routes</Link>
+
       <div className="flex flex-col gap-4">
         <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', padding: 'var(--space-md) var(--space-lg)' }}>

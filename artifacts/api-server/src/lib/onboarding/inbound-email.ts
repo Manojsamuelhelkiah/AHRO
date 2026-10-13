@@ -1,11 +1,12 @@
 import { db } from "@workspace/db";
-import { onbCases, onbCommunications, onbEvents, onbWatchEmails } from "@workspace/db/schema";
+import { onbCases, onbCommunications, onbEvents, onbWatchEmails, hroMailboxIngress } from "@workspace/db/schema";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { handleInbound } from "./engine";
 import { sendEmail } from "./channels";
 import { getSetting, HR_ALERT_EMAIL_KEY } from "./settings";
 import { makeSharedTick } from "./shared-tick";
+import { withGmailConsumerCoordination } from "./gmail-consumer-coordination";
 import { logger } from "../logger";
 import {
   evaluateSensitiveLifecycleGate,
@@ -360,11 +361,13 @@ type GmailHeader = { name: string; value: string };
 export type GmailPart = {
   mimeType?: string;
   filename?: string;
-  body?: { data?: string };
+  body?: { data?: string; size?: number; attachmentId?: string };
   parts?: GmailPart[];
 };
 export type GmailMessage = {
   id: string;
+  labelIds?: string[];
+  internalDate?: string;
   payload?: GmailPart & { headers?: GmailHeader[] };
 };
 
@@ -775,7 +778,8 @@ async function monitoredOrganizations(): Promise<string[]> {
     .selectDistinct({ organizationId: onbCases.organizationId })
     .from(onbCases)
     .where(sql`${onbCases.lifecycleStage} not in ('complete')`);
-  return rows.map((row) => row.organizationId);
+  const routes = await db.selectDistinct({ organizationId: hroMailboxIngress.organizationId }).from(hroMailboxIngress).where(eq(hroMailboxIngress.enabled, 1));
+  return [...new Set([...rows, ...routes].map(row => row.organizationId))];
 }
 
 /** Tenants with a durable down transition that has not yet recovered. */
@@ -833,7 +837,11 @@ async function writeMonitorTransitionForOrganizations(
 export const runInboundEmailTick = makeSharedTick(async () => {
   monitorStatus.lastPollAt = new Date();
   try {
-    await pollOnce();
+    if (!await withGmailConsumerCoordination(async () => {
+      await pollOnce();
+      await (await import("../hro-email-ingestion")).runHroEmailIntakeScan();
+      await (await import("../hro-email-private-source")).runEmailIntakeRetention();
+    })) return;
     monitorStatus.lastSuccessAt = new Date();
     monitorStatus.lastError = null;
     monitorStatus.lastErrorAt = null;

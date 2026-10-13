@@ -381,6 +381,37 @@ app.use(cookieParser());
 app.use(express.json());
 const { seedOffboardingBrowserFixture } = await import("./offboarding-browser-fixture.mjs");
 const offboardingFixture = await seedOffboardingBrowserFixture(dbPackage, suffix);
+const { withControlledEmailIntakeProvider, receiveIntakeMessage } = await import("./src/lib/hro-email-ingestion.ts");
+const { HRO_EMAIL_TEMPLATES, emailExample } = await import("./src/lib/hro-email-registry.ts");
+const controlledMailbox = `email-intake-${suffix}@example.invalid`;
+const intakeProvider = { get: async path => {
+  assert.equal(path, "/gmail/v1/users/me/profile", "No real inbox may be fetched in browser tests");
+  return { ok: true, json: async () => ({ emailAddress: controlledMailbox }) };
+}};
+await db.insert(accessNamedGrants).values(["data.case.notes.read", "data.case.notes.edit"].map(resourceKey => ({
+  organizationId: offboardingFixture.org, principalType: "human", principalId: offboardingFixture.actor,
+  resourceKey, scope: "tenant", resourceType: "field", effect: "allow", source: "named", status: "active",
+  createdByUserId: "fixture-independent-grantor", approvedByUserId: "fixture-independent-approver", approvedAt: new Date(),
+}))).onConflictDoNothing();
+app.post("/api/test/email-intake-message", async (req, res, next) => {
+  try {
+    const user = sessions.get(cookieValue(req, "browser_e2e_session"));
+    if (user !== offboardingFixture.actor) return res.status(403).json({ error: "Controlled operator required" });
+    const { hroMailboxIngress, hroEmailRequests } = dbPackage;
+    const [route] = await db.select().from(hroMailboxIngress).where(and(eq(hroMailboxIngress.organizationId, offboardingFixture.org), eq(hroMailboxIngress.enabled, 1)));
+    if (!route) return res.status(409).json({ error: "Configure a reviewed route first" });
+    const template = HRO_EMAIL_TEMPLATES.find(t => t.id === req.body.templateId);
+    if (!template) return res.status(400).json({ error: "Unknown controlled template" });
+    const id = `controlled-email-${randomUUID()}`;
+    await receiveIntakeMessage(controlledMailbox, { id, internalDate: String(Date.now()), payload: {
+      mimeType: "text/plain", headers: [{ name: "From", value: "requester@example.invalid" }, { name: "Subject", value: `[HRO-INTAKE:${route.token}] Controlled request` }],
+      body: { data: Buffer.from(emailExample(template)).toString("base64url") },
+    }}, [], intakeProvider, { storage: { save: async () => {}, read: async () => Buffer.alloc(0), delete: async () => {} },
+      scan: async () => "unavailable" });
+    const [row] = await db.select().from(hroEmailRequests).where(eq(hroEmailRequests.providerMessageId, id));
+    res.json({ id: row.id, templateId: row.templateId });
+  } catch (error) { next(error); }
+});
 app.post("/api/test/offboarding-session", (req, res) => {
   const profile = req.body?.profile;
   const user = { "offboarding-operator": offboardingFixture.actor, "offboarding-legal": offboardingFixture.legal, "offboarding-viewer": offboardingFixture.viewer }[profile];
@@ -445,7 +476,7 @@ app.use((req, _res, next) => {
   const session = cookieValue(req, "browser_e2e_session");
   const userId = session ? sessions.get(session) : null;
   if (userId) req.authUserId = userId;
-  runWithProviderDeny(() => next());
+  runWithProviderDeny(() => withControlledEmailIntakeProvider(intakeProvider, () => next()));
 });
 
 // The browser regression is allowed to inspect owned fixture state, but only
