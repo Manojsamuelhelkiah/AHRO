@@ -12,6 +12,11 @@ export type SeparationFacts = {
 export type SeparationReceipt = {
   actor: string; authorityId: string; authorityRevision: number; scope: string;
   reference: string; generation: number; recordedAt: string; provenance: "human-source-attested";
+  authorization?: {
+    schema: "human-permission/v1"; organizationId: string; caseId: number | null;
+    actorUserId: string; requiredKeys: string[]; reviewedRevision: number;
+    evidenceGeneration: number; decision: string; recordedAt: string; ownerAdminRequired: boolean;
+  };
 };
 export type SeparationTask = {
   id: string; activity: string; label: string; stream: string; scope: string; owner: string | null;

@@ -100,20 +100,9 @@ async function captureFence(
     }).from(onbGovernanceRequirements).where(
       eq(onbGovernanceRequirements.organizationId, organizationId),
     ).orderBy(onbGovernanceRequirements.key);
-  const verifiedAuthorities = await tx.select({
-      id: onbGovernanceAuthorityAssignments.id,
-      role: onbGovernanceAuthorityAssignments.authorityRole,
-      assigneeUserId: onbGovernanceAuthorityAssignments.assigneeUserId,
-      expiresAt: onbGovernanceAuthorityAssignments.expiresAt,
-    }).from(onbGovernanceAuthorityAssignments).where(and(
-      eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
-      eq(onbGovernanceAuthorityAssignments.verificationStatus, "verified"),
-      isNull(onbGovernanceAuthorityAssignments.revokedAt),
-      or(
-        isNull(onbGovernanceAuthorityAssignments.expiresAt),
-        gt(onbGovernanceAuthorityAssignments.expiresAt, now),
-      ),
-    )).orderBy(desc(onbGovernanceAuthorityAssignments.id));
+  // Historical specialist grants are deliberately absent from every new
+  // dispatch fence. The live gate revalidates versioned permission receipts.
+  const verifiedAuthorities: Array<{ id: number; role: string; assigneeUserId: string; expiresAt: Date | null }> = [];
   return {
     dispatchId,
     operation,

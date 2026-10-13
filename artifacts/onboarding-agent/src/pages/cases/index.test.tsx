@@ -39,6 +39,13 @@ function installFetch(
           : input instanceof URL
             ? input.toString()
             : input.url;
+      // Cases now reads the incoming client date-format settings separately.
+      // Never feed case/program arrays to that configuration query.
+      if (url === "/api/organizations/current/settings/operations") {
+        return Promise.resolve(jsonResponse({
+          version: 1, configuration: { defaults: { dateFormat: "yyyy-MM-dd" } },
+        }));
+      }
       return handler({ url, init });
     },
   });

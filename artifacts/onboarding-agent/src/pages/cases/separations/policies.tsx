@@ -66,7 +66,7 @@ function Propose({ base, onClose }: { base?: SeparationPolicyRecord; onClose: ()
           const up = (k: keyof Ob, v: string) => setObs(obs.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
           return (
             <div key={i} className="grid gap-2 rounded-md border border-[var(--border)] p-3 sm:grid-cols-3">
-              {(['id', 'label', 'stream', 'scope', 'prerequisites', 'dueOffsetDays'] as const).map((k) => <Field key={k} label={k === 'dueOffsetDays' ? 'Due offset (days from LWD)' : k === 'scope' ? 'Authority scope' : k === 'prerequisites' ? 'Prerequisite ids (comma separated)' : k}><Input data-testid={`input-obligation-${i}-${k}`} value={o[k]} onChange={(e) => up(k, e.target.value)} /></Field>)}
+              {(['id', 'label', 'stream', 'scope', 'prerequisites', 'dueOffsetDays'] as const).map((k) => <Field key={k} label={k === 'dueOffsetDays' ? 'Due offset (days from LWD)' : k === 'scope' ? 'Reviewer routing label (no access grant)' : k === 'prerequisites' ? 'Prerequisite ids (comma separated)' : k}><Input data-testid={`input-obligation-${i}-${k}`} value={o[k]} onChange={(e) => up(k, e.target.value)} /></Field>)}
               <div className="flex items-end"><Button size="sm" variant="ghost" aria-label="Remove obligation" onClick={() => setObs(obs.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button></div>
             </div>
           );

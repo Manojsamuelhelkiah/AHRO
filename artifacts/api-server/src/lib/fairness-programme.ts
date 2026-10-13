@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { hasHumanPermissions, recordedHumanPermissionDecisionCurrent, recordHumanPermissionDecision } from "./human-permissions";
 import { denyRetiredCaseCapability } from "./retired-case-capabilities";
 import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -78,20 +79,16 @@ async function member(tx: Tx, organizationId: string, userId: string) {
 }
 async function authority(tx: Tx, organizationId: string, userId: string, role: ReviewRole): Promise<Receipt["assignmentId"]> {
   const membership = await member(tx, organizationId, userId);
+  if (!await hasHumanPermissions(tx, { organizationId, actorUserId: userId, requiredKeys: ["tool.policy.manage"] }))
+    throw new FairnessError("Current policy-management permission is required.", 403);
   if (role === "business") {
     if (!["owner", "admin"].includes(membership.role)) throw new FairnessError("Business scope review requires an organization owner or admin.", 403);
     return null;
   }
-  const [grant] = await tx.select().from(onbGovernanceAuthorityAssignments).where(and(
-    eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
-    eq(onbGovernanceAuthorityAssignments.assigneeUserId, userId),
-    eq(onbGovernanceAuthorityAssignments.authorityRole, role),
-    eq(onbGovernanceAuthorityAssignments.verificationStatus, "verified"),
-    isNull(onbGovernanceAuthorityAssignments.revokedAt),
-    or(isNull(onbGovernanceAuthorityAssignments.expiresAt), gt(onbGovernanceAuthorityAssignments.expiresAt, new Date())),
-  )).orderBy(desc(onbGovernanceAuthorityAssignments.createdAt)).limit(1).for("update");
-  if (!grant) throw new FairnessError(`Current verified ${role} authority is required; membership alone is not specialist authority.`, 403);
-  return grant.id;
+  if (!await hasHumanPermissions(tx, { organizationId, actorUserId: userId, requiredKeys: ["tool.policy.manage"] }))
+    throw new FairnessError("Current policy-management permission is required.", 403);
+  return (await recordHumanPermissionDecision(tx, { organizationId, actorUserId: userId, requiredKeys: ["tool.policy.manage"],
+    reviewedRevision: 0, decision: "permission-check" })).id;
 }
 export function validateReviewSet(reviews: Receipt[]) {
   if (roles.some(role => !reviews.some(r => r.role === role && r.approved)) ||
@@ -103,9 +100,11 @@ async function liveReviews(tx: Tx, organizationId: string, reviews: Receipt[]) {
   validateReviewSet(reviews);
   // Consistent identity order avoids review/read lock inversions.
   for (const receipt of [...reviews].sort((a, b) => a.userId.localeCompare(b.userId))) {
-    if (await authority(tx, organizationId, receipt.userId, receipt.role) !== receipt.assignmentId) {
+    if (receipt.role !== "business" && !await recordedHumanPermissionDecisionCurrent(tx, organizationId,
+      receipt.assignmentId, ["tool.policy.manage"])) {
       throw new FairnessError("A reviewer authority changed. Obtain fresh reviews.");
     }
+    if (receipt.role === "business") await authority(tx, organizationId, receipt.userId, receipt.role);
     if ((await member(tx, organizationId, receipt.userId)).membershipRevision !== receipt.membershipRevision) {
       throw new FairnessError("A reviewer membership lifecycle changed. Obtain fresh reviews.");
     }

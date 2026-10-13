@@ -7,7 +7,7 @@ import {
 } from '@workspace/api-client-react';
 
 export const APPROVAL_PERMISSION_MESSAGE =
-  'A current governance-approved specialist assignment is required for this decision';
+  'Current case-scoped decision and flow permissions and an independent named reviewer are required';
 export const APPROVAL_VERSION_MESSAGE =
   'This review has no valid version. Reload the review before taking action.';
 export const APPROVAL_STALE_MESSAGE =
@@ -24,7 +24,7 @@ export type ApprovalActionTarget = {
 };
 
 export type ApprovalAuthorityState = {
-  /** Result of the server's live, authenticated specialist preflight. */
+  /** Result of the server's live, case-scoped human-permission preflight. */
   canDecide: boolean;
   /** Fail-closed reason supplied by the same authority checker as the write. */
   reason?: string | null;
@@ -98,7 +98,7 @@ export function getApprovalActionAvailability(
   if (authority.loading) {
     return {
       canAct: false,
-      reason: 'Checking current specialist authority…',
+      reason: 'Checking current decision permissions…',
     };
   }
 

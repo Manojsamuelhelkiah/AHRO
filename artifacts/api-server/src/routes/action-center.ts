@@ -300,7 +300,7 @@ async function sensitiveActionCenterProjection(
 function clientError(error: unknown, res: Response): boolean {
   if (error instanceof SensitiveAuthorityRequiredError) {
     res.status(403).json({
-      message: "A current case-scoped specialist authority assignment is required for this sensitive action.",
+      message: "Current case-scoped decision, flow and sensitive-field permissions are required for this action.",
       code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
     });
     return true;

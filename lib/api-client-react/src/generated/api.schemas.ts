@@ -6404,90 +6404,6 @@ export interface OnbApprovalDecision {
   /** @minimum 1 */
   expectedVersion: number;
 }
-
-export type OnbAuthorityGovernanceStateGovernanceStatus = typeof OnbAuthorityGovernanceStateGovernanceStatus[keyof typeof OnbAuthorityGovernanceStateGovernanceStatus];
-
-
-export const OnbAuthorityGovernanceStateGovernanceStatus = {
-  unconfigured: 'unconfigured',
-  'operator-attested': 'operator-attested',
-  'governance-approved': 'governance-approved',
-  withdrawn: 'withdrawn',
-} as const;
-
-export type OnbAuthorityGovernanceStateGovernance = {
-  status: OnbAuthorityGovernanceStateGovernanceStatus;
-  /** @nullable */
-  attestedAt?: string | null;
-  /** @nullable */
-  attestationNote?: string | null;
-  /** @nullable */
-  approvedAt?: string | null;
-  /** @nullable */
-  governanceSource?: string | null;
-  revision: number;
-};
-
-export type OnbAuthorityAssignmentStatus = typeof OnbAuthorityAssignmentStatus[keyof typeof OnbAuthorityAssignmentStatus];
-
-
-export const OnbAuthorityAssignmentStatus = {
-  active: 'active',
-  revoked: 'revoked',
-} as const;
-
-export interface OnbAuthorityAssignment {
-  id: string;
-  personUserId: string;
-  /** @nullable */
-  personEmail: string | null;
-  emailResponderAuthorized: boolean;
-  authorityRole: string;
-  scopes: string[];
-  /** @nullable */
-  caseId: number | null;
-  /** @nullable */
-  siteScope: string | null;
-  /** @nullable */
-  jurisdictionScope: string | null;
-  validFrom: string;
-  /** @nullable */
-  validUntil: string | null;
-  status: OnbAuthorityAssignmentStatus;
-  /** @minimum 1 */
-  revision: number;
-  governanceDecisionRef: string;
-  /** @nullable */
-  revokeReason: string | null;
-}
-
-export interface OnbAuthorityGovernanceState {
-  governance: OnbAuthorityGovernanceStateGovernance;
-  canAdminister: boolean;
-  assignments: OnbAuthorityAssignment[];
-}
-
-export interface OnbAuthorityAssignmentRequest {
-  personUserId: string;
-  /** @nullable */
-  personEmail?: string | null;
-  emailResponderAuthorized?: boolean;
-  authorityRole: string;
-  /** @minItems 1 */
-  scopes: string[];
-  /** @nullable */
-  caseId?: number | null;
-  /** @nullable */
-  siteScope?: string | null;
-  /** @nullable */
-  jurisdictionScope?: string | null;
-  /** @nullable */
-  validFrom?: string | null;
-  /** @nullable */
-  validUntil?: string | null;
-  governanceDecisionRef: string;
-}
-
 export type OnbApprovalHistoryEventType = typeof OnbApprovalHistoryEventType[keyof typeof OnbApprovalHistoryEventType];
 
 
@@ -9304,45 +9220,6 @@ export interface GovernanceDecisionInput {
      */
   sourceReference?: string | null;
 }
-
-export interface GovernanceAuthorityAssignmentInput {
-  /**
-     * @minLength 1
-     * @maxLength 64
-     */
-  role: string;
-  /**
-     * @minLength 1
-     * @maxLength 4000
-     */
-  assigneeUserId: string;
-  /**
-     * @minLength 1
-     * @maxLength 4000
-     */
-  verificationReference: string;
-}
-
-export interface GovernanceAuthorityNominationInput {
-  /**
-     * @minLength 1
-     * @maxLength 64
-     */
-  role: string;
-  /**
-     * @minLength 1
-     * @maxLength 4000
-     */
-  assigneeUserId: string;
-  /**
-     * @minLength 1
-     * @maxLength 4000
-     */
-  assignmentReason: string;
-  /** @nullable */
-  expiresAt?: string | null;
-}
-
 export interface GovernanceDecisionsResponse {
   decisions: GovernanceDecision[];
 }
@@ -10981,35 +10858,29 @@ export type ListHroEmailRequestsParams = {
 before?: string;
 };
 
-export type GetGovernanceAuthorityOptions200MembersItemRole = typeof GetGovernanceAuthorityOptions200MembersItemRole[keyof typeof GetGovernanceAuthorityOptions200MembersItemRole];
-
-
-export const GetGovernanceAuthorityOptions200MembersItemRole = {
-  owner: 'owner',
-  admin: 'admin',
-  member: 'member',
-} as const;
-
-export type GetGovernanceAuthorityOptions200MembersItem = {
-  clerkUserId: string;
-  role: GetGovernanceAuthorityOptions200MembersItemRole;
-  /** @nullable */
-  name: string | null;
-  /** @nullable */
-  email: string | null;
+export type GetCurrentHumanPermissions200 = {
+  allows: string[];
 };
 
-export type GetGovernanceAuthorityOptions200RolesItem = {
-  id: string;
-  label: string;
+export type RequestFreshOnboardingApprovalReviewBody = {
+  /** @minimum 1 */
+  expectedVersion: number;
 };
 
-export type GetGovernanceAuthorityOptions200 = {
-  organizationId: string;
-  canNominate: boolean;
-  canVerify: boolean;
-  members: GetGovernanceAuthorityOptions200MembersItem[];
-  roles: GetGovernanceAuthorityOptions200RolesItem[];
+export type RequestFreshOnboardingApprovalReview200 = {
+  version: number;
+  reviewRequired: boolean;
+  released: boolean;
+};
+
+export type UpdateOwnApprovalEmailBindingBody = {
+  email: string;
+  enabled: boolean;
+};
+
+export type UpdateOwnApprovalEmailBinding200 = {
+  email: string;
+  enabled: boolean;
 };
 
 export type DownloadHroBatchTemplateParams = {
@@ -11147,14 +11018,6 @@ export type UpdateGovernanceRequirementCoverageBody = {
   relatedImplementation?: string | null;
   /** @nullable */
   evidenceReference?: string | null;
-};
-
-export type VerifyGovernanceAuthorityBody = {
-  /**
-     * @minLength 1
-     * @maxLength 4000
-     */
-  verificationReference: string;
 };
 
 export type ListGovernanceHistoryParams = {
@@ -11374,19 +11237,6 @@ export type ListOnboardingApprovalsParams = {
 status?: string;
 };
 
-export type BootstrapOnboardingAuthorityGovernanceBody = {
-  note: string;
-};
-
-export type WithdrawOnboardingAuthorityGovernanceBody = {
-  /** @minLength 1 */
-  reason: string;
-};
-
-export type RevokeOnboardingAuthorityAssignmentBody = {
-  reason: string;
-};
-
 export type GetOnboardingOutcomeKpisParams = {
 /**
  * Case-created-at window; this is not a joining-date cohort
@@ -11565,4 +11415,3 @@ export type ListSensitiveLifecycleDeletionJobs200 = {
 };
 
 export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
-

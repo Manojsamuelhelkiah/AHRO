@@ -7,6 +7,7 @@ import express from "express";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
+  accessNamedGrants,
   onbApprovalHistory,
   onbApprovals,
   onbAuthorityAudit,
@@ -14,6 +15,8 @@ import {
   onbAuthorityGovernance,
   onbCaseLogistics,
   onbCases,
+  onbChecklistTemplates,
+  onbSettings,
   onbConnectors,
   onbDocuments,
   onbEffectJournal,
@@ -96,6 +99,7 @@ before(async () => {
   await db.insert(organizationMembershipsTable).values([
     { organizationId: orgA, clerkUserId: user, role: "member" },
     { organizationId: orgB, clerkUserId: user, role: "owner" },
+    { organizationId: orgA, clerkUserId: `${user}-ungranted-member`, role: "member" },
   ]);
   for (const organizationId of [orgA, orgB]) {
     const userGroupId = `case-access-users-${organizationId}`;
@@ -142,7 +146,7 @@ before(async () => {
           "data.documents.edit",
         ],
         flows: ["flow.case.read", "flow.case.edit", "flow.document-review.edit"],
-        tools: [],
+        tools: ["tool.approval.decide", "tool.policy.manage"],
       },
       createdByUserId: user,
       approvedByUserId: "independent-case-access-approver",
@@ -191,7 +195,7 @@ before(async () => {
     req.organizationId = String(req.header("x-organization-id") ?? orgA);
     const role = req.header("x-test-role");
     req.organizationRole = role === "member" || role === "admin" ? role : "owner";
-    req.authUserId = user;
+    req.authUserId = req.header("x-test-user") ?? user;
     next();
   });
   app.use(onboardingRouter);
@@ -657,6 +661,12 @@ test("legacy document recovery holds, binds the explicit requester, and does not
   const [preservedCase] = await db.select().from(onbCases).where(eq(onbCases.id, legacy.id));
   assert.equal(preservedCase.createdByUserId, null, "legacy creator provenance remains explicitly unknown");
 
+  await db.insert(accessNamedGrants).values(["tool.approval.decide", "flow.case.edit"].map(resourceKey => ({
+    organizationId: orgA, principalType: "human" as const, principalId: legalUser, scope: "case" as const, caseId: legacy.id,
+    resourceType: resourceKey.startsWith("tool.") ? "tool" as const : "flow" as const, resourceKey,
+    source: "named" as const, effect: "allow" as const, status: "active" as const,
+    createdByUserId: "independent-fixture-access-owner", approvedByUserId: "independent-fixture-access-owner", approvedAt: new Date(),
+  })));
   const legalDecision = await decideApproval({
     organizationId: orgA,
     approvalId: approval.id,
@@ -692,7 +702,7 @@ test("legacy document recovery holds, binds the explicit requester, and does not
   );
 });
 
-test("only tenant owner/admin can atomically confirm Gate A", async () => {
+test("only current scoped permissions and independent identity can atomically confirm Gate A", async () => {
   const [caseRow] = await db.insert(onbCases).values({
     organizationId: orgA,
     workerName: "Confirmation Target",
@@ -718,7 +728,7 @@ test("only tenant owner/admin can atomically confirm Gate A", async () => {
   caseIds.push(caseRow.id);
 
   const reader = await call(`/onboarding/cases/${caseRow.id}/offer-acceptance`, orgA, {
-    method: "POST", headers: { "x-test-role": "member" }, body: JSON.stringify({ note: "reader cannot confirm" }),
+    method: "POST", headers: { "x-test-role": "member", "x-test-user": `${user}-ungranted-member` }, body: JSON.stringify({ note: "membership alone cannot confirm" }),
   });
   assert.equal(reader.status, 403);
   const [approval] = await db.insert(onbApprovals).values({
@@ -728,11 +738,11 @@ test("only tenant owner/admin can atomically confirm Gate A", async () => {
     idempotencyKey: `fixture-reader-denied:${caseRow.id}`,
   }).returning();
   const readerDecision = await call(`/onboarding/approvals/${approval.id}/decide`, orgA, {
-    method: "POST", headers: { "x-test-role": "member" }, body: JSON.stringify({ decision: "approved", expectedVersion: 1 }),
+    method: "POST", headers: { "x-test-role": "member", "x-test-user": `${user}-ungranted-member` }, body: JSON.stringify({ decision: "approved", expectedVersion: 1 }),
   });
   assert.equal(readerDecision.status, 403);
   const permissionError = await readerDecision.json() as { message: string };
-  assert.match(permissionError.message, /authority is required/i);
+   assert.match(permissionError.message, /permissions.*required/i);
   const [unchangedApproval] = await db.select().from(onbApprovals).where(eq(onbApprovals.id, approval.id));
   assert.equal(unchangedApproval.status, "pending");
   assert.equal(unchangedApproval.version, 1);
@@ -768,7 +778,7 @@ test("only tenant owner/admin can atomically confirm Gate A", async () => {
   ));
   assert.equal(gateApproval.status, "approved");
   assert.equal(gateApproval.authorityScope, "hr-compliance-approve");
-  assert.equal(gateApproval.decidedAuthorityId, `gate-a-authority-${suffix}`);
+  assert.equal(gateApproval.decidedAuthorityId, `human-permission/v1:approval:${gateApproval.id}`);
   assert.equal(gateApproval.decidedAuthorityRevision, 1);
   assert.equal(gateApproval.decidedBy, user);
   const [history] = await db.select().from(onbApprovalHistory).where(and(
@@ -777,7 +787,7 @@ test("only tenant owner/admin can atomically confirm Gate A", async () => {
     eq(onbApprovalHistory.eventType, "decision"),
   ));
   assert.equal(history.decidedBy, user);
-  assert.equal((history.snapshot as { decidedAuthorityId?: string }).decidedAuthorityId, `gate-a-authority-${suffix}`);
+  assert.equal((history.snapshot as { decidedAuthorityId?: string }).decidedAuthorityId, `human-permission/v1:approval:${gateApproval.id}`);
   assert.equal((history.snapshot as { decidedAuthorityRevision?: number }).decidedAuthorityRevision, 1);
   await db.transaction((tx) => reopenApprovalInTransaction(tx, {
     organizationId: orgA,
@@ -792,7 +802,46 @@ test("only tenant owner/admin can atomically confirm Gate A", async () => {
     eq(onbApprovalHistory.eventType, "decision"),
   ));
   assert.equal(historyAfterReopen.decidedBy, user);
-  assert.equal((historyAfterReopen.snapshot as { decidedAuthorityId?: string }).decidedAuthorityId, `gate-a-authority-${suffix}`);
+  assert.equal((historyAfterReopen.snapshot as { decidedAuthorityId?: string }).decidedAuthorityId, `human-permission/v1:approval:${gateApproval.id}`);
+});
+
+test("legacy Gate A can request a new pending permission review without replaying acceptance or resuming work", async () => {
+  const [c] = await db.insert(onbCases).values({
+    organizationId: orgA, workerName: "Legacy permission review", workerEmail: `renew-${suffix}@example.invalid`,
+    hireType: "external-fte", workerCategory: "employee", role: "Engineer", department: "Testing",
+    geography: "US", workforceContext: { workCountry: "US" }, legalEntity: "Test US",
+    managerName: "Manager", recruiterName: "Requester", joiningDate: "2031-01-01",
+    createdByUserId: requesterUser, lifecycleStage: "preboarding", offerAcceptanceComplete: true,
+    orchestrationStatus: "waiting-approval", orchestrationCheckpoint: "waiting:historical-review",
+  }).returning();
+  caseIds.push(c.id);
+  const [a] = await db.insert(onbApprovals).values({
+    organizationId: orgA, caseId: c.id, agent: "human-review", ruleRef: "Gate A — offer-acceptance package",
+    hitlPattern: "approve-before-act", recommendation: "Review historical acceptance", rationale: "Retained history",
+    resumeAction: "continue-after-offer-acceptance", requestedByUserId: requesterUser,
+    status: "approved", version: 1, decidedBy: user, decidedAt: new Date(),
+    decidedAuthorityId: "historical-specialist-receipt", decidedAuthorityRevision: 1,
+    authorityScope: "hr-compliance-approve", idempotencyKey: `gateway-a:${c.id}:human-queue`,
+  }).returning();
+  const cap = await call(`/onboarding/approvals/${a.id}/capability`, orgA);
+  assert.equal(((await cap.json()) as { requiresFreshReview: boolean }).requiresFreshReview, true);
+  const renewed = await call(`/onboarding/approvals/${a.id}/fresh-review`, orgA, {
+    method: "POST", body: JSON.stringify({ expectedVersion: 1 }),
+  });
+  assert.equal(renewed.status, 200);
+  assert.deepEqual(await renewed.json(), { status: 200, version: 2, reviewRequired: true, released: false });
+  const [pending] = await db.select().from(onbApprovals).where(eq(onbApprovals.id, a.id));
+  assert.equal(pending.status, "pending");
+  assert.equal(pending.permissionDecision, null);
+  assert.equal(pending.resumeAction, "none");
+  const stale = await call(`/onboarding/approvals/${a.id}/fresh-review`, orgA, {
+    method: "POST", body: JSON.stringify({ expectedVersion: 1 }),
+  });
+  assert.equal(stale.status, 409);
+  assert.equal(((await (await call(`/onboarding/approvals/${a.id}/capability`, orgA)).json()) as { reviewOnly: boolean }).reviewOnly, true);
+  const [unchanged] = await db.select().from(onbCases).where(eq(onbCases.id, c.id));
+  assert.equal(unchanged.offerAcceptanceComplete, true);
+  assert.equal(unchanged.orchestrationCheckpoint, "waiting:historical-review");
 });
 
 test("Gate A fails closed for a legacy case with no durable requester principal", async () => {
@@ -839,24 +888,92 @@ test("Gate A fails closed for a legacy case with no durable requester principal"
   assert.equal(gateApproval.requestedByUserId, null);
 });
 
-test("governance withdrawal is transactional and immediately fails authority closed", async () => {
+test("retired governance withdrawal cannot mutate historical authority or ordinary permissions", async () => {
   const response = await call("/onboarding/authority/governance/withdraw", orgA, {
     method: "POST",
     body: JSON.stringify({ reason: "Emergency authority withdrawal fixture" }),
   });
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 410);
   const [governance] = await db.select().from(onbAuthorityGovernance).where(
     eq(onbAuthorityGovernance.organizationId, orgA),
   );
-  assert.equal(governance.status, "withdrawn");
-  assert.equal(governance.revision, 2);
+  assert.equal(governance.status, "governance-approved");
+  assert.equal(governance.revision, 1);
   const [audit] = await db.select().from(onbAuthorityAudit).where(and(
     eq(onbAuthorityAudit.organizationId, orgA),
     eq(onbAuthorityAudit.action, "governance-withdrawn"),
   ));
-  assert.ok(audit);
+  assert.equal(audit, undefined);
   const assignment = await call("/onboarding/authority/assignments", orgA);
-  assert.equal(assignment.status, 403);
+  assert.equal(assignment.status, 410);
+});
+
+test("nonwaivable safety policy uses live policy permission without specialist records and preserves snapshots", async () => {
+  const organizationId = `safety-policy-${suffix}`;
+  const actor = `safety-policy-member-${suffix}`;
+  await db.insert(organizationsTable).values({
+    id: organizationId, name: "Safety policy fixture", slug: organizationId,
+    joinCodeHash: `hash-${organizationId}`, createdByUserId: actor,
+  });
+  try {
+    await db.insert(organizationMembershipsTable).values({
+      organizationId, clerkUserId: actor, role: "member",
+    });
+    const headers = { "x-test-user": actor, "x-test-role": "member" };
+    const path = "/onboarding/authority/nonwaivable-safety-policy";
+    const write = (itemIds: string[]) => call(path, organizationId, {
+      method: "POST", headers, body: JSON.stringify({ itemIds }),
+    });
+    assert.equal((await call(path, organizationId, { headers })).status, 403);
+    assert.equal((await write(["fixture_safety"])).status, 403);
+    const [grant] = await db.insert(accessNamedGrants).values({
+      organizationId, principalType: "human", principalId: actor, scope: "tenant",
+      resourceKey: "tool.policy.manage", source: "named", effect: "allow", status: "active",
+      resourceType: "tool", createdByUserId: actor,
+    }).returning();
+    const snapshot = [{
+      id: "fixture_safety", label: "Fixture safety control", order: 1, enabled: false,
+      mandatory: false, enforcementStage: "before-day1-review" as const, nonWaivableSafety: false,
+    }];
+    await db.insert(onbChecklistTemplates).values({
+      organizationId, version: 1, items: snapshot, createdBy: actor,
+    });
+    const [existingCase] = await db.insert(onbCases).values({
+      organizationId, workerName: "Existing snapshot fixture", workerEmail: `${actor}@example.test`,
+      hireType: "external-fte", workerCategory: "employee", geography: "US",
+      legalEntity: "Fixture entity", managerName: "Fixture manager", recruiterName: "Fixture recruiter",
+      role: "Fixture", department: "Fixture", joiningDate: "2031-01-01", createdByUserId: actor,
+      checklistTemplateVersion: 1, checklistSnapshot: snapshot,
+    }).returning();
+    assert.equal((await call(path, organizationId, { headers })).status, 200);
+    assert.equal((await write(["fixture_safety"])).status, 200);
+    const firstTemplates = await db.select().from(onbChecklistTemplates).where(
+      eq(onbChecklistTemplates.organizationId, organizationId),
+    );
+    const hardened = firstTemplates.find(t => t.version === 2)!;
+    assert.equal(hardened.items[0].nonWaivableSafety, true);
+    assert.equal(hardened.items[0].enabled, true);
+    assert.equal(hardened.items[0].mandatory, true);
+    assert.equal((await write([])).status, 500, "removal remains rejected, not silently accepted");
+    const read = await call(path, organizationId, { headers });
+    assert.deepEqual(((await read.json()) as { itemIds: string[] }).itemIds, ["fixture_safety"]);
+    const [unchanged] = await db.select().from(onbCases).where(eq(onbCases.id, existingCase.id));
+    assert.deepEqual(unchanged.checklistSnapshot, snapshot);
+    assert.equal(unchanged.checklistTemplateVersion, 1);
+    assert.equal((await call(path, orgB, { headers })).status, 403);
+    await db.update(accessNamedGrants).set({ revokedAt: new Date(), revokedByUserId: actor }).where(eq(accessNamedGrants.id, grant.id));
+    assert.equal((await call(path, organizationId, { headers })).status, 403);
+    assert.equal((await write(["another_safety"])).status, 403);
+    assert.deepEqual(await db.select().from(onbAuthorityAssignments).where(
+      eq(onbAuthorityAssignments.organizationId, organizationId),
+    ), []);
+  } finally {
+    await db.delete(onbChecklistTemplates).where(eq(onbChecklistTemplates.organizationId, organizationId));
+    await db.delete(onbCases).where(eq(onbCases.organizationId, organizationId));
+    await db.delete(onbSettings).where(eq(onbSettings.organizationId, organizationId));
+    await db.delete(onbAuthorityAudit).where(eq(onbAuthorityAudit.organizationId, organizationId));
+    await deleteTestOrganizations(eq(organizationsTable.id, organizationId));
+  }
 });
 
 test("outcome KPI analytics is tenant-scoped and honors period, region, and domain filters", async () => {
@@ -939,9 +1056,9 @@ test("outcome KPI analytics is tenant-scoped and honors period, region, and doma
   assert.equal(unsupportedBody.caseCount, 0);
 });
 
-test("privacy-scoped outcome export requires a verified privacy/legal assignment and never emits case evidence", async () => {
+test("permission-scoped outcome export ignores historical specialist assignments and never emits case evidence", async () => {
   const denied = await call("/onboarding/analytics/outcome-kpis/export", orgA);
-  assert.equal(denied.status, 403);
+  assert.equal(denied.status, 200);
 
   await db.insert(onbGovernanceAuthorityAssignments).values({
     organizationId: orgA,

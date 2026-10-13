@@ -3,6 +3,7 @@ import { denyRetiredCaseCapability, retiredCaseCapabilitiesEnabled } from "./ret
 import { and, desc, eq, like, sql } from "drizzle-orm";
 import { db, onbSettings } from "@workspace/db";
 import { HrPolicyError, policyCapabilities, verifiedAuthority } from "./hr-policy-library";
+import { recordedHumanPermissionDecisionCurrent } from "./human-permissions";
 import { selectApprovedPolicyExtract, type PolicyProviderReceipt } from "./hr-policy-ai";
 import { benchmarkHash, benchmarkProvenance, POLICY_BENCHMARK, evaluateBenchmark, LIVE_LIMITS, BENCHMARK_LIMITATION, type BenchmarkSelector } from "./hr-policy-benchmark";
 import { DRIFT_KEY, DRIFT_CONFIRMATION, DRIFT_INTERVAL, DRIFT_DURATION, DRIFT_MAX_CHECKS, DRIFT_RUN_WINDOW,
@@ -185,10 +186,10 @@ export async function runPolicyBenchmark(org: string, actor: string, input: unkn
 
 async function assertDriftAuthority(tx: any, org: string, actor: string, id: string, reviewId: string) {
   const p = await readSetting(tx, org, DRIFT_KEY) as DriftProgramme | null;
-  const grant = await verifiedAuthority(tx, org, actor, "hr-compliance");
-  if (!p || p.programmeId !== id || p.status !== "active" || p.actor !== actor || p.authorityId !== grant.id ||
+  if (!p || p.programmeId !== id || p.status !== "active" || p.actor !== actor ||
+    !await recordedHumanPermissionDecisionCurrent(tx, org, p.authorityId, ["tool.policy.manage"], undefined, undefined, actor) ||
     p.reviewId !== reviewId || Date.parse(p.expiresAt) <= Date.now())
-    throw new HrPolicyError("Drift consent, exact reviewer authority or baseline review is no longer current.", 409);
+    throw new HrPolicyError("Drift consent, current policy-management permission or baseline review is no longer current.", 409);
   const currentReview = await assertReview(tx, org);
   const baseline = await readSetting(tx, org, `${RUN_PREFIX}${p.baselineRunId}`);
   if (currentReview.reviewId !== reviewId || !eligibleDriftBaseline(baseline, reviewId, p.providerIsolated))

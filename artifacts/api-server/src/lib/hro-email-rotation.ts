@@ -1,7 +1,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, hroEmailRequests, hroMailboxIngress } from "@workspace/db";
-import { access, authority, currentReceipt, type Tx } from "./offboarding/authority";
+import { access, type Tx } from "./offboarding/authority";
+import { requireEmailRouteAdministrator, emailRouteReceiptCurrent as currentReceipt } from "./hro-email-authorization";
 import { SeparationError, object, text } from "./offboarding/model";
 import { audit } from "./offboarding/service";
 import { withSensitiveLifecycleFence } from "./onboarding/sensitive-lifecycle";
@@ -20,8 +21,7 @@ export function rotationRequestEligible(row: Request, route: Route) {
 }
 async function configureAuthority(tx: Tx, org: string, actor: string) {
   await access(tx, org, actor, true);
-  await authority(tx, org, actor, "hr-compliance-approve");
-  await authority(tx, org, actor, "legal-approve");
+  await requireEmailRouteAdministrator(tx, org, actor);
 }
 async function routeFor(tx: Tx, org: string, id: string) {
   const [route] = await tx.select().from(hroMailboxIngress).where(and(

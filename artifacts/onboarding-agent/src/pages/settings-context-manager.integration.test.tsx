@@ -258,6 +258,8 @@ test('filters, correlation navigation and Back/Forward reset operator pagination
       await tick();
     });
     await waitFor(() => h.requests.at(-1)!.search.includes('status=failed'), 'status filter');
+    // The request is observable before React Query commits its returned rows.
+    await waitFor(() => Boolean(document.querySelector('a[href*="contextCorrelation"]')), 'filtered history rendered');
     await act(async () => {
       document.querySelector<HTMLAnchorElement>('a[href*="contextCorrelation"]')!.click();
       await tick();

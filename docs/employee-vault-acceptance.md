@@ -107,7 +107,7 @@ approved; a local access log is not an independent external audit certification.
    satisfies a policy requiring additional checks. Cases must explicitly adopt
    the reviewed revision through the existing audited governance rebase.
 5. Retain the existing acceptance, class-specific sensitive lifecycle policies,
-   effective access permissions, specialist authority, protected audit and final
+   effective access permissions, explicit version-bound human reviews, protected audit and final
    HR approval prerequisites. Employer receipt retention is capped by both the
    independent approved maximum and the applicable approved employer BGV policy.
    Active employer BGV/case holds prevent receipt minimization.

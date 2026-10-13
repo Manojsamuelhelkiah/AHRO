@@ -30,3 +30,5 @@ export * from "./hro-context";
 export * from "./employee-vault";
 export * from "./uat-admission";
 export * from "./offboarding";
+export * from "./human-permission";
+export * from "./human-permission-decisions";

@@ -19,6 +19,7 @@ import {
 } from "./hr-policy-ai";
 import { sentenceForQuestion, containsPromptInjection, policyPermitted, policyCurrent, policyTimely } from "./hr-policy-selection";
 import { isPlatformSuperAdmin } from "./private-platform-admin";
+import { hasHumanPermissions, recordHumanPermissionDecision, recordedHumanPermissionDecisionCurrent } from "./human-permissions";
 
 export type PolicyRole = "owner" | "admin" | "member";
 type PolicyStatus = "draft" | "in_review" | "published" | "superseded" | "retired";
@@ -136,30 +137,23 @@ async function liveMember(tx: any, organizationId: string, userId: string): Prom
 }
 
 /** Trusted governance records are intentionally the only specialist authority. */
-export async function verifiedAuthority(tx: any, organizationId: string, userId: string, authorityRole: string) {
+export async function verifiedAuthority(tx: any, organizationId: string, userId: string, authorityRole: string, reviewedRevision = 0) {
   await liveMember(tx, organizationId, userId);
-  const now = new Date();
-  const [grant] = await tx.select().from(onbGovernanceAuthorityAssignments).where(and(
-    eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
-    eq(onbGovernanceAuthorityAssignments.assigneeUserId, userId),
-    eq(onbGovernanceAuthorityAssignments.authorityRole, authorityRole),
-    eq(onbGovernanceAuthorityAssignments.verificationStatus, "verified"),
-    isNull(onbGovernanceAuthorityAssignments.revokedAt),
-    or(isNull(onbGovernanceAuthorityAssignments.expiresAt), gt(onbGovernanceAuthorityAssignments.expiresAt, now)),
-  )).orderBy(desc(onbGovernanceAuthorityAssignments.createdAt)).limit(1).for("update");
-  if (!grant) throw new HrPolicyError(
-    "A current, verified governance authority assignment is required.",
+  if (!await hasHumanPermissions(tx, { organizationId, actorUserId: userId, requiredKeys: ["tool.policy.manage"] })) throw new HrPolicyError(
+    "Current policy-management permission is required.",
     403,
-    "VERIFIED_POLICY_AUTHORITY_REQUIRED",
+    "POLICY_MANAGEMENT_PERMISSION_REQUIRED",
   );
-  return grant;
+  return recordHumanPermissionDecision(tx, {
+    organizationId, actorUserId: userId, requiredKeys: ["tool.policy.manage"],
+    reviewedRevision, decision: "permission-check",
+  });
 }
 
 // Platform administration is request-scoped, not a permanent specialist grant.
 // Never use this helper to substitute for the independent policy reviewer.
 async function administrativeAuthority(tx: any, organizationId: string, userId: string, role: string) {
   await liveMember(tx, organizationId, userId);
-  if (isPlatformSuperAdmin(userId, organizationId)) return null;
   return verifiedAuthority(tx, organizationId, userId, role);
 }
 
@@ -168,40 +162,13 @@ export async function requirePolicyMaintainer(tx: any, organizationId: string, u
 }
 
 async function authorityStillCurrent(tx: any, organizationId: string, assignmentId: number | null, role: string): Promise<boolean> {
-  if (!assignmentId) return false;
-  const now = new Date();
-  const [grant] = await tx.select().from(onbGovernanceAuthorityAssignments).where(and(
-    eq(onbGovernanceAuthorityAssignments.id, assignmentId),
-    eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
-    eq(onbGovernanceAuthorityAssignments.authorityRole, role),
-    eq(onbGovernanceAuthorityAssignments.verificationStatus, "verified"),
-    isNull(onbGovernanceAuthorityAssignments.revokedAt),
-    or(isNull(onbGovernanceAuthorityAssignments.expiresAt), gt(onbGovernanceAuthorityAssignments.expiresAt, now)),
-  ));
-  if (!grant) return false;
-  const [member] = await tx.select({ id: organizationMembershipsTable.id }).from(organizationMembershipsTable).where(and(
-    eq(organizationMembershipsTable.organizationId, organizationId),
-    eq(organizationMembershipsTable.clerkUserId, grant.assigneeUserId),
-    isNull(organizationMembershipsTable.revokedAt),
-  ));
-  return Boolean(member);
+  return recordedHumanPermissionDecisionCurrent(tx, organizationId, assignmentId, ["tool.policy.manage"]);
 }
 
 async function activeAuthorityRoles(tx: any, organizationId: string, userId: string): Promise<Set<string>> {
-  if (isPlatformSuperAdmin(userId, organizationId)) {
-    return new Set(["hr-policy-maintain", "hr-policy-historical-review", "hr-policy-handoff-resolve"]);
-  }
-  const now = new Date();
-  const grants = await tx.select({ authorityRole: onbGovernanceAuthorityAssignments.authorityRole })
-    .from(onbGovernanceAuthorityAssignments)
-    .where(and(
-      eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
-      eq(onbGovernanceAuthorityAssignments.assigneeUserId, userId),
-      eq(onbGovernanceAuthorityAssignments.verificationStatus, "verified"),
-      isNull(onbGovernanceAuthorityAssignments.revokedAt),
-      or(isNull(onbGovernanceAuthorityAssignments.expiresAt), gt(onbGovernanceAuthorityAssignments.expiresAt, now)),
-    ));
-  return new Set(grants.map((grant: { authorityRole: string }) => grant.authorityRole));
+  const allowed = await hasHumanPermissions(tx, { organizationId, actorUserId: userId, requiredKeys: ["tool.policy.manage"] });
+  return new Set(allowed ? ["hr-policy-maintain", "hr-policy-historical-review", "hr-policy-handoff-resolve",
+    "hr-compliance", "legal", "occupational-health", "payroll"] : []);
 }
 
 function policyPublic(row: typeof onbHrPolicyVersions.$inferSelect) {
@@ -543,7 +510,7 @@ export async function reviewPolicy(organizationId: string, userId: string, polic
       eq(onbHrPolicyVersions.version, version),
     )).for("update");
     if (!row) throw new HrPolicyError("Policy version not found.", 404);
-    const grant = await verifiedAuthority(tx, organizationId, userId, row.reviewAuthorityRole);
+    const grant = await verifiedAuthority(tx, organizationId, userId, row.reviewAuthorityRole, row.version);
     if (!isAudience(row, await liveMember(tx, organizationId, userId), organizationId, userId)) throw new HrPolicyError("Policy audience permission required.", 403);
     if (row.status !== "in_review" || row.reviewOutcome !== null) throw new HrPolicyError("This exact policy version is not awaiting review.", 409);
     if (row.createdByUserId === userId) throw new HrPolicyError("The policy author cannot review their own version.", 403, "POLICY_REVIEW_SOD_REQUIRED");

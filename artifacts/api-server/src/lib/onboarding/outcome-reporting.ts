@@ -76,32 +76,28 @@ async function humanAuthorityBinding(
   tx: OnboardingDbTransaction,
   c: typeof onbCases.$inferSelect,
   actorUserId: string,
-): Promise<typeof onbAuthorityAssignments.$inferSelect> {
+): Promise<{
+  id: string; revision: number; personUserId: string; authorityRole: string;
+  siteScope: string | null; jurisdictionScope: string | null; validFrom: Date; validUntil: Date | null;
+  permissionDecision: import("@workspace/db").HumanPermissionDecision;
+}> {
   if (!(await hasCurrentAuthorityScope(tx, {
     organizationId: c.organizationId,
     actorUserId,
     scope: REPORTING_HUMAN_AUTHORITY_SCOPE,
     caseId: c.id,
   }))) {
-    invalid("Current governance-approved HR compliance authority is required to record human outcome evidence.");
+    invalid("Current case approval and flow edit permissions are required to record human outcome evidence.");
   }
   const now = new Date();
-  const rows = await tx.select().from(onbAuthorityAssignments).where(and(
-    eq(onbAuthorityAssignments.organizationId, c.organizationId),
-    eq(onbAuthorityAssignments.personUserId, actorUserId),
-    eq(onbAuthorityAssignments.status, "active"),
-    lte(onbAuthorityAssignments.validFrom, now),
-    sql`(${onbAuthorityAssignments.validUntil} is null or ${onbAuthorityAssignments.validUntil} > ${now})`,
-  )).for("update");
-  const authority = rows.find((item) =>
-    item.scopes.includes(REPORTING_HUMAN_AUTHORITY_SCOPE) &&
-    roleMayExerciseScope(item.authorityRole, REPORTING_HUMAN_AUTHORITY_SCOPE) &&
-    (item.caseId === null || item.caseId === c.id) &&
-    (!item.siteScope || item.siteScope === c.geography) &&
-    (!item.jurisdictionScope || item.jurisdictionScope === c.legalEntity)
-  );
-  if (!authority) invalid("A live HR compliance authority assignment binding is required.");
-  return authority;
+  return { id: `human-permission/v1:${actorUserId}`, revision: 1, personUserId: actorUserId,
+    authorityRole: "permission-based-human", siteScope: c.geography, jurisdictionScope: c.legalEntity,
+    validFrom: now, validUntil: null, permissionDecision: {
+      schema: "human-permission/v1", organizationId: c.organizationId, actorUserId, caseId: c.id,
+      requiredKeys: ["tool.approval.decide", "flow.case.edit"], reviewedRevision: c.workforceContextVersion,
+      evidenceGeneration: c.workforceContextVersion, decision: "source-attested",
+      recordedAt: now.toISOString(), ownerAdminRequired: false,
+    } };
 }
 
 function persistedHumanAuthorityIsValid(
@@ -122,7 +118,11 @@ function persistedHumanAuthorityIsValid(
     receipt.organizationId !== c.organizationId ||
     receipt.actorUserId !== evidence.recordedByUserId ||
     receipt.scope !== REPORTING_HUMAN_AUTHORITY_SCOPE ||
-    !roleMayExerciseScope(receipt.authorityRole as OnbAuthorityRole, REPORTING_HUMAN_AUTHORITY_SCOPE) ||
+    !(receipt.permissionDecision
+      ? receipt.permissionDecision.schema === "human-permission/v1" &&
+        receipt.permissionDecision.actorUserId === evidence.recordedByUserId &&
+        receipt.permissionDecision.organizationId === c.organizationId && receipt.permissionDecision.caseId === c.id
+      : roleMayExerciseScope(receipt.authorityRole as OnbAuthorityRole, REPORTING_HUMAN_AUTHORITY_SCOPE)) ||
     receipt.caseId !== c.id ||
     (receipt.siteScope !== null && receipt.siteScope !== c.geography) ||
     (receipt.jurisdictionScope !== null && receipt.jurisdictionScope !== c.legalEntity)
@@ -136,7 +136,7 @@ function persistedHumanAuthorityIsValid(
 async function createHumanAuthorityReceipt(
   tx: OnboardingDbTransaction,
   c: typeof onbCases.$inferSelect,
-  authority: typeof onbAuthorityAssignments.$inferSelect,
+  authority: Awaited<ReturnType<typeof humanAuthorityBinding>>,
 ): Promise<number> {
   const [receipt] = await tx.insert(onbOutcomeEvidenceAuthorityReceipts).values({
     organizationId: c.organizationId,
@@ -150,6 +150,7 @@ async function createHumanAuthorityReceipt(
     jurisdictionScope: authority.jurisdictionScope,
     validFrom: authority.validFrom,
     validUntil: authority.validUntil,
+    permissionDecision: authority.permissionDecision,
   }).returning({ id: onbOutcomeEvidenceAuthorityReceipts.id });
   return receipt!.id;
 }

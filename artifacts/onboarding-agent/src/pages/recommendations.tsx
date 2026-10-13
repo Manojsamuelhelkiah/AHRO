@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customFetch } from '@workspace/api-client-react';
 import { Button, Badge, IconTile, LoadingBlock, PageHeader, cn } from '@/components/ui-shared';
 import { useOrganizationRole } from '@/hooks/use-organization-role';
-import { listPolicyAuthorityMembers, type TenantMember } from '@/lib/workforce-policy-api';
+import { listTenantMembers, type TenantMember } from '@/lib/workforce-policy-api';
 import { AlertTriangle, Check, FlaskConical, RefreshCw, ShieldCheck, X } from 'lucide-react';
 
 type LearningPolicy = {
@@ -251,7 +251,7 @@ export function RecommendationsPage() {
   const queryClient = useQueryClient();
   const { role, loading: roleLoading } = useOrganizationRole();
   const canReview = role === 'owner' || role === 'admin';
-  const members = useQuery({ queryKey: ['onboarding', 'policy-authority-members'], queryFn: listPolicyAuthorityMembers, enabled: canReview });
+  const members = useQuery({ queryKey: ['onboarding', 'members'], queryFn: listTenantMembers, enabled: canReview });
   const query = useQuery({
     queryKey: key(windowDays),
     queryFn: () => customFetch<RecommendationsResponse>(`/api/onboarding/policy-recommendations?windowDays=${windowDays}`, { responseType: 'json', credentials: 'include' }),

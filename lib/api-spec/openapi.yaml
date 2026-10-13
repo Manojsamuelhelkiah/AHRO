@@ -428,56 +428,88 @@ paths:
               schema: { type: array, items: { $ref: "#/components/schemas/SeparationIntakeResult" } }
         "409":
           description: HRIS integration not approved.
-  /governance/authority-options:
+  /onboarding/human-permissions:
     get:
-      operationId: getGovernanceAuthorityOptions
-      summary: List client-scoped members and authority roles for appointments
-      description: Requires an owner/admin or authenticated verified governance operator. Only active members of the pinned client are included. Names are display labels, never authority or identity proof.
-      tags: [Governance]
+      operationId: getCurrentHumanPermissions
+      tags: [onboarding]
+      summary: Current tenant-scoped action permissions for the signed-in named member
+      description: UI capability hints only. Every mutation and continuation independently rechecks live tenant and case permissions.
       responses:
         "200":
-          description: Member choices and server-evaluated appointment capabilities
+          description: Effective exact-key permissions
           content:
             application/json:
               schema:
                 type: object
-                required: [organizationId, canNominate, canVerify, members, roles]
+                required: [allows]
                 properties:
-                  organizationId:
-                    type: string
-                  canNominate:
-                    type: boolean
-                  canVerify:
-                    type: boolean
-                  members:
+                  allows:
                     type: array
-                    items:
-                      type: object
-                      required: [clerkUserId, role, name, email]
-                      properties:
-                        clerkUserId:
-                          type: string
-                        role:
-                          type: string
-                          enum: [owner, admin, member]
-                        name:
-                          type: [string, "null"]
-                        email:
-                          type: [string, "null"]
-                  roles:
-                    type: array
-                    items:
-                      type: object
-                      required: [id, label]
-                      properties:
-                        id:
-                          type: string
-                        label:
-                          type: string
-        "403":
-          description: Member directory access denied
-        "503":
-          description: Member identity directory temporarily unavailable
+                    items: { type: string }
+  /onboarding/approvals/{id}/fresh-review:
+    post:
+      operationId: requestFreshOnboardingApprovalReview
+      tags: [onboarding]
+      summary: Explicitly renew an unfinished case's obsolete human review cycle
+      description: Requires current case-flow and profile edit permissions. Retains historical decisions, holds pending work, and never resumes work or resets completed or ambiguous provider outcomes.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Fresh pending review recorded, without releasing work
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, reviewRequired, released]
+                properties:
+                  version: { type: integer }
+                  reviewRequired: { type: boolean }
+                  released: { type: boolean }
+        "403": { description: Current case edit permissions required }
+        "404": { description: Approval not found in this client }
+        "409": { description: "Stale version, current decision, historical/completed case or unresolved provider effect" }
+  /onboarding/approval-email-binding:
+    put:
+      operationId: updateOwnApprovalEmailBinding
+      tags: [onboarding]
+      summary: Bind or withdraw the signed-in member's uniquely verified email for remote replies
+      description: Consent and identity binding only. Does not grant permissions, decide pending work, or send mail. Remote decisions also require verified full-body Gmail DKIM transport, sender/case/version checks and current effective permissions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, enabled]
+              properties:
+                email: { type: string, format: email }
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Binding recorded or withdrawn
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [email, enabled]
+                properties:
+                  email: { type: string, format: email }
+                  enabled: { type: boolean }
+        "403": { description: Active named client member with unique verified email ownership required }
+        "409": { description: This address is bound to another member }
+        "503": { description: Email identity could not be verified }
   /uat-auth/challenge:
     post:
       operationId: startUatSignIn
@@ -1283,7 +1315,7 @@ paths:
       operationId: createGovernanceDecision
       tags: [governance]
       summary: Create a draft decision revision one
-      description: Owner/admin may draft only. Approval requires separately verified specialist authority.
+      description: A named owner/admin with current policy-management permission may draft. Independent explicit review is still required.
       requestBody:
         required: true
         content:
@@ -1344,7 +1376,7 @@ paths:
       operationId: reviewGovernanceDecision
       tags: [governance]
       summary: Approve or reject one exact decision revision
-      description: Requires an active server-verified assignment for the decision's accountable role. Tenant administration alone is insufficient.
+      description: Requires current effective tool.policy.manage permission and an explicit decision on the exact current revision. Reviewer roles are routing metadata, not professional qualifications.
       parameters:
         - { name: key, in: path, required: true, schema: { type: string } }
       requestBody:
@@ -1363,7 +1395,7 @@ paths:
         "200":
           description: Review receipt and current decision
           content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceDecisionReviewResponse" } } }
-        "403": { description: Verified active specialist authority required }
+        "403": { description: Current policy-management permission required }
         "409": { description: Stale or already-reviewed revision }
   /governance/requirements:
     get:
@@ -1404,83 +1436,6 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceRequirementResponse" } } }
         "403": { description: Verified specialist authority required }
         "409": { description: Stale coverage version }
-  /governance/assignments:
-    get:
-      operationId: listGovernanceAssignments
-      tags: [governance]
-      summary: List verified authority assignments
-      responses:
-        "200":
-          description: Assignments
-          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceAssignmentsResponse" } } }
-    post:
-      operationId: assignGovernanceAuthority
-      tags: [governance]
-      summary: Assign or nominate specialist authority
-      description: A server allow-listed verified operator creates verified authority. Owner/admin may only create a pending nomination, which has no review authority until verified.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              oneOf:
-                - $ref: "#/components/schemas/GovernanceAuthorityAssignmentInput"
-                - $ref: "#/components/schemas/GovernanceAuthorityNominationInput"
-      responses:
-        "201":
-          description: Verified assignment
-          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceAssignmentResponse" } } }
-        "403": { description: Server-verified operator required }
-  /governance/assignments/{id}/verify:
-    post:
-      operationId: verifyGovernanceAuthority
-      tags: [governance]
-      summary: Verify a pending owner/admin authority nomination
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [verificationReference]
-              properties:
-                verificationReference: { type: string, minLength: 1, maxLength: 4000 }
-      responses:
-        "200": { description: Verified assignment }
-        "403": { description: Server-verified operator required }
-        "409": { description: "Pending assignment missing, revoked, or already verified" }
-  /governance/authority-bootstrap:
-    post:
-      operationId: bootstrapGovernanceAuthority
-      tags: [governance]
-      summary: Bootstrap verified specialist authority
-      description: Same server-verified operator controls as assignment; this is not a tenant-admin escalation path.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/GovernanceAuthorityAssignmentInput" }
-      responses:
-        "201":
-          description: Verified bootstrap assignment
-          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceAssignmentResponse" } } }
-        "403": { description: Server-verified operator required }
-  /governance/assignments/{id}/revoke:
-    post:
-      operationId: revokeGovernanceAuthority
-      tags: [governance]
-      summary: Revoke a verified authority assignment
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: integer, minimum: 1 } }
-      responses:
-        "200":
-          description: Revoked assignment
-          content: { application/json: { schema: { $ref: "#/components/schemas/GovernanceAssignmentResponse" } } }
-        "403": { description: Server-verified operator required }
-        "409": { description: Assignment absent or already revoked }
   /governance/history:
     get:
       operationId: listGovernanceHistory
@@ -5044,24 +4999,6 @@ paths:
         "403": { description: HR owner/admin role required }
         "404": { description: Case or gate not found }
         "409": { description: Item is not an evidence gate or supplied authority is not configured for it }
-  /onboarding/policy-authorities/{userId}/{authorityRole}:
-    put:
-      operationId: assignOnboardingPolicyAuthority
-      tags: [onboarding]
-      summary: Assign a tenant member as a server-authoritative policy evidence authority
-      parameters:
-        - name: userId
-          in: path
-          required: true
-          schema: { type: string, minLength: 1 }
-        - name: authorityRole
-          in: path
-          required: true
-          schema: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{1,63}$" }
-      responses:
-        "204": { description: Authority assignment exists }
-        "403": { description: HR owner/admin role required }
-        "404": { description: User is not a member of this organization }
   /onboarding/cases/{id}/workforce-context:
     put:
       operationId: correctOnboardingWorkforceContext
@@ -5360,126 +5297,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /onboarding/authority/governance:
-    get:
-      operationId: getOnboardingAuthorityGovernance
-      tags: [onboarding]
-      summary: Current tenant governance state and caller authority administration eligibility
-      responses:
-        "200":
-          description: Governance state
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OnbAuthorityGovernanceState"
-  /onboarding/authority/bootstrap:
-    post:
-      operationId: bootstrapOnboardingAuthorityGovernance
-      tags: [onboarding]
-      summary: Record operator attestation only; does not approve production authority
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                note: { type: string }
-              required: [note]
-      responses:
-        "201": { description: Operator attestation recorded }
-        "403": { description: Owner or admin required }
-  /onboarding/authority/governance/withdraw:
-    post:
-      operationId: withdrawOnboardingAuthorityGovernance
-      tags: [onboarding]
-      summary: Immediately withdraw tenant specialist authority governance
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                reason: { type: string, minLength: 1 }
-              required: [reason]
-      responses:
-        "200": { description: Governance withdrawn and authority decisions fail closed }
-        "403": { description: Current governance authority administrator required }
-  /onboarding/authority/assignments:
-    get:
-      operationId: listOnboardingAuthorityAssignments
-      tags: [onboarding]
-      summary: List specialist authority assignments (restricted)
-      responses:
-        "200":
-          description: Authority assignments
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/OnbAuthorityAssignment"
-        "403": { description: Governance-approved authority administration required }
-    post:
-      operationId: createOnboardingAuthorityAssignment
-      tags: [onboarding]
-      summary: Grant a scoped specialist authority assignment (restricted; self-grant prohibited)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/OnbAuthorityAssignmentRequest"
-      responses:
-        "201":
-          description: Authority granted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OnbAuthorityAssignment"
-        "403": { description: Governance-approved authority administration required or self-grant denied }
-  /onboarding/authority/assignments/{id}/revoke:
-    post:
-      operationId: revokeOnboardingAuthorityAssignment
-      tags: [onboarding]
-      summary: Revoke specialist authority; pending decisions and dispatches revalidate it
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                reason: { type: string }
-              required: [reason]
-      responses:
-        "200": { description: Authority revoked }
-        "403": { description: Governance-approved authority administration required }
-  /onboarding/authority/unresolved-approvals:
-    get:
-      operationId: listOnboardingUnresolvedAuthorityApprovals
-      tags: [onboarding]
-      summary: Historical approvals lacking authority evidence, for review only
-      responses:
-        "200": { description: Legacy review queue }
-  /onboarding/authority/unresolved-approvals/{id}/acknowledge:
-    post:
-      operationId: acknowledgeOnboardingUnresolvedAuthorityApproval
-      tags: [onboarding]
-      summary: Acknowledge historical evidence without replaying a decision or effect
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: integer, minimum: 1 }
-      responses:
-        "200": { description: Historical review acknowledged without effect }
   /onboarding/connectors:
     get:
       operationId: listOnboardingConnectors
@@ -12889,58 +12706,6 @@ components:
           type: integer
           minimum: 1
       required: [decision, expectedVersion]
-    OnbAuthorityGovernanceState:
-      type: object
-      properties:
-        governance:
-          type: object
-          properties:
-            status: { type: string, enum: [unconfigured, operator-attested, governance-approved, withdrawn] }
-            attestedAt: { type: ["string", "null"] }
-            attestationNote: { type: ["string", "null"] }
-            approvedAt: { type: ["string", "null"] }
-            governanceSource: { type: ["string", "null"] }
-            revision: { type: integer }
-          required: [status, revision]
-        canAdminister: { type: boolean }
-        assignments:
-          type: array
-          items: { $ref: "#/components/schemas/OnbAuthorityAssignment" }
-      required: [governance, canAdminister, assignments]
-    OnbAuthorityAssignment:
-      type: object
-      properties:
-        id: { type: string }
-        personUserId: { type: string }
-        personEmail: { type: ["string", "null"] }
-        emailResponderAuthorized: { type: boolean }
-        authorityRole: { type: string }
-        scopes: { type: array, items: { type: string } }
-        caseId: { type: ["integer", "null"] }
-        siteScope: { type: ["string", "null"] }
-        jurisdictionScope: { type: ["string", "null"] }
-        validFrom: { type: string }
-        validUntil: { type: ["string", "null"] }
-        status: { type: string, enum: [active, revoked] }
-        revision: { type: integer, minimum: 1 }
-        governanceDecisionRef: { type: string }
-        revokeReason: { type: ["string", "null"] }
-      required: [id, personUserId, personEmail, emailResponderAuthorized, authorityRole, scopes, caseId, siteScope, jurisdictionScope, validFrom, validUntil, status, revision, governanceDecisionRef, revokeReason]
-    OnbAuthorityAssignmentRequest:
-      type: object
-      properties:
-        personUserId: { type: string }
-        personEmail: { type: ["string", "null"] }
-        emailResponderAuthorized: { type: boolean }
-        authorityRole: { type: string }
-        scopes: { type: array, minItems: 1, items: { type: string } }
-        caseId: { type: ["integer", "null"] }
-        siteScope: { type: ["string", "null"] }
-        jurisdictionScope: { type: ["string", "null"] }
-        validFrom: { type: ["string", "null"] }
-        validUntil: { type: ["string", "null"] }
-        governanceDecisionRef: { type: string }
-      required: [personUserId, authorityRole, scopes, governanceDecisionRef]
     OnbApprovalHistory:
       type: object
       properties:
@@ -15210,23 +14975,6 @@ components:
         reviewDueAt: { type: [string, "null"], format: date-time }
         impactedWorkflows: { type: array, items: { type: string }, maxItems: 100 }
         sourceReference: { type: [string, "null"], maxLength: 4000 }
-    GovernanceAuthorityAssignmentInput:
-      type: object
-      additionalProperties: false
-      required: [role, assigneeUserId, verificationReference]
-      properties:
-        role: { type: string, minLength: 1, maxLength: 64 }
-        assigneeUserId: { type: string, minLength: 1, maxLength: 4000 }
-        verificationReference: { type: string, minLength: 1, maxLength: 4000 }
-    GovernanceAuthorityNominationInput:
-      type: object
-      additionalProperties: false
-      required: [role, assigneeUserId, assignmentReason]
-      properties:
-        role: { type: string, minLength: 1, maxLength: 64 }
-        assigneeUserId: { type: string, minLength: 1, maxLength: 4000 }
-        assignmentReason: { type: string, minLength: 1, maxLength: 4000 }
-        expiresAt: { type: [string, "null"], format: date-time }
     GovernanceDecisionsResponse:
       type: object
       additionalProperties: false

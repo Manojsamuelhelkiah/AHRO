@@ -37,7 +37,7 @@ import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
   withSensitiveLifecycleFence,
 } from "./sensitive-lifecycle";
-import { roleMayExerciseScope, verifyDecisionAuthorityInTransaction } from "./decision-authority";
+import { verifiedBoundEmailMember, verifyDecisionAuthorityInTransaction } from "./decision-authority";
 import { resolveEffectiveAccessInTransaction } from "../access-governance";
 import {
   isVerifiedGmailDkimTransport,
@@ -173,31 +173,13 @@ async function hasEnabledEmailResponder(
   approval: ApprovalLike,
   address: string,
 ): Promise<boolean> {
-  if (!approval.authorityScope) return false;
-  const [c] = await tx.select({
-    geography: onbCases.geography,
-    legalEntity: onbCases.legalEntity,
-  }).from(onbCases).where(and(
-    eq(onbCases.organizationId, approval.organizationId),
-    eq(onbCases.id, approval.caseId),
-  ));
-  if (!c) return false;
-  const now = new Date();
-  const rows = await tx.select().from(onbAuthorityAssignments).where(and(
-    eq(onbAuthorityAssignments.organizationId, approval.organizationId),
-    sql`lower(${onbAuthorityAssignments.personEmail}) = lower(${address})`,
-    eq(onbAuthorityAssignments.emailResponderAuthorized, true),
-    eq(onbAuthorityAssignments.status, "active"),
-    lte(onbAuthorityAssignments.validFrom, now),
-    or(sql`${onbAuthorityAssignments.validUntil} is null`, sql`${onbAuthorityAssignments.validUntil} > ${now}`),
-  ));
-  return rows.filter((row) =>
-    row.scopes.includes(approval.authorityScope!) &&
-    roleMayExerciseScope(row.authorityRole, approval.authorityScope!) &&
-    (row.caseId === null || row.caseId === approval.caseId) &&
-    (!row.siteScope || row.siteScope === c.geography) &&
-    (!row.jurisdictionScope || row.jurisdictionScope === c.legalEntity),
-  ).length === 1;
+  const member = await verifiedBoundEmailMember(tx, approval.organizationId, address);
+  if (!member) return false;
+  const access = await resolveEffectiveAccessInTransaction(tx, {
+    organizationId: approval.organizationId, principalType: "human", principalId: member,
+    caseId: approval.caseId, purpose: "remote-approval-notification",
+  });
+  return access.allows.includes("tool.approval.decide") && access.allows.includes("flow.case.edit");
 }
 function decisionContent(opts: {
   approval: ApprovalLike;
@@ -445,12 +427,18 @@ export async function decideApproval(opts: {
       }
       return { outcome: "stale", reason, currentVersion, status: approval.status } as const;
     }
+    const authority = await verifyDecisionAuthorityInTransaction(tx, {
+      organizationId: opts.organizationId,
+      approval,
+      actorUserId: opts.actorUserId,
+      responderEmail: opts.responderEmail,
+    });
     if (opts.additionalAccessKeys?.length) {
-      const access = opts.actorUserId
+      const access = authority.allowed
         ? await resolveEffectiveAccessInTransaction(tx, {
             organizationId: opts.organizationId,
             principalType: "human",
-            principalId: opts.actorUserId,
+            principalId: authority.personUserId,
             caseId: approval.caseId,
             purpose: "onboarding-approval-decision",
           })
@@ -464,12 +452,6 @@ export async function decideApproval(opts: {
     }
     // Check current, scoped authority inside the case/approval lock, so a
     // concurrent grant revocation cannot authorize this decision.
-    const authority = await verifyDecisionAuthorityInTransaction(tx, {
-      organizationId: opts.organizationId,
-      approval,
-      actorUserId: opts.actorUserId,
-      responderEmail: opts.responderEmail,
-    });
     if (!authority.allowed) {
       const recipient = normalizedConfiguredAddress(opts.sourceAddress);
       if (remoteReply && recipient) {
@@ -495,6 +477,13 @@ export async function decideApproval(opts: {
       version: currentVersion,
       decidedAuthorityId: authority.authorityId,
       decidedAuthorityRevision: authority.revision,
+      permissionDecision: {
+        schema: "human-permission/v1", organizationId: opts.organizationId,
+        caseId: approval.caseId, actorUserId: decisionActor,
+        requiredKeys: ["tool.approval.decide", "flow.case.edit", ...(opts.additionalAccessKeys ?? [])],
+        reviewedRevision: currentVersion, evidenceGeneration: currentVersion,
+        decision: opts.decision, recordedAt: decidedAt.toISOString(), ownerAdminRequired: false,
+      },
     }).where(and(
       eq(onbApprovals.organizationId, opts.organizationId),
       eq(onbApprovals.id, opts.approvalId),

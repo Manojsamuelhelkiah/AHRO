@@ -76,7 +76,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
   guide("administration", "Governance, privacy, retention and audit", "/settings", "Sensitive access, legal holds, retention, independent audit readiness and release checks remain mandatory.",
     ["Use scoped access reports and current authority.", "Review approved lifecycle policies and legal holds.", "Verify independent audit receipts before regulated release."],
     ["Approved retention policy", "Legal hold", "Independent provider-verified audit receipt"],
-    ["Tenant administration is not specialist authority.", "Restricted history and protected effect journals are retained; retirement does not purge records."]),
+    ["Tenant membership alone is not decision permission; ordinary access is not professional qualification.", "Restricted history and protected effect journals are retained; retirement does not purge records."]),
 ];
 
 export const FEATURE_COVERAGE = {

@@ -10,7 +10,7 @@ Clerk authenticates the person. Active application membership determines which c
 
 Use the existing client setup flow to create or join an organization. Owners administer membership in Settings. Changing an application role does not grant professional approval authority such as Legal, Occupational Health or Payroll.
 
-Removing membership preserves its revocation record rather than erasing history. The removed account must not recover access by reusing an old shared join code, and prior specialist authority must not revive. Owners cannot remove or demote themselves through ordinary member administration. Ownership transfer and tenant deletion are not part of this interface.
+Removing membership preserves its revocation record rather than erasing history. The removed account must not recover access by reusing an old shared join code, and old decisions must not revive revoked permissions. Specialist records remain historical only. Owners cannot remove or demote themselves through ordinary member administration. Ownership transfer and tenant deletion are not part of this interface.
 
 ## Requests and switching
 
@@ -23,7 +23,7 @@ The browser pins its request scope for the lifetime of the mounted page. Switchi
 - Client-owned records, settings, process policies, caches and idempotency keys retain organization scope.
 - Parent-child relationships must prevent references across organizations. Existing uploader-private restrictions remain narrower than organization membership.
 - Background jobs and provider callbacks must derive a trusted tenant and preserve it through claim, execution and recovery.
-- Shared mailboxes require case-bound attribution; an email address alone does not identify a client or specialist authority.
+- Shared mailboxes require case-bound attribution; an email address alone does not identify a client or grant decision permissions.
 - Files, AI context and exports must use authorized tenant-scoped inputs, including any narrower record permissions.
 - Learned workforce recommendations do not pool client data without separately approved governance.
 - Audit evidence has its own retention and independent-protection controls. Membership removal is not permission to erase historical accountability.

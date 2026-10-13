@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   db,
+  accessNamedGrants,
   onbApprovalHistory,
   onbApprovalNotifications,
   onbApprovals,
@@ -84,22 +85,20 @@ describe("versioned approval transaction boundaries (real DB)", { skip: !hasDb }
   });
 
   async function ensureDecisionAuthority() {
-    await db.insert(onbAuthorityGovernance).values({
-      organizationId, status: "governance-approved", approvedByUserId: "test-governance",
-      approvedAt: new Date(), governanceSource: "test", revision: 1,
-    }).onConflictDoUpdate({
-      target: onbAuthorityGovernance.organizationId,
-      set: { status: "governance-approved", approvedAt: new Date(), governanceSource: "test" },
-    });
     await db.insert(organizationMembershipsTable).values({
       organizationId, clerkUserId: approverUserId, role: "member",
     }).onConflictDoNothing();
-    await db.insert(onbAuthorityAssignments).values({
-      id: `${suffix}-authority`, organizationId, personUserId: approverUserId,
-      authorityRole: "hr-compliance", scopes: ["hr-compliance-approve"],
-      validFrom: new Date(Date.now() - 60_000), status: "active", revision: 1,
-      grantorUserId: "test-governance", source: "test", governanceDecisionRef: "test",
-    }).onConflictDoNothing();
+    const existing = await db.select().from(accessNamedGrants).where(and(
+      eq(accessNamedGrants.organizationId, organizationId), eq(accessNamedGrants.principalId, approverUserId),
+    ));
+    if (!existing.length) await db.insert(accessNamedGrants).values(
+      ["tool.approval.decide", "flow.case.edit"].map(key => ({
+        organizationId, principalType: "human" as const, principalId: approverUserId, scope: "tenant" as const,
+        resourceType: key.startsWith("tool.") ? "tool" as const : "flow" as const, resourceKey: key,
+        source: "named" as const, effect: "allow" as const, status: "active" as const,
+        createdByUserId: "independent-fixture-owner", approvedByUserId: "independent-fixture-owner", approvedAt: new Date(),
+      })),
+    );
   }
 
   async function createFixture() {

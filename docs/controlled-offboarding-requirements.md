@@ -51,7 +51,7 @@ separation actions, messages, entitlements or operational authority.
   and never acquire ordinary automation authority. Emergency Security work is
   independently scoped, manual and subsequently reviewed.
 - Opaque narratives and history require all potentially relevant sensitive-field
-  grants and verified specialists. The fixed numeric settlement projection is
+  grants and explicit named-human reviews. Access does not establish professional qualifications. The fixed numeric settlement projection is
   separately Payroll-field/Finance-or-Payroll-authorized and omits references.
 - Legacy offboarding labels remain review-only. There is no blanket migration,
   deletion or history replay.

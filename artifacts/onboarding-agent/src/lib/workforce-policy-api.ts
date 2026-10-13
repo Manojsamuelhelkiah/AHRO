@@ -100,43 +100,8 @@ export function saveJobProfile(data: JobProfileInput, options?: RequestInit) {
   });
 }
 
-export type PolicyAuthority = {
-  userId: string;
-  authorityRole: string;
-  caseId: number;
-  itemId: string;
-  site: string;
-  assignedBy: string;
-  createdAt: string;
-  membershipRole: 'owner' | 'admin' | 'member';
-};
-
-/** Reserved explicit scope for confirmed office/remote work with no site exposure. */
-export const ORGANIZATION_AUTHORITY_SCOPE = '__organization__';
-
-export type TenantMember = { userId: string; role: 'owner' | 'admin' | 'member' };
-
-export function listPolicyAuthorityMembers(options?: RequestInit) {
-  return customFetch<TenantMember[]>('/api/onboarding/policy-authority-members', { ...options, method: 'GET', responseType: 'json' });
-}
-
-export function listPolicyAuthorities(options?: RequestInit) {
-  return customFetch<PolicyAuthority[]>('/api/onboarding/policy-authorities', { ...options, method: 'GET', responseType: 'json' });
-}
-
-export function assignPolicyAuthority(userId: string, authorityRole: string, scope: { caseId: number; itemId: string; site: string }, options?: RequestInit) {
-  return customFetch<void>(`/api/onboarding/policy-authorities/${encodeURIComponent(userId)}/${encodeURIComponent(authorityRole)}`, {
-    ...options, method: 'PUT', headers: { 'Content-Type': 'application/json', ...options?.headers }, body: JSON.stringify(scope), responseType: 'json',
-  });
-}
-
-export function revokePolicyAuthority(userId: string, authorityRole: string, scope: { caseId: number; itemId: string; site: string }, options?: RequestInit) {
-  return customFetch<void>(`/api/onboarding/policy-authorities/${encodeURIComponent(userId)}/${encodeURIComponent(authorityRole)}`, {
-    ...options, method: 'DELETE', headers: { 'Content-Type': 'application/json', ...options?.headers }, body: JSON.stringify(scope), responseType: 'json',
-  });
-}
-
 export type BatchIntakePerson = {
+  /** Personal intake fields never grant workflow approval permissions. */
   personKey: string;
   workerName: string;
   workerEmail: string;
@@ -157,6 +122,13 @@ export type BatchIntakePerson = {
   jobProfileId?: string;
   workforceContext?: WorkforceContext;
 };
+
+export type TenantMember = { userId: string; role: 'owner' | 'admin' | 'member' };
+export function listTenantMembers(options?: RequestInit) {
+  return customFetch<TenantMember[]>('/api/onboarding/members', { ...options, method: 'GET', responseType: 'json' });
+}
+/** Routing context for confirmed office/remote work with no site exposure; not an access grant. */
+export const ORGANIZATION_REVIEW_CONTEXT = '__organization__';
 
 export type BatchIntakeResult = {
   batchId: string;

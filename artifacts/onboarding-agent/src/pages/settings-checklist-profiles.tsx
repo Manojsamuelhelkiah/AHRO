@@ -20,7 +20,7 @@ import { Button, cn, IconTile, LoadingBlock, Label, Badge } from '@/components/u
 import { Layers, Plus, Edit2, Copy, PowerOff, X, Check, AlertTriangle, Bot, ExternalLink } from 'lucide-react';
 import { Link } from 'wouter';
 import { RecommendationsPage } from './recommendations';
-import { listPolicyAuthorityMembers, listWorkforceStarterTemplates } from '@/lib/workforce-policy-api';
+import { listTenantMembers, listWorkforceStarterTemplates } from '@/lib/workforce-policy-api';
 import { ChecklistProfileDrafter } from '@/components/checklist-profile-drafter';
 
 function mutationMessage(error: any, fallback: string) {
@@ -326,7 +326,7 @@ function ProfileEditor({ profile, onClose, defaultChecklist }: any) {
   const previewSelection = useMutation({
     mutationFn: () => customFetch<ChecklistPreviewResponse>('/api/onboarding/checklist-profiles/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sampleContext), responseType: 'json' }),
   });
-  const members = useQuery({ queryKey: ['onboarding', 'policy-authority-members'], queryFn: listPolicyAuthorityMembers });
+  const members = useQuery({ queryKey: ['onboarding', 'members'], queryFn: listTenantMembers });
   const criteriaCount = Object.values(draft.criteria ?? {}).filter((value) => value?.trim()).length;
   const draftPreview = useMemo(
     () => previewChecklist(defaultChecklist, draft.overrides ?? []),

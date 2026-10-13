@@ -71,11 +71,11 @@ def c(id, name, mechanism, safe_behavior, limitation, *sources, status="Implemen
 
 GROUPS = [
     ("Identity and authority", "Security / access-governance reviewer", [
-        c("SEC-01", "Authenticated operational access", "Signed-in identity is required for operational API access; provider callbacks have separate verification boundaries.", "Unauthorized access is rejected.", "Authentication does not grant organization, case or specialist authority.", "guards", "access"),
+        c("SEC-01", "Authenticated operational access", "Signed-in identity is required for operational API access; provider callbacks have separate verification boundaries.", "Unauthorized access is rejected.", "Authentication does not grant organization, case or decision permissions.", "guards", "access"),
         c("SEC-02", "Organization and case isolation", "Application-owned organizations and subject scopes constrain access to client records.", "Cross-scope requests are denied.", "Tenant membership alone is not permission for every case or record.", "access", "sensitive"),
         c("SEC-03", "Group, field and tool permissions", "Access groups and scoped permissions govern eligible flows, fields and tools.", "Disallowed reads or actions are blocked.", "Coverage must be checked for each new endpoint and tool.", "access", "agent"),
         c("SEC-04", "Temporary access and lifecycle fencing", "Time-bounded grants and membership lifecycle state are evaluated against current access.", "Expired or revoked grants cannot authorize subsequent work.", "Race-sensitive flows need ongoing regression evidence; expiry is not a historical audit rewrite.", "access", "history"),
-        c("SEC-05", "Verified specialist authority", "Professional governance authority is distinct from tenant administration and mailbox personas.", "Missing or unverified authority blocks specialist actions.", "Authority must be established through the applicable approval process.", "governance", status="Configuration required"),
+        c("SEC-05", "Permission-based human decisions", "Named active members need current scoped decision or policy permissions plus explicit current-revision human reviews.", "Denied or revoked permissions and stale or historical receipts block new effects.", "Ordinary access is not professional qualification; old specialist records are history only.", "governance"),
         c("SEC-06", "Versioned approvals and policies", "Consequential work uses approved policy revisions and evidence-bound review rather than unreviewed drafts.", "Changed evidence or missing approvals require review.", "A new policy cannot prove the rationale of an older decision.", "governance", "dispatch"),
         c("SEC-07", "Registered agent identity", "Agent identity and version are resolved against server-side registration and permitted execution scope.", "Unknown or unauthorized executors are rejected.", "Client-supplied role or permission claims are not authority.", "agent", "context"),
         c("SEC-08", "Candidate-link access lifecycle", "Candidate portal credentials and access records are scoped and expire; eligible metadata has a separate cleanup lifecycle.", "Invalid or expired links cannot authorize portal operations.", "Portal access is not full Control Tower access; active links are not deleted just for metadata age.", "portal", "portal-cleanup"),
@@ -84,7 +84,7 @@ GROUPS = [
     ("Communication safety and abuse prevention", "Security / communication-channel owner", [
         c("COM-01", "Signed webhook verification", "Twilio callbacks are signature-validated; voice callbacks also bind to the expected call identity.", "Forged callbacks are rejected before influencing state.", "Applies to configured channel boundaries; it is not a universal vendor identity guarantee.", "guards"),
         c("COM-02", "Trusted status senders", "Configured sender allowlists gate external status-email processing; an unset list trusts nobody.", "Untrusted status messages do not change checks.", "A trusted sender still needs the applicable case binding and evidence checks.", "guards", status="Configuration required"),
-        c("COM-03", "Case binding and replay protection", "Inbound communication is subject-bound, with provider-message deduplication and self-echo protection.", "Unmatched, ambiguous or duplicate messages do not drive new effects.", "Sender identity alone cannot establish tenant or specialist authority.", "guards"),
+        c("COM-03", "Case binding and replay protection", "Inbound communication is subject-bound, with provider-message deduplication and self-echo protection.", "Unmatched, ambiguous or duplicate messages do not drive new effects.", "Sender identity alone cannot establish client/case permissions or release a pending review.", "guards"),
         c("COM-04", "Recipient restrictions", "External messages and calls require authorized recipients; historical volunteer consent cannot authorize delivery.", "Unauthorized delivery is blocked or recorded as logged-only.", "A delivery record is not proof of stakeholder approval or completed employment work.", "guards"),
         c("COM-05", "Send and call caps", "Communication limits and voice-turn serialization constrain runaway activity and replays.", "Excess or overlapping work is rate-limited, held or safely ended.", "These are scoped controls, not evidence of an enterprise-wide denial-of-service guarantee.", "guards"),
         c("COM-06", "Bounded voice interaction", "Voice accepts fixed structured decisions with bounded speech, output and conversation turns.", "Unsafe or invalid output routes to a human callback or ends safely.", "Successful voice exchange does not authorize record changes or professional commitments.", "guards"),
@@ -183,15 +183,15 @@ BUSINESS_PAGES = [
      "",
      "Register: SEC-01–09; all eight control families."),
     ("Who can see data and authorize work?",
-     "Signing in, belonging to a client organization and holding professional authority are different things.",
+     "Signing in, belonging to a client organization and having scoped permissions are different things. None establishes professional qualifications.",
      [
          ("Organization and case boundaries", "Client records are scoped to organizations and relevant cases. Groups and permissions govern fields, flows and tools; temporary grants can expire or be revoked."),
          ("Human and agent identity", "Named people and registered agent versions have defined execution scope. An agent cannot grant itself additional permissions by writing them into a request."),
-         ("Specialist authority and approvals", "Tenant owners and mailbox personas do not automatically become legal, medical, privacy or payroll approvers. Approved policy revisions and current evidence determine consequential authority; drafts remain proposals."),
+         ("Human decision permissions and approvals", "Named active client members require current scoped approval or policy-management permissions and explicit current-revision human review. Mailbox personas and role labels grant neither access nor professional qualifications; drafts remain proposals."),
          ("Candidate access is limited", "Candidate portal links have their own scoped, expiring access lifecycle. Such a link is not a full staff or employer account."),
      ],
      "",
-     "Register: SEC-01–09; RUN-02. Specialist authority setup is configuration-dependent."),
+     "Register: SEC-01–09; RUN-02. Scoped access, approved policy and source evidence still require review."),
     ("Safe communications and privacy",
      "Messages should reach authorized people, and incoming content must not become instructions to the system.",
      [
@@ -249,7 +249,7 @@ BUSINESS_PAGES = [
          ("Compliance and authenticity roadmap", "Build consolidated obligation-to-control evidence packs and assessments. Add validated issuer/provider connections and revocation/freshness coverage for required document types. Existing governance and signed results are not absent—but are not universal coverage."),
          ("Answer quality and fairness roadmap", "Business-reviewed benchmark questions, broader support checks, deterministic rules where appropriate and a governed fairness/challenge programme strengthen assurance. Never use model confidence alone as ground truth or collect protected traits without separately approved safeguards."),
          ("Deployment facts to verify", "Obtain evidence for identity-provider posture, encryption/key management, residency, AI-provider data-use terms, incident response, backup recovery and any claimed certifications. Code review alone does not establish these."),
-         ("Before approving a live rollout", "Confirm scoped access and specialist authority; approved privacy and retention rules; configured providers/scanners; current audit protection; relevant test evidence; defined metrics and escalation ownership. Treat unresolved assurance as an explicit gap."),
+         ("Before approving a live rollout", "Confirm scoped access and explicit named-human review; approved privacy and retention rules; configured providers/scanners; current audit protection; relevant test evidence; defined metrics and escalation ownership. Treat unresolved assurance as an explicit gap."),
      ],
      "",
      "Register: MAP-01–05; DEP-01–06. Evidence owners are suggested reviewer roles, not assigned accountability."),
@@ -260,7 +260,7 @@ TECH_PAGES = [
      "A concise brief for chief security officers and information-security heads. Code-level control presence is not production assurance.",
      [
          ("Trust boundaries", "Browser or callback → authenticated/signed identity → organization and subject authorization → approved domain evidence → bounded AI or registered tool → output validation / current approval gates → optional governed external effect → protected audit. Read-only policy and explanation paths do not authorize operational writes."),
-         ("Identity and authority | SEC / COM", "Tenant/case isolation; group, field and tool scope; expiring grants; registered agent versions; independent specialist authority. Signed callbacks, trusted sender/case binding, recipient authorization, deduplication and communication caps constrain ingress and egress."),
+         ("Identity and permissions | SEC / COM", "Tenant/case isolation; group, field and tool scope; expiring grants; registered agent versions; explicit version-bound named-human decisions with live permission revalidation. Signed callbacks, verified named-member email binding, recipient authorization, deduplication and communication caps constrain ingress and egress."),
          ("Privacy and document evidence | PRI / DOC", "Sensitive policy and live disclosure gates; conservative opaque-content handling; scoped minimization/masking; holds and separate lifecycles. Private upload/quarantine gates remain independent from signed issuer verification. Vault requires employee consent, exact version binding and all employer-required checks."),
          ("Responsible-AI controls | AI", "Approved extract selection, exact quotation validation and fresh citation access; structured decisions and untrusted-content fences; sensitive-topic human handoff; no adverse employment decision from model output alone. Budgets: 24,000 conservative input-token upper bound using UTF-8 bytes, 16,000 output-token allowance, 40,000 combined bound; oversize is rejected, not silently truncated. Case explanations are read-only and evidence-grounded."),
          ("Scope and configuration limits", "Live policy approvals, scanner and issuer coverage, professional authority, channel allowlists and external audit protection are client-specific prerequisites. Verify provider data terms and deployment posture separately. Defence-in-depth does not imply zero leakage, perfect answers or bias-free decisions."),

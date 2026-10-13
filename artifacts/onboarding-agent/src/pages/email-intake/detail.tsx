@@ -28,7 +28,7 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
   const source = useGetHroEmailPrivateSource(current.id, { query: { queryKey: ['hro-email-private-source', scope, current.id], enabled: canReview }, request: { headers } });
 
   const tpl = templates.find((t) => t.template.id === templateId)?.template;
-  const allowed = useMemo(() => [...CONTROL, ...(tpl?.columns.map((c) => c.key) ?? [])], [tpl]);
+  const allowed = useMemo(() => [...new Set([...CONTROL, ...(tpl?.columns.map((c) => c.key) ?? [])])], [tpl]);
   const closed = current.status === 'converted' || current.status === 'rejected';
   const readOnly = !canReview || closed;
 

@@ -479,7 +479,7 @@ test("starter picker refreshes persisted selectors, handles failure/retry and re
     await act(async () => { render(); await settle(); });
     await act(async () => { await settle(); });
     assert.match(dom.document.body.textContent!, /No user groups yet/);
-    assert.match(dom.document.body.textContent!, /grant no permissions or specialist authority/);
+    assert.match(dom.document.body.textContent!, /grant no permissions or professional qualifications/);
     const select = dom.document.querySelector<HTMLSelectElement>("[data-testid=select-access-user-group-starter]")!;
     assert.deepEqual([...select.options].map((option) => option.textContent).slice(1), [...starters.map((starter) => starter.name), "Custom group"]);
     await changeChoice("custom");

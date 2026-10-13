@@ -1,5 +1,6 @@
 import { db } from "@workspace/db";
 import { onbCases, onbEvents, onbPolicyEvidence, onbPolicyAuthorities, type OnbReadinessItemRow } from "@workspace/db/schema";
+import { hasHumanPermissions } from "../human-permissions";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { LEGACY_CHECKLIST, mandatoryChecklistReady } from "./settings";
 import { resumeChecklistOrchestration } from "./engine";
@@ -187,17 +188,9 @@ export async function verifyChecklistEvidence(opts: {
     }
     const scope = workforceAuthorityScope(c.workforceContext);
     if (!scope) return { ok: false, code: "not-designated" };
-    const [authority] = await tx.select({ userId: onbPolicyAuthorities.userId })
-      .from(onbPolicyAuthorities).where(and(
-        eq(onbPolicyAuthorities.organizationId, opts.organizationId),
-        eq(onbPolicyAuthorities.userId, opts.verifierUserId),
-        eq(onbPolicyAuthorities.authorityRole, configuredRole),
-        eq(onbPolicyAuthorities.caseId, opts.caseId),
-        eq(onbPolicyAuthorities.itemId, opts.itemId),
-        eq(onbPolicyAuthorities.site, scope),
-      isNull(onbPolicyAuthorities.revokedAt),
-      )).limit(1);
-    if (!authority) return { ok: false, code: "not-designated" };
+    if (!await hasHumanPermissions(tx, { organizationId: opts.organizationId, actorUserId: opts.verifierUserId,
+      caseId: opts.caseId, requiredKeys: ["tool.approval.decide", "flow.case.edit"] }))
+      return { ok: false, code: "not-designated" };
     const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
       organizationId: opts.organizationId,
       jurisdiction: jurisdictionForWorkforceContext(c.workforceContext),

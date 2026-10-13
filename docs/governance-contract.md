@@ -81,10 +81,11 @@ The existing externally driven onboarding watcher also calls
 `runGovernanceReminderTick()`. It atomically transitions each due persisted
 reminder once and writes a history event; it does not send a provider message.
 
-The initial verified-operator bootstrap is deliberately separate:
-`POST /governance/authority-bootstrap`. It only succeeds when a server-side
-verified operator identity/verification reference is supplied; ordinary
-tenant-admin identity cannot self-declare specialist authority.
+Specialist assignment and operator-bootstrap administration are retired.
+Their mutation URLs return 410 and cannot alter retained historical evidence.
+Policy work requires a named active client member's live `tool.policy.manage`
+permission and an explicit current-revision review. Membership, mailbox
+personas and display-role labels are not permission grants or qualifications.
 
 Mutation concurrency tokens are `expectedRevision` for decision revisions and
 `expectedVersion` for requirement coverage. Reviews use `outcome: "approved"
@@ -92,14 +93,14 @@ Mutation concurrency tokens are `expectedRevision` for decision revisions and
 substitute `approve/reject`, a browser-selected authority, or a local role for
 these values.
 
-Owners/admins can revise decision rationale/value, but only a server-verified
-operator can change an existing decision's accountable role or impacted
-workflow mapping. This prevents a live approval from being self-routed to a
-different authority/scope.
+Authorized policy managers can revise decision rationale/value and routing
+labels or impacted workflows. Changes invalidate the prior review; routing
+labels do not establish eligibility, permissions or professional qualifications.
 
-Runtime gate consumers must treat only an unrevoked, unexpired
-`verificationStatus: "verified"` assignment as specialist authority and must
-not rely on a UI role selection, a pending nomination, or tenant membership.
+Runtime gate consumers require a versioned permission-based human review and
+revalidate the reviewer's live client-scoped permissions. Old specialist
+receipts are history only and cannot authorize new effects. Explicit denies,
+revocations, separation of duties, source evidence and case revisions remain.
 Provider/runtime integrations must also follow
 `docs/governance-dispatch-contract.md`; active or ambiguous durable dispatches
 block governance mutation until verified reconciliation.

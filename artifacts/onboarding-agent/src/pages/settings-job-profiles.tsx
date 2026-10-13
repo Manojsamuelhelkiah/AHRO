@@ -4,23 +4,17 @@ import { Check, Copy, Edit2, PowerOff, Plus, ShieldCheck, Users, X } from 'lucid
 import { Badge, Button, IconTile, Label, LoadingBlock, cn } from '@/components/ui-shared';
 import { useOrganizationRole } from '@/hooks/use-organization-role';
 import {
-  assignPolicyAuthority,
   listJobProfiles,
-  listPolicyAuthorityMembers,
-  listPolicyAuthorities,
-  revokePolicyAuthority,
   saveJobProfile,
   type JobProfile,
   type JobProfileInput,
   type WorkforceContext,
-  ORGANIZATION_AUTHORITY_SCOPE,
   hasExplicitWorkforceContext,
   updateWorkforceContext,
 } from '@/lib/workforce-policy-api';
 
 const inputCls = 'flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]';
 const jobProfileKey = ['onboarding', 'job-profiles'];
-const authorityKey = ['onboarding', 'policy-authorities'];
 
 function contextText(context: WorkforceContext) {
   return [
@@ -88,18 +82,8 @@ export function JobProfilesAndAuthorities() {
   const queryClient = useQueryClient();
   const { isHR, loading: roleLoading } = useOrganizationRole();
   const profiles = useQuery({ queryKey: jobProfileKey, queryFn: listJobProfiles });
-  const authorities = useQuery({ queryKey: authorityKey, queryFn: listPolicyAuthorities, enabled: isHR });
-  const members = useQuery({ queryKey: ['onboarding', 'policy-authority-members'], queryFn: listPolicyAuthorityMembers, enabled: isHR });
   const [editing, setEditing] = useState<JobProfile | null | undefined>(undefined);
-  const [userId, setUserId] = useState('');
-  const [role, setRole] = useState('hse');
-  const [caseId, setCaseId] = useState('');
-  const [itemId, setItemId] = useState('');
-  const [site, setSite] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const assign = useMutation({ mutationFn: ({ userId, role, caseId, itemId, site }: { userId: string; role: string; caseId: number; itemId: string; site: string }) => assignPolicyAuthority(userId, role, { caseId, itemId, site }) });
-  const revoke = useMutation({ mutationFn: ({ userId, role, caseId, itemId, site }: { userId: string; role: string; caseId: number; itemId: string; site: string }) => revokePolicyAuthority(userId, role, { caseId, itemId, site }) });
-  const refreshAuthorities = () => queryClient.invalidateQueries({ queryKey: authorityKey });
   const retire = (profile: JobProfile) => {
     saveJobProfile({ profileId: profile.profileId, expectedVersion: profile.version, name: profile.name, context: profile.context, enabled: false })
       .then(() => queryClient.invalidateQueries({ queryKey: jobProfileKey }))
@@ -110,7 +94,7 @@ export function JobProfilesAndAuthorities() {
     <div className="mt-8 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-sm">
       <div className="border-b border-[var(--border)] bg-[var(--surface-alt)] p-[var(--space-lg)]">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex gap-3"><IconTile icon={Users} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" /><div><h3 className="text-xs font-semibold uppercase tracking-[.05em] text-[var(--text-primary)]">Job profile catalog & designated authorities</h3><p className="mt-0.5 text-xs text-[var(--text-muted)]">Reusable, versioned job context is selected at intake. Authorities are tenant-scoped people who can verify independently evidenced gates.</p></div></div>
+          <div className="flex gap-3"><IconTile icon={Users} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" /><div><h3 className="text-xs font-semibold uppercase tracking-[.05em] text-[var(--text-primary)]">Job profile catalog</h3><p className="mt-0.5 text-xs text-[var(--text-muted)]">Reusable, versioned job context is selected at intake. Human decisions use current client and case permissions.</p></div></div>
           {isHR && <Button size="sm" onClick={() => setEditing(null)}><Plus className="mr-1 h-4 w-4" /> New profile</Button>}
         </div>
       </div>
@@ -128,12 +112,6 @@ export function JobProfilesAndAuthorities() {
             </div>)}
           </div>
         )}
-        <div className="mt-6 border-t border-[var(--border)] pt-5">
-          <div className="flex items-start gap-3"><IconTile icon={ShieldCheck} className="bg-[var(--surface-soft)] text-[var(--text-secondary)] border-transparent" /><div><h4 className="text-sm font-bold">Designated evidence authorities</h4><p className="mt-0.5 text-xs text-[var(--text-muted)]">Only a current tenant member assigned to the gate’s configured role can record verification. Removing access affects future decisions, not the audit record.</p></div></div>
-          {!roleLoading && !isHR && <p className="mt-3 text-xs text-[var(--text-muted)]">Only organization owners and admins can manage authority assignments.</p>}
-           {isHR && <><div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-5"><select className={inputCls} value={userId} onChange={(event) => setUserId(event.target.value)} disabled={members.isLoading}><option value="">{members.isLoading ? 'Loading tenant members…' : 'Select tenant member'}</option>{members.data?.map((member) => <option key={member.userId} value={member.userId}>{member.userId} · {member.role}</option>)}</select><input className={inputCls} value={role} onChange={(event) => setRole(event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} placeholder="e.g. hse" /><input className={inputCls} type="number" min="1" value={caseId} onChange={(event) => setCaseId(event.target.value)} placeholder="Case ID" /><input className={inputCls} value={itemId} onChange={(event) => setItemId(event.target.value)} placeholder="Evidence item ID" /><input className={inputCls} value={site} onChange={(event) => setSite(event.target.value)} placeholder="Exact site or organization scope" /></div><div className="mt-2 flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" onClick={() => setSite(ORGANIZATION_AUTHORITY_SCOPE)}>Use organization scope</Button><Button disabled={assign.isPending || !userId.trim() || !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(role) || !Number.isInteger(Number(caseId)) || Number(caseId) < 1 || !itemId.trim() || !site.trim()} onClick={() => { setError(null); assign.mutate({ userId: userId.trim(), role, caseId: Number(caseId), itemId: itemId.trim(), site: site.trim() }, { onSuccess: () => { setUserId(''); refreshAuthorities(); }, onError: (error: Error) => setError(error.message) }); }}>Assign scoped authority</Button><span className="text-xs text-[var(--text-muted)]">Use organization scope only for a confirmed non-site office/remote case; site work must use the exact current site.</span></div>
-           {authorities.isLoading ? <LoadingBlock>Loading authority assignments…</LoadingBlock> : authorities.isError ? <p role="alert" className="mt-3 text-xs text-[var(--status-red)]">Authority assignments could not be loaded: {authorities.error instanceof Error ? authorities.error.message : 'Please retry.'}</p> : <div className="mt-3 space-y-2">{authorities.data?.map((assignment) => <div key={`${assignment.userId}-${assignment.authorityRole}`} className="flex items-center justify-between rounded border border-[var(--border)] bg-[var(--surface-alt)] p-2 text-xs"><span><strong>{assignment.authorityRole}</strong> · {assignment.userId} <span className="text-[var(--text-muted)]">({assignment.membershipRole}) · case #{assignment.caseId} / {assignment.itemId} / {assignment.site}</span></span><Button size="sm" variant="ghost" className="text-[var(--status-red)]" disabled={revoke.isPending} onClick={() => revoke.mutate({ userId: assignment.userId, role: assignment.authorityRole, caseId: assignment.caseId, itemId: assignment.itemId, site: assignment.site }, { onSuccess: refreshAuthorities, onError: (error: Error) => setError(error.message) })}>Revoke</Button></div>)}</div>}</>}
-        </div>
       </div>
     </div>
   );

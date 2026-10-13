@@ -12,6 +12,8 @@ import {
 import { sql } from "drizzle-orm";
 import { organizationsTable } from "./organizations";
 import { onbCases, type OnbAuthorityScope } from "./onboarding";
+import { jsonb } from "drizzle-orm/pg-core";
+import type { HumanPermissionDecision } from "./human-permission";
 
 /**
  * Restricted, voluntary survey evidence. This table intentionally has no
@@ -76,6 +78,7 @@ export const onbOutcomeEvidenceAuthorityReceipts = pgTable(
     validFrom: timestamp("valid_from", { withTimezone: true }).notNull(),
     validUntil: timestamp("valid_until", { withTimezone: true }),
     verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull().defaultNow(),
+    permissionDecision: jsonb("permission_decision").$type<HumanPermissionDecision>(),
   },
   (t) => [
     index("onb_outcome_authority_receipt_lookup_idx").on(t.organizationId, t.id),

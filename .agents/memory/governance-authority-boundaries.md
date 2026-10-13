@@ -1,13 +1,13 @@
 ---
 name: Governance authority boundaries
-description: Why policy review authority is separate from ordinary case assignments and how provisional policy affects live actions
+description: Effective policy-management permission and explicit version-bound review govern adoption; provisional policies cannot release live effects.
 ---
 
-Tenant administration and case-level operational assignments do not confer legal, privacy, or safety policy-review authority. A nomination is not verification.
+Policy review requires current effective policy-management permission and explicit human review. Tenant labels, case assignments and reviewer routing labels alone do not grant permission or establish professional qualifications.
 
-**Why:** Existing case authority assignments are owner-maintained. Reusing them as specialist approval would let an ordinary administrator self-authorize decisions the user explicitly required to remain blocked.
+**Why:** The user retired the separate specialist-verification mechanism without removing ordinary access governance, separation of duties or explicit policy approval.
 
-**How to apply:** Reuse the checklist/context-policy execution engine, but verify the reviewer through a separate trusted assignment before treating a policy revision as approved. Keep policy approval, provider configuration, and real evidence independent. Never infer executable scope from editable prose or human-readable workflow labels.
+**How to apply:** Reuse the checklist/context-policy engine and live effective-access evaluator; do not create another specialist registry. Keep policy approval, provider configuration and real source evidence independent. Never infer executable scope from editable prose, workflow labels or historical specialist receipts.
 
 Active cases must retain their adopted revisions; publishing a replacement is not an implicit case rebase.
 
@@ -15,9 +15,9 @@ Active cases must retain their adopted revisions; publishing a replacement is no
 
 **How to apply:** Make revision impact visible, require explicit version-checked adoption at a safe boundary, and retain live revocation checks independently of historical approval receipts. Legacy absence of a snapshot is not permission for a new sensitive live effect.
 
-Approval remains bound to its exact authority grant and its adopted approval state, not merely a reviewer identity or revision number.
+Approval remains bound to its permission-based human receipt and adopted approval state, with live permission revalidation, not merely a reviewer identity or revision number.
 
-**Why:** A replacement role assignment must not resurrect an approval made under a revoked grant. Approving an already-adopted provisional revision must not silently activate a case.
+**Why:** Retired specialist receipts cannot authorize new effects, and approving an already-adopted provisional revision must not silently activate a case.
 
 **How to apply:** Evaluate both execution and impact against the adopted revision's approval receipt. Require explicit adoption even when only approval status changed.
 

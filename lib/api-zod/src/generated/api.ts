@@ -1125,23 +1125,51 @@ export const AdmitSeparationSourceEventResponse = zod.array(AdmitSeparationSourc
 
 
 /**
- * Requires an owner/admin or authenticated verified governance operator. Only active members of the pinned client are included. Names are display labels, never authority or identity proof.
- * @summary List client-scoped members and authority roles for appointments
+ * UI capability hints only. Every mutation and continuation independently rechecks live tenant and case permissions.
+ * @summary Current tenant-scoped action permissions for the signed-in named member
  */
-export const GetGovernanceAuthorityOptionsResponse = zod.object({
-  "organizationId": zod.string(),
-  "canNominate": zod.boolean(),
-  "canVerify": zod.boolean(),
-  "members": zod.array(zod.object({
-  "clerkUserId": zod.string(),
-  "role": zod.enum(['owner', 'admin', 'member']),
-  "name": zod.string().nullable(),
-  "email": zod.string().nullable()
-})),
-  "roles": zod.array(zod.object({
-  "id": zod.string(),
-  "label": zod.string()
-}))
+export const GetCurrentHumanPermissionsResponse = zod.object({
+  "allows": zod.array(zod.string())
+})
+
+
+/**
+ * Requires current case-flow and profile edit permissions. Retains historical decisions, holds pending work, and never resumes work or resets completed or ambiguous provider outcomes.
+ * @summary Explicitly renew an unfinished case's obsolete human review cycle
+ */
+
+
+
+export const RequestFreshOnboardingApprovalReviewParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+
+
+
+export const RequestFreshOnboardingApprovalReviewBody = zod.object({
+  "expectedVersion": zod.number().min(1)
+})
+
+export const RequestFreshOnboardingApprovalReviewResponse = zod.object({
+  "version": zod.number(),
+  "reviewRequired": zod.boolean(),
+  "released": zod.boolean()
+})
+
+
+/**
+ * Consent and identity binding only. Does not grant permissions, decide pending work, or send mail. Remote decisions also require verified full-body Gmail DKIM transport, sender/case/version checks and current effective permissions.
+ * @summary Bind or withdraw the signed-in member's uniquely verified email for remote replies
+ */
+export const UpdateOwnApprovalEmailBindingBody = zod.object({
+  "email": zod.string().email(),
+  "enabled": zod.boolean()
+})
+
+export const UpdateOwnApprovalEmailBindingResponse = zod.object({
+  "email": zod.string().email(),
+  "enabled": zod.boolean()
 })
 
 
@@ -3250,7 +3278,7 @@ export const ListGovernanceDecisionsResponse = zod.object({
 
 
 /**
- * Owner/admin may draft only. Approval requires separately verified specialist authority.
+ * A named owner/admin with current policy-management permission may draft. Independent explicit review is still required.
  * @summary Create a draft decision revision one
  */
 export const createGovernanceDecisionBodyKeyRegExp = new RegExp('^[A-Za-z0-9][A-Za-z0-9-]{0,79}$');
@@ -3402,7 +3430,7 @@ export const ReviseGovernanceDecisionResponse = zod.object({
 
 
 /**
- * Requires an active server-verified assignment for the decision's accountable role. Tenant administration alone is insufficient.
+ * Requires current effective tool.policy.manage permission and an explicit decision on the exact current revision. Reviewer roles are routing metadata, not professional qualifications.
  * @summary Approve or reject one exact decision revision
  */
 export const ReviewGovernanceDecisionParams = zod.object({
@@ -3517,163 +3545,6 @@ export const UpdateGovernanceRequirementCoverageResponse = zod.object({
   "evidenceReference": zod.string().nullish(),
   "version": zod.number().min(1),
   "updatedAt": zod.coerce.date()
-})
-})
-
-
-/**
- * @summary List verified authority assignments
- */
-
-
-
-export const ListGovernanceAssignmentsResponse = zod.object({
-  "assignments": zod.array(zod.object({
-  "id": zod.number().min(1),
-  "role": zod.string(),
-  "assigneeUserId": zod.string(),
-  "verificationStatus": zod.enum(['pending', 'verified']),
-  "verifiedByUserId": zod.string(),
-  "verificationReference": zod.string(),
-  "expiresAt": zod.coerce.date().nullish(),
-  "revokedAt": zod.coerce.date().nullish(),
-  "revokedByUserId": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
-}))
-})
-
-
-/**
- * A server allow-listed verified operator creates verified authority. Owner/admin may only create a pending nomination, which has no review authority until verified.
- * @summary Assign or nominate specialist authority
- */
-export const assignGovernanceAuthorityBodyOneRoleMax = 64;
-
-export const assignGovernanceAuthorityBodyOneAssigneeUserIdMax = 4000;
-
-export const assignGovernanceAuthorityBodyOneVerificationReferenceMax = 4000;
-
-export const assignGovernanceAuthorityBodyTwoRoleMax = 64;
-
-export const assignGovernanceAuthorityBodyTwoAssigneeUserIdMax = 4000;
-
-export const assignGovernanceAuthorityBodyTwoAssignmentReasonMax = 4000;
-
-
-
-export const AssignGovernanceAuthorityBody = zod.union([zod.object({
-  "role": zod.string().min(1).max(assignGovernanceAuthorityBodyOneRoleMax),
-  "assigneeUserId": zod.string().min(1).max(assignGovernanceAuthorityBodyOneAssigneeUserIdMax),
-  "verificationReference": zod.string().min(1).max(assignGovernanceAuthorityBodyOneVerificationReferenceMax)
-}),zod.object({
-  "role": zod.string().min(1).max(assignGovernanceAuthorityBodyTwoRoleMax),
-  "assigneeUserId": zod.string().min(1).max(assignGovernanceAuthorityBodyTwoAssigneeUserIdMax),
-  "assignmentReason": zod.string().min(1).max(assignGovernanceAuthorityBodyTwoAssignmentReasonMax),
-  "expiresAt": zod.coerce.date().nullish()
-})])
-
-
-
-
-export const AssignGovernanceAuthorityResponse = zod.object({
-  "assignment": zod.object({
-  "id": zod.number().min(1),
-  "role": zod.string(),
-  "assigneeUserId": zod.string(),
-  "verificationStatus": zod.enum(['pending', 'verified']),
-  "verifiedByUserId": zod.string(),
-  "verificationReference": zod.string(),
-  "expiresAt": zod.coerce.date().nullish(),
-  "revokedAt": zod.coerce.date().nullish(),
-  "revokedByUserId": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
-})
-})
-
-
-/**
- * @summary Verify a pending owner/admin authority nomination
- */
-
-
-
-export const VerifyGovernanceAuthorityParams = zod.object({
-  "id": zod.coerce.number().min(1)
-})
-
-export const verifyGovernanceAuthorityBodyVerificationReferenceMax = 4000;
-
-
-
-export const VerifyGovernanceAuthorityBody = zod.object({
-  "verificationReference": zod.string().min(1).max(verifyGovernanceAuthorityBodyVerificationReferenceMax)
-})
-
-export const VerifyGovernanceAuthorityResponse = zod.unknown()
-
-
-/**
- * Same server-verified operator controls as assignment; this is not a tenant-admin escalation path.
- * @summary Bootstrap verified specialist authority
- */
-export const bootstrapGovernanceAuthorityBodyRoleMax = 64;
-
-export const bootstrapGovernanceAuthorityBodyAssigneeUserIdMax = 4000;
-
-export const bootstrapGovernanceAuthorityBodyVerificationReferenceMax = 4000;
-
-
-
-export const BootstrapGovernanceAuthorityBody = zod.object({
-  "role": zod.string().min(1).max(bootstrapGovernanceAuthorityBodyRoleMax),
-  "assigneeUserId": zod.string().min(1).max(bootstrapGovernanceAuthorityBodyAssigneeUserIdMax),
-  "verificationReference": zod.string().min(1).max(bootstrapGovernanceAuthorityBodyVerificationReferenceMax)
-})
-
-
-
-
-export const BootstrapGovernanceAuthorityResponse = zod.object({
-  "assignment": zod.object({
-  "id": zod.number().min(1),
-  "role": zod.string(),
-  "assigneeUserId": zod.string(),
-  "verificationStatus": zod.enum(['pending', 'verified']),
-  "verifiedByUserId": zod.string(),
-  "verificationReference": zod.string(),
-  "expiresAt": zod.coerce.date().nullish(),
-  "revokedAt": zod.coerce.date().nullish(),
-  "revokedByUserId": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
-})
-})
-
-
-/**
- * @summary Revoke a verified authority assignment
- */
-
-
-
-export const RevokeGovernanceAuthorityParams = zod.object({
-  "id": zod.coerce.number().min(1)
-})
-
-
-
-
-export const RevokeGovernanceAuthorityResponse = zod.object({
-  "assignment": zod.object({
-  "id": zod.number().min(1),
-  "role": zod.string(),
-  "assigneeUserId": zod.string(),
-  "verificationStatus": zod.enum(['pending', 'verified']),
-  "verifiedByUserId": zod.string(),
-  "verificationReference": zod.string(),
-  "expiresAt": zod.coerce.date().nullish(),
-  "revokedAt": zod.coerce.date().nullish(),
-  "revokedByUserId": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
 })
 })
 
@@ -16649,21 +16520,6 @@ export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
 
 
 /**
- * @summary Assign a tenant member as a server-authoritative policy evidence authority
- */
-
-export const assignOnboardingPolicyAuthorityPathAuthorityRoleRegExp = new RegExp('^[a-z0-9][a-z0-9_-]{1,63}$');
-
-
-export const AssignOnboardingPolicyAuthorityParams = zod.object({
-  "userId": zod.coerce.string().min(1),
-  "authorityRole": zod.coerce.string().regex(assignOnboardingPolicyAuthorityPathAuthorityRoleRegExp)
-})
-
-export const AssignOnboardingPolicyAuthorityResponse = zod.void()
-
-
-/**
  * @summary Record an authorized correction to captured job context without silently rebasing an active policy
  */
 
@@ -17257,166 +17113,6 @@ export const GetOnboardingApprovalHistoryResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const GetOnboardingApprovalHistoryResponse = zod.array(GetOnboardingApprovalHistoryResponseItem)
-
-
-/**
- * @summary Current tenant governance state and caller authority administration eligibility
- */
-
-
-
-export const GetOnboardingAuthorityGovernanceResponse = zod.object({
-  "governance": zod.object({
-  "status": zod.enum(['unconfigured', 'operator-attested', 'governance-approved', 'withdrawn']),
-  "attestedAt": zod.string().nullish(),
-  "attestationNote": zod.string().nullish(),
-  "approvedAt": zod.string().nullish(),
-  "governanceSource": zod.string().nullish(),
-  "revision": zod.number()
-}),
-  "canAdminister": zod.boolean(),
-  "assignments": zod.array(zod.object({
-  "id": zod.string(),
-  "personUserId": zod.string(),
-  "personEmail": zod.string().nullable(),
-  "emailResponderAuthorized": zod.boolean(),
-  "authorityRole": zod.string(),
-  "scopes": zod.array(zod.string()),
-  "caseId": zod.number().nullable(),
-  "siteScope": zod.string().nullable(),
-  "jurisdictionScope": zod.string().nullable(),
-  "validFrom": zod.string(),
-  "validUntil": zod.string().nullable(),
-  "status": zod.enum(['active', 'revoked']),
-  "revision": zod.number().min(1),
-  "governanceDecisionRef": zod.string(),
-  "revokeReason": zod.string().nullable()
-}))
-})
-
-
-/**
- * @summary Record operator attestation only; does not approve production authority
- */
-export const BootstrapOnboardingAuthorityGovernanceBody = zod.object({
-  "note": zod.string()
-})
-
-export const BootstrapOnboardingAuthorityGovernanceResponse = zod.void()
-
-
-/**
- * @summary Immediately withdraw tenant specialist authority governance
- */
-
-
-
-export const WithdrawOnboardingAuthorityGovernanceBody = zod.object({
-  "reason": zod.string().min(1)
-})
-
-export const WithdrawOnboardingAuthorityGovernanceResponse = zod.unknown()
-
-
-/**
- * @summary List specialist authority assignments (restricted)
- */
-
-
-
-export const ListOnboardingAuthorityAssignmentsResponseItem = zod.object({
-  "id": zod.string(),
-  "personUserId": zod.string(),
-  "personEmail": zod.string().nullable(),
-  "emailResponderAuthorized": zod.boolean(),
-  "authorityRole": zod.string(),
-  "scopes": zod.array(zod.string()),
-  "caseId": zod.number().nullable(),
-  "siteScope": zod.string().nullable(),
-  "jurisdictionScope": zod.string().nullable(),
-  "validFrom": zod.string(),
-  "validUntil": zod.string().nullable(),
-  "status": zod.enum(['active', 'revoked']),
-  "revision": zod.number().min(1),
-  "governanceDecisionRef": zod.string(),
-  "revokeReason": zod.string().nullable()
-})
-export const ListOnboardingAuthorityAssignmentsResponse = zod.array(ListOnboardingAuthorityAssignmentsResponseItem)
-
-
-/**
- * @summary Grant a scoped specialist authority assignment (restricted; self-grant prohibited)
- */
-
-
-
-export const CreateOnboardingAuthorityAssignmentBody = zod.object({
-  "personUserId": zod.string(),
-  "personEmail": zod.string().nullish(),
-  "emailResponderAuthorized": zod.boolean().optional(),
-  "authorityRole": zod.string(),
-  "scopes": zod.array(zod.string()).min(1),
-  "caseId": zod.number().nullish(),
-  "siteScope": zod.string().nullish(),
-  "jurisdictionScope": zod.string().nullish(),
-  "validFrom": zod.string().nullish(),
-  "validUntil": zod.string().nullish(),
-  "governanceDecisionRef": zod.string()
-})
-
-
-
-
-export const CreateOnboardingAuthorityAssignmentResponse = zod.object({
-  "id": zod.string(),
-  "personUserId": zod.string(),
-  "personEmail": zod.string().nullable(),
-  "emailResponderAuthorized": zod.boolean(),
-  "authorityRole": zod.string(),
-  "scopes": zod.array(zod.string()),
-  "caseId": zod.number().nullable(),
-  "siteScope": zod.string().nullable(),
-  "jurisdictionScope": zod.string().nullable(),
-  "validFrom": zod.string(),
-  "validUntil": zod.string().nullable(),
-  "status": zod.enum(['active', 'revoked']),
-  "revision": zod.number().min(1),
-  "governanceDecisionRef": zod.string(),
-  "revokeReason": zod.string().nullable()
-})
-
-
-/**
- * @summary Revoke specialist authority; pending decisions and dispatches revalidate it
- */
-export const RevokeOnboardingAuthorityAssignmentParams = zod.object({
-  "id": zod.coerce.string()
-})
-
-export const RevokeOnboardingAuthorityAssignmentBody = zod.object({
-  "reason": zod.string()
-})
-
-export const RevokeOnboardingAuthorityAssignmentResponse = zod.unknown()
-
-
-/**
- * @summary Historical approvals lacking authority evidence, for review only
- */
-export const ListOnboardingUnresolvedAuthorityApprovalsResponse = zod.unknown()
-
-
-/**
- * @summary Acknowledge historical evidence without replaying a decision or effect
- */
-
-
-
-export const AcknowledgeOnboardingUnresolvedAuthorityApprovalParams = zod.object({
-  "id": zod.coerce.number().min(1)
-})
-
-export const AcknowledgeOnboardingUnresolvedAuthorityApprovalResponse = zod.unknown()
 
 
 /**

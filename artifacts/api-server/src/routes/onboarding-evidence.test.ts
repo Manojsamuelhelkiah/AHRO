@@ -1,4 +1,5 @@
 import { deleteTestOrganizations } from "../test-support/organization-fixtures";
+import { seedApprovedSensitiveLifecyclePolicies } from "../test-utils/sensitive-lifecycle-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
@@ -330,7 +331,7 @@ before(async () => {
           "data.case.notes.edit",
         ],
         flows: ["flow.case.read", "flow.case.edit", "flow.document-review.read", "flow.document-review.edit"],
-        tools: ["tool.documents.edit", "tool.notification.send"],
+        tools: ["tool.documents.edit", "tool.notification.send", "tool.approval.decide", "tool.policy.manage"],
       },
       createdByUserId: user,
       approvedByUserId: governanceOwnerUser,
@@ -350,8 +351,8 @@ before(async () => {
           "data.case.profile.read",
           "data.case.notes.read",
         ],
-        flows: ["flow.case.read", "flow.document-review.read", "flow.document-review.edit"],
-        tools: ["tool.documents.edit", "tool.notification.send", "tool.workflow.run"],
+        flows: ["flow.case.read", "flow.case.edit", "flow.document-review.read", "flow.document-review.edit"],
+        tools: ["tool.documents.edit", "tool.notification.send", "tool.workflow.run", "tool.approval.decide"],
       },
       createdByUserId: user,
       approvedByUserId: governanceOwnerUser,
@@ -362,7 +363,7 @@ before(async () => {
       securityGroupId: caseReadOnlySecurityGroupId,
       version: 1,
       policy: {
-        fields: ["data.documents.read"],
+        fields: ["data.documents.read", "data.case.profile.read"],
         flows: ["flow.case.read", "flow.document-review.read"],
         tools: [],
       },
@@ -412,24 +413,16 @@ before(async () => {
     approvedAt: new Date(),
     approvedPolicyVersion: 1,
   });
-  await db.insert(onbSensitiveLifecyclePolicies).values([
-    "candidate-document", "identity", "medical", "payroll",
-    "bgv", "candidate-contact", "candidate-voice", "candidate-portal",
-  ].map((dataClass) => ({
-    organizationId: orgA,
-    dataClass,
-    jurisdiction: "US",
-    revision: 1,
-    purpose: "test evidence lifecycle",
-    lawfulBasis: "employment onboarding",
-    retentionDays: 30,
-    providerSharingApproved: false,
-    permittedProviders: [],
-    policyReference: "test-policy",
-    approvalReference: "test-approval",
-    approvedByUserId: user,
-    approvedAuthorityAssignmentId: 1,
-  })));
+  // Retire the old specialist-only restriction. This principal keeps only
+  // public case reading after ordinary group access is revoked.
+  await db.update(accessUserGroupMembers).set({ revokedAt: new Date() }).where(and(
+    eq(accessUserGroupMembers.organizationId, orgA), eq(accessUserGroupMembers.principalId, revokedUser),
+  ));
+  await db.insert(accessUserGroupMembers).values({
+    organizationId: orgA, groupId: caseReadOnlyUserGroupId, principalType: "human",
+    principalId: revokedUser, attachedByUserId: user,
+  });
+  await seedApprovedSensitiveLifecyclePolicies(orgA);
   [documentA] = (await db.insert(onbDocuments).values({
     organizationId: orgA, caseId: caseA, key: "id-proof", label: "Government photo ID (passport / national ID)",
     category: "identity", required: true, status: "received",
@@ -679,7 +672,7 @@ test("Gate C approval list, history, capability, and decision honor readiness ke
   }
 });
 
-test("sensitive reads and writes require both current specialist authority and explicit field policy", async () => {
+test("sensitive reads use ordinary field permissions, not specialist assignments; writes retain exact keys", async () => {
   const legacyAuthorityOnly = await call(`/onboarding/cases/${caseA}/evidence`, orgA, {
     headers: { "x-test-user": identityOnlyUser },
   });
@@ -691,8 +684,10 @@ test("sensitive reads and writes require both current specialist authority and e
     headers: { "x-test-user": groupOnlyUser },
   });
   assert.equal(groupWithoutSpecialist.status, 200);
-  const [groupOnlyDocument] = await groupWithoutSpecialist.json() as Array<Record<string, unknown>>;
-  assert.equal(groupOnlyDocument.restricted, true, "a field allow cannot replace the live specialist assignment");
+  const groupOnlyDocument = (await groupWithoutSpecialist.json() as Array<Record<string, unknown>>)
+    .find(row => Number(row.id) === uploadA)!;
+  assert.notEqual(groupOnlyDocument.restricted, true, "a named member with current field access needs no specialist assignment");
+  assert.equal(groupOnlyDocument.originalName, "medical-bank-clearance.pdf");
 
   const specialistAndAllow = await call(`/onboarding/cases/${caseA}/evidence`, orgA);
   assert.equal(specialistAndAllow.status, 200);
@@ -879,18 +874,15 @@ test("communication narratives require every current specialist authority", asyn
   }
 });
 
-test("owner role alone cannot read unresolved opaque approval evidence", async () => {
+test("retired unresolved-authority endpoint cannot disclose historical evidence", async () => {
   const response = await call("/onboarding/authority/unresolved-approvals", orgA, {
     headers: { "x-test-user": revokedUser, "x-test-role": "owner" },
   });
-  assert.equal(response.status, 200);
-  const [approval] = await response.json() as Array<Record<string, unknown>>;
-  assert.equal(approval.restricted, true);
-  assert.equal(approval.recommendation, "Restricted historical approval evidence.");
-  assert.doesNotMatch(JSON.stringify(approval), /medical accommodation|bank account|opaque private/i);
+  assert.equal(response.status, 410);
+  assert.doesNotMatch(await response.text(), /medical accommodation|bank account|opaque private/i);
 });
 
-test("revoked or other-tenant authority assignments never disclose case evidence", async () => {
+test("revoked effective access or another tenant never disclose case evidence", async () => {
   for (const actor of [revokedUser, otherTenantUser]) {
     const response = await call(`/onboarding/cases/${caseA}/evidence`, orgA, {
       headers: { "x-test-user": actor },
@@ -914,7 +906,7 @@ test("revoked or other-tenant authority assignments never disclose case evidence
   }
 });
 
-test("a revoked secondary specialist scope blocks a mixed-class evidence decision", async () => {
+test("missing medical-field permission blocks a mixed-class evidence decision", async () => {
   const response = await call(`/onboarding/cases/${caseA}/evidence/${mixedUpload}/decision`, orgA, {
     method: "POST",
     body: JSON.stringify({ decision: "approve", reason: "Reviewed mixed evidence." }),
@@ -925,7 +917,7 @@ test("a revoked secondary specialist scope blocks a mixed-class evidence decisio
   assert.equal(upload?.state, "manual_review");
 });
 
-test("HR evidence decisions atomically update upload and document, with role and tenant fences", async () => {
+test("evidence decisions atomically update upload and document, with live permission and tenant fences", async () => {
   const denied = await call(`/onboarding/cases/${caseA}/evidence/${uploadA}/decision`, orgA, {
     method: "POST", headers: { "x-test-role": "member", "x-test-user": revokedUser },
     body: JSON.stringify({ decision: "approve", reason: "Looks good." }),
@@ -1032,7 +1024,7 @@ test("HR evidence decisions atomically update upload and document, with role and
     malwareScanState: "unavailable", malwareScanSha256: null, validationState: "manual_review",
   }).where(eq(onbCandidateUploads.id, newerUpload.id));
   const retryDenied = await call(`/onboarding/cases/${caseA}/evidence/${newerUpload.id}/retry-malware-scan`, orgA, {
-    method: "POST", headers: { "x-test-role": "member" },
+    method: "POST", headers: { "x-test-role": "member", "x-test-user": revokedUser },
   });
   assert.equal(retryDenied.status, 403);
   const retryCrossTenant = await call(`/onboarding/cases/${caseA}/evidence/${newerUpload.id}/retry-malware-scan`, orgB, {
@@ -1112,7 +1104,7 @@ test("an evidence decision holds the lifecycle fence from its successful gate th
     // re-entrant fence context. It must wait for the route to persist.
     const policyChange = saveSensitiveLifecyclePolicy({
       organizationId: orgA,
-      actorUserId: user,
+      actorUserId: `test-permission-reviewer:${orgA}`,
       policy: {
         dataClass: "candidate-document", jurisdiction: "US",
         purpose: currentPolicy.purpose, lawfulBasis: currentPolicy.lawfulBasis,

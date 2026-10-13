@@ -1,7 +1,7 @@
 # Governance dispatch fence contract
 
 Any path that performs a real provider/external write based on governance
-decisions, requirement coverage, or specialist authority **must** wrap that
+decisions, requirement coverage, or effective human permissions **must** wrap that
 write in `withGovernanceDispatch`.
 
 ```ts

@@ -13,6 +13,7 @@ import {
   onbSystemChecks,
 } from "@workspace/db";
 import { ensureGovernanceSeeded } from "./governance";
+import { recordedHumanPermissionDecisionCurrent } from "../human-permissions";
 import {
   acquireCaseDispatchMutationLock,
   hasActiveCaseDispatchMarker,
@@ -285,7 +286,7 @@ export function evaluateGovernanceExecutionGate(input: {
       blockers.push({
         kind: "reviewer-authority-inactive",
         key: decision.key,
-        message: `${decision.title ?? decision.key} no longer has an active verified reviewer authority for live use.`,
+        message: `${decision.title ?? decision.key} requires a fresh review by a member with current policy-management permission.`,
       });
     }
   }
@@ -508,15 +509,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
       eq(onbReadinessSlaCaseState.organizationId, organizationId),
       eq(onbReadinessSlaCaseState.caseId, input.caseRow.id),
     )).limit(1),
-    db.select().from(onbGovernanceAuthorityAssignments).where(and(
-      eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
-      eq(onbGovernanceAuthorityAssignments.verificationStatus, "verified"),
-      isNull(onbGovernanceAuthorityAssignments.revokedAt),
-      or(
-        isNull(onbGovernanceAuthorityAssignments.expiresAt),
-        gt(onbGovernanceAuthorityAssignments.expiresAt, new Date()),
-      ),
-    )),
+    Promise.resolve([] as Array<{ id: number }>),
     db.select().from(onbGovernanceDecisions).where(
       eq(onbGovernanceDecisions.organizationId, organizationId),
     ),
@@ -529,6 +522,14 @@ export async function evaluateStoredCaseGovernanceGate(input: {
     )).limit(1),
   ]);
   const snapshotVersion = hrisState[0]?.snapshotVersion;
+  await db.transaction(async tx => {
+    for (const review of decisionReviews) {
+      if (review.outcome === "approved" && await recordedHumanPermissionDecisionCurrent(tx, organizationId,
+        review.authorityAssignmentId, ["tool.policy.manage"], review.decisionRevision, undefined, review.reviewedByUserId)) {
+        activeAuthorities.push({ id: review.authorityAssignmentId });
+      }
+    }
+  });
   const vaultBgvClear = await hasCurrentVaultBgvReceipt(db, organizationId, input.caseRow.id);
   const hrisAttestations = snapshotVersion === undefined
     ? []
@@ -862,14 +863,16 @@ export async function governanceCaseImpact(input: {
     db.select().from(onbGovernanceDecisionReviews).where(
       eq(onbGovernanceDecisionReviews.organizationId, input.organizationId),
     ),
-    db.select().from(onbGovernanceAuthorityAssignments).where(and(
-      eq(onbGovernanceAuthorityAssignments.organizationId, input.organizationId),
-      eq(onbGovernanceAuthorityAssignments.verificationStatus, "verified"),
-      isNull(onbGovernanceAuthorityAssignments.revokedAt),
-      or(isNull(onbGovernanceAuthorityAssignments.expiresAt),
-        gt(onbGovernanceAuthorityAssignments.expiresAt, new Date())),
-    )),
+    Promise.resolve([] as Array<{ id: number }>),
   ]);
+  await db.transaction(async tx => {
+    for (const review of reviews) {
+      if (review.outcome === "approved" && await recordedHumanPermissionDecisionCurrent(tx, input.organizationId,
+        review.authorityAssignmentId, ["tool.policy.manage"], review.decisionRevision, undefined, review.reviewedByUserId)) {
+        activeAuthorities.push({ id: review.authorityAssignmentId });
+      }
+    }
+  });
   return {
     snapshot,
     impacts: assessGovernanceCaseImpact({

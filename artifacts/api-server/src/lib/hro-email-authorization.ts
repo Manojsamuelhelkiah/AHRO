@@ -1,0 +1,41 @@
+import type { SeparationReceipt } from "@workspace/db";
+import type { Tx } from "./offboarding/authority";
+import { SeparationError } from "./offboarding/model";
+import { hasHumanPermissions, permissionReceiptStillCurrent, type HumanPermissionReceipt } from "./human-permissions";
+
+const ROUTE_KEYS = ["flow.case.edit", "data.case.profile.edit"] as const;
+
+export async function requireEmailRouteAdministrator(tx: Tx, organizationId: string, actorUserId: string) {
+  if (!await hasHumanPermissions(tx, { organizationId, actorUserId,
+    requiredKeys: ROUTE_KEYS, ownerAdminRequired: true })) {
+    throw new SeparationError("A named client owner or admin with current case-flow and profile edit permissions is required to configure email intake.", 403);
+  }
+}
+
+export async function emailRouteReceipt(tx: Tx, input: {
+  organizationId: string; actor: string; reference: string; generation: number;
+}): Promise<SeparationReceipt> {
+  await requireEmailRouteAdministrator(tx, input.organizationId, input.actor);
+  const recordedAt = new Date().toISOString();
+  return {
+    actor: input.actor, authorityId: `human-permission/v1:${input.actor}`, authorityRevision: 1,
+    scope: "email-route-configuration", reference: input.reference, generation: input.generation,
+    recordedAt, provenance: "human-source-attested",
+    authorization: {
+      schema: "human-permission/v1", organizationId: input.organizationId, caseId: null,
+      actorUserId: input.actor, requiredKeys: [...ROUTE_KEYS], ownerAdminRequired: true,
+      reviewedRevision: input.generation, evidenceGeneration: input.generation,
+      decision: "mailbox-binding-reviewed", recordedAt,
+    },
+  };
+}
+
+export async function emailRouteReceiptCurrent(tx: Tx, org: string, receipt: SeparationReceipt | null, _country = "") {
+  if (!receipt || receipt.scope !== "email-route-configuration" ||
+    receipt.actor !== receipt.authorization?.actorUserId ||
+    receipt.authorization?.decision !== "mailbox-binding-reviewed") return false;
+  return permissionReceiptStillCurrent(tx, receipt.authorization as HumanPermissionReceipt, {
+    organizationId: org, requiredKeys: ROUTE_KEYS, ownerAdminRequired: true,
+    reviewedRevision: receipt.generation, evidenceGeneration: receipt.generation,
+  });
+}

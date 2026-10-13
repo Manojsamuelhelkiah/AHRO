@@ -5,15 +5,15 @@ description: Ownership changes must not revive dormant access or create professi
 
 Changing a user group's steward is an administrative handoff, not an access grant. Retain group identity, members, attachments, and expiry settings, but require fresh independent membership review before retained paths become live under the new steward.
 
-Administrative actor eligibility and durable group-steward eligibility are distinct. An active tenant-bound Super Admin may create an empty group without permanently changing the underlying account's organization role. Do not make stored steward activity depend on whichever administrator happens to be making a request.
-
-**Why:** Checking only the stored owner role rejected legitimate Super Admin preset-group creation; globally relaxing owner checks would instead risk reviving dormant group access.
-
-**How to apply:** Recognize verified request-scoped administrative rights at administrative action checks, while retaining persistent owner activity, target-owner checks, membership review, and access-evaluation safeguards.
-
 **Why:** Replacing an inactive owner with an active owner can revive every dormant group path, including legacy self-memberships, even when no membership or policy was added. Invalidating only sensitive approvals would miss non-sensitive access restoration.
 
 **How to apply:** Treat stewardship transfers and reversals as fresh review boundaries, including low-sensitivity paths. Serialize with organization membership changes and recheck both acting and destination owners. Do not infer policy-maintainer appointments, specialist verification, or new group membership from ownership.
+
+Administrative request eligibility and durable group-steward eligibility are distinct. Request-scoped administrative rights do not permanently change an account's tenant role or make a stored steward eligible.
+
+**Why:** Persistent access liveness must not change according to whichever administrator happens to be making a request.
+
+**How to apply:** Evaluate administrative action rights in request scope; independently retain persistent steward activity, destination-owner checks, membership review, and effective-access safeguards.
 
 An admission review requirement must survive ordinary membership updates, expiry edits, and remove/re-add cycles, even after the linked policy becomes non-sensitive.
 

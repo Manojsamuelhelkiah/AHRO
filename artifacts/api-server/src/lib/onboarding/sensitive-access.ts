@@ -2,8 +2,8 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import type { OnbAuthorityScope } from "@workspace/db/schema";
 import { resolveEffectiveAccessInTransaction, type EffectiveAccess } from "../access-governance";
-import { hasCurrentAuthorityScope, currentAuthorityScopesForCases } from "./decision-authority";
 import { isPlatformSuperAdmin } from "../private-platform-admin";
+import { isSharedDemoPrincipalInTransaction } from "../human-permissions";
 
 type SensitiveAuthorityTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -189,6 +189,7 @@ async function sensitiveAccessFromEffective(
   // This exception is for client-record reads, never professional authority.
   const administrativeRead = isPlatformSuperAdmin(input.actorUserId, input.organizationId) &&
     effectiveAccess.allows.includes("flow.case.read");
+  const sharedDemo = await isSharedDemoPrincipalInTransaction(tx, input.actorUserId);
   const result = {
     identity: false,
     medical: false,
@@ -204,15 +205,9 @@ async function sensitiveAccessFromEffective(
   for (const classification of Object.keys(SENSITIVE_SCOPE_BY_CLASS) as SensitiveRecordClass[]) {
     if (!effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].read) &&
       !effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit)) continue;
-    const specialistAuthority = authorityScopes ? authorityScopes.has(SENSITIVE_SCOPE_BY_CLASS[classification]) : await hasCurrentAuthorityScope(tx, {
-      organizationId: input.organizationId,
-      actorUserId: input.actorUserId,
-      scope: SENSITIVE_SCOPE_BY_CLASS[classification],
-      caseId: input.caseId,
-    });
-    result[classification] = (administrativeRead || specialistAuthority) &&
+    result[classification] = (!sharedDemo || administrativeRead) &&
       effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].read);
-    result.edit[classification] = specialistAuthority &&
+    result.edit[classification] = !sharedDemo &&
       effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit);
   }
   // Do not carry a read exception past its request lifetime or grant expiry
@@ -236,13 +231,10 @@ export async function sensitiveAccessForCaseList(
         access.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit),
       ),
     ).map(([id]) => id);
-    const authorities = await currentAuthorityScopesForCases(tx, {
-      organizationId, actorUserId, caseIds: sensitiveIds, scopes: [...new Set(Object.values(SENSITIVE_SCOPE_BY_CLASS))],
-    });
     const result = new Map<number, SensitiveAccess>();
     for (const [caseId, effective] of effectiveByCase) {
       result.set(caseId, await sensitiveAccessFromEffective(tx, { organizationId, actorUserId, caseId },
-        effective, authorities.get(caseId) ?? new Set()));
+        effective));
     }
     return result;
   }, { isolationLevel: "repeatable read", accessMode: "read only" });
@@ -272,6 +264,7 @@ export async function withSensitiveAuthorityFence<T>(input: {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${input.organizationId}))`);
     await input.beforeAuthorize?.(tx);
+    if (await isSharedDemoPrincipalInTransaction(tx, input.actorUserId)) throw new SensitiveAuthorityRequiredError();
     const effectiveAccess = await resolveEffectiveAccessInTransaction(tx, {
       organizationId: input.organizationId,
       principalType: "human",
@@ -280,16 +273,10 @@ export async function withSensitiveAuthorityFence<T>(input: {
       purpose: "onboarding-sensitive-record-edit",
     });
     for (const classification of [input.classification, ...(input.additionalClassifications ?? [])]) {
-      const hasSpecialistAuthority = await hasCurrentAuthorityScope(tx, {
-        organizationId: input.organizationId,
-        actorUserId: input.actorUserId,
-        scope: SENSITIVE_SCOPE_BY_CLASS[classification],
-        caseId: input.caseId,
-      });
       const hasGovernanceGrant = effectiveAccess.allows.includes(
         SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit,
       );
-      if (!hasSpecialistAuthority || !hasGovernanceGrant) {
+      if (!hasGovernanceGrant) {
         throw new SensitiveAuthorityRequiredError();
       }
     }
@@ -380,7 +367,7 @@ export function restrictedDocumentView<T extends {
     category: "restricted",
     status: document.status,
     required: document.required,
-    note: "Details are restricted to the assigned specialist.",
+      note: "Current sensitive-field read permission is required.",
     ...(document.reminderCount === undefined ? {} : { reminderCount: document.reminderCount }),
     ...(document.lastReminderAt === undefined ? {} : { lastReminderAt: document.lastReminderAt }),
     ...(document.reminderNextAt === undefined ? {} : { reminderNextAt: document.reminderNextAt }),

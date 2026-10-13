@@ -493,7 +493,7 @@ export function FlowBasisSummary({ basis, mode, saved = false, attachmentCount =
       </details>
       <p>Customization: {mode !== 'recommended' ? 'Pending review — planned hybrid/custom adoption continues on this basis.' : attachmentCount ? 'Documents attached, pending review; effective flows unchanged.' : basis.overrideRefs.length ? 'Existing reviewed overrides retained.' : 'None planned; documents may be attached later.'}</p>
       <p>Private document references: {attachmentCount}. Attachments are not reviewed executable changes.</p>
-      <p className="text-xs text-[var(--text-muted)]">{saved ? 'Saved provenance is historical planning evidence, not a pinned executable version. ' : ''}Documents are private review attachments only. Country, policy, security, specialist authority and live-effect gates still apply.</p>
+      <p className="text-xs text-[var(--text-muted)]">{saved ? 'Saved provenance is historical planning evidence, not a pinned executable version. ' : ''}Documents are private review attachments only. Country, policy, security, current scoped permissions, explicit human review and live-effect gates still apply.</p>
     </>}
   </section>;
 }

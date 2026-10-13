@@ -20,7 +20,7 @@
           "status": "Implemented",
           "mechanism": "Signed-in identity is required for operational API access; provider callbacks have separate verification boundaries.",
           "safe_behavior": "Unauthorized access is rejected.",
-          "limitation": "Authentication does not grant organization, case or specialist authority.",
+          "limitation": "Authentication does not grant organization, case or decision permissions.",
           "sources": [
             "guards",
             "access"
@@ -103,11 +103,11 @@
         },
         {
           "id": "SEC-05",
-          "name": "Verified specialist authority",
-          "status": "Configuration required",
-          "mechanism": "Professional governance authority is distinct from tenant administration and mailbox personas.",
-          "safe_behavior": "Missing or unverified authority blocks specialist actions.",
-          "limitation": "Authority must be established through the applicable approval process.",
+          "name": "Permission-based human decisions",
+          "status": "Implemented",
+          "mechanism": "Named active members need current scoped decision or policy permissions plus explicit current-revision human reviews.",
+          "safe_behavior": "Denied or revoked permissions and stale or historical receipts block new effects.",
+          "limitation": "Ordinary access is not professional qualification; old specialist records are history only.",
           "sources": [
             "governance"
           ],
@@ -253,7 +253,7 @@
           "status": "Implemented",
           "mechanism": "Inbound communication is subject-bound, with provider-message deduplication and self-echo protection.",
           "safe_behavior": "Unmatched, ambiguous or duplicate messages do not drive new effects.",
-          "limitation": "Sender identity alone cannot establish tenant or specialist authority.",
+          "limitation": "Sender identity alone cannot establish client/case permissions or release a pending review.",
           "sources": [
             "guards"
           ],

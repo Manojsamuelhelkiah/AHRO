@@ -1,4 +1,5 @@
 export const tenantSafeguards = [
+  { table: "human_permission_decisions", phaseB: false },
   { table: "employee_vault_products", phaseB: false },
   { table: "employee_vault_requests", phaseB: false },
   { table: "employee_vault_receipts", phaseB: false },

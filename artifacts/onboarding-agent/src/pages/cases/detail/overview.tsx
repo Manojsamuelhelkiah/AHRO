@@ -146,7 +146,7 @@ export function AttentionPanel({ approval, caseId, offlineSample = false }: any)
         )}
         {action.isAuthorityLoading && (
           <p className="text-[var(--text-xs)] text-[var(--text-muted)]" role="status">
-            Checking current specialist authority…
+            Checking current decision permissions…
           </p>
         )}
         {!action.isAuthorityLoading && !action.isAuthorized && (

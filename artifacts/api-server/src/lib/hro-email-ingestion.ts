@@ -7,7 +7,7 @@ import { db, hroEmailRequests, hroEmailScan, hroMailboxIngress, hroMailboxReques
 import { header, type GmailMessage } from "./onboarding/inbound-email";
 import { mailboxTokens } from "./hro-mailbox-ingress";
 import { classifyEmail } from "./hro-email-registry";
-import { currentReceipt } from "./offboarding/authority";
+import { emailRouteReceiptCurrent as currentReceipt } from "./hro-email-authorization";
 import { withSensitiveLifecycleFence, evaluateCaseDerivedLifecycleGateInTransaction } from "./onboarding/sensitive-lifecycle";
 
 const connectors = new ReplitConnectors();

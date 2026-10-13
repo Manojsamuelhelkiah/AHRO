@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { organizationsTable } from "./organizations";
+import type { HumanPermissionDecision } from "./human-permission";
 
 export type OnbReadinessItemRow = {
   key: string;
@@ -318,6 +319,7 @@ export const onbApprovals = pgTable("onb_approvals", {
   authorityScope: text("authority_scope").$type<OnbAuthorityScope>(),
   requestedByUserId: text("requested_by_user_id"),
   decidedAuthorityId: text("decided_authority_id"),
+  permissionDecision: jsonb("permission_decision").$type<HumanPermissionDecision>(),
   decidedAuthorityRevision: integer("decided_authority_revision"),
   authorityReviewStatus: text("authority_review_status").notNull().default("not-required"),
   authorityReviewedByUserId: text("authority_reviewed_by_user_id"),

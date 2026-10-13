@@ -227,7 +227,7 @@ export function OrganizationMembersSettings() {
                       className="mt-2 block w-full rounded-md border border-input bg-background p-2"
                     />
                   </label>
-                  <p className="text-xs text-[var(--text-muted)]">This reason is retained in the audit record and visible to authorized audit reviewers. Do not include sensitive personal or medical details. Reinstatement does not restore administrative or specialist authority.</p>
+                  <p className="text-xs text-[var(--text-muted)]">This reason is retained in the audit record and visible to authorized audit reviewers. Do not include sensitive personal or medical details. Reinstatement does not restore administrative access or previously revoked permissions.</p>
                   <div className="flex gap-2">
                     <Button type="submit" size="sm" disabled={busy || !reason.trim()}>{reinstate.isPending ? "Reinstating..." : "Reinstate as member"}</Button>
                     <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { setSelected(null); setReason(""); }}>Cancel</Button>

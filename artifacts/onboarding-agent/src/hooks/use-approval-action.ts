@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDecideOnboardingApproval } from '@workspace/api-client-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getPinnedOrganizationIdForPage } from '@workspace/api-client-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getPinnedOrganizationIdForPage, customFetch } from '@workspace/api-client-react';
 import { toast } from './use-toast';
 import {
   APPROVAL_PERMISSION_MESSAGE,
@@ -25,6 +25,9 @@ type ApprovalCapabilityResponse = {
   canDecide: boolean;
   reason: string | null;
   version: number;
+  requiresFreshReview?: boolean;
+  canRequestFreshReview?: boolean;
+  reviewOnly?: boolean;
 };
 
 function currentPinnedOrganizationId(): string | null {
@@ -39,7 +42,8 @@ function currentPinnedOrganizationId(): string | null {
 export function useApprovalCapability(
   approval: ApprovalActionTarget | null | undefined,
 ) {
-  const validTarget = approval && isValidApprovalVersion(approval) && approval.status === 'pending';
+  const validTarget = approval && isValidApprovalVersion(approval) &&
+    (approval.status === 'pending' || approval.status === 'approved');
   const organizationId = currentPinnedOrganizationId();
   return useQuery({
     queryKey: ['/api/onboarding/approvals', approval?.id ?? null, 'capability', approval?.version ?? null, organizationId],
@@ -47,13 +51,31 @@ export function useApprovalCapability(
     retry: false,
     refetchInterval: validTarget ? 5000 : false,
     queryFn: async (): Promise<ApprovalCapabilityResponse> => {
-      const response = await fetch(`/api/onboarding/approvals/${approval!.id}/capability`, {
+      return customFetch<ApprovalCapabilityResponse>(`/api/onboarding/approvals/${approval!.id}/capability`, {
         credentials: 'include',
         headers: organizationId ? { 'x-organization-id': organizationId } : undefined,
       });
-      if (!response.ok) throw new Error(`Capability preflight failed (API ${response.status})`);
-      return response.json() as Promise<ApprovalCapabilityResponse>;
     },
+  });
+}
+
+export function useFreshApprovalReview(approval: ApprovalActionTarget) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const organizationId = currentPinnedOrganizationId();
+      return customFetch<{ version: number; reviewRequired: boolean; released: false }>(`/api/onboarding/approvals/${approval.id}/fresh-review`, {
+        method: "POST", credentials: "include",
+        headers: { "content-type": "application/json", ...(organizationId ? { "x-organization-id": organizationId } : {}) },
+        body: JSON.stringify({ expectedVersion: approval.version }),
+      });
+    },
+    onSuccess: async () => {
+      await refreshApprovalViews(queryClient, approval);
+      await queryClient.invalidateQueries({ queryKey: ['/api/onboarding/approvals', approval.id] });
+      toast({ title: "Fresh review requested", description: "A new pending review cycle was recorded. No work resumed and no email was sent." });
+    },
+    onError: error => toast({ title: "Review not requested", description: error.message, variant: "destructive" }),
   });
 }
 

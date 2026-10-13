@@ -9,6 +9,7 @@ import { allRequiredChecks, digest, VAULT_CHECK_KINDS } from "./policy";
 import { authoritativeCheckIsCurrent } from "./verification";
 import { liveVaultPolicy, type VaultTx } from "./core";
 import { jurisdictionForWorkforceContext } from "../onboarding/sensitive-lifecycle";
+import { recordedHumanPermissionDecisionCurrent } from "../human-permissions";
 
 export const shareProjection = (r: typeof requests.$inferSelect) => ({
   id: r.id, employer: r.employerName, caseId: r.caseId, purpose: r.purpose, scope: r.scope, jurisdiction: r.jurisdiction,
@@ -36,12 +37,9 @@ export async function caseVaultRequirements(tx: Pick<VaultTx, "select">, c: type
     eq(reviews.decisionRevision, d.revision), eq(reviews.outcome, "approved"),
     eq(reviews.reviewedByUserId, d.approvedByUserId),
   ));
-  const [assignment] = review ? await tx.select().from(assignments).where(and(eq(assignments.organizationId, c.organizationId), eq(assignments.id, review.authorityAssignmentId))) : [];
-  if (!assignment || assignment.verificationStatus !== "verified" || assignment.revokedAt ||
-    assignment.assigneeUserId !== d.approvedByUserId || !assignment.verificationReference ||
-    assignment.authorityRole !== "legal" ||
-    (assignment.expiresAt && assignment.expiresAt <= new Date()) || !review?.verificationReference) return null;
-  const [member] = await tx.select().from(memberships).where(and(eq(memberships.organizationId, c.organizationId), eq(memberships.clerkUserId, assignment.assigneeUserId), isNull(memberships.revokedAt)));
+  if (!review?.verificationReference || !await recordedHumanPermissionDecisionCurrent(tx as VaultTx, c.organizationId,
+    review.authorityAssignmentId, ["tool.policy.manage"], d.revision)) return null;
+  const [member] = await tx.select().from(memberships).where(and(eq(memberships.organizationId, c.organizationId), eq(memberships.clerkUserId, d.approvedByUserId), isNull(memberships.revokedAt)));
   if (!member) return null;
   const value = d.proposedValue as { jurisdiction?: unknown; checks?: unknown; maxAgeDays?: unknown;
     governanceRuntime?: { domain?: string; impactedWorkflows?: string[] } };

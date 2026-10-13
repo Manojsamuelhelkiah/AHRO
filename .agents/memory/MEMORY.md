@@ -26,7 +26,7 @@
 - [Versioned aggregate editing](versioned-aggregate-editing.md) — JSON aggregate editors need server version preconditions plus queued latest-state transforms, including archive and delete.
 - [Intent taxonomy provenance](intent-taxonomy-provenance.md) — count reference outcomes separately from parents, aliases, custom rows, and candidates; type source edges by evidence strength.
 - [Connector effect fencing](connector-effect-fencing.md) — all future remote writes must use the durable journal; never reclaim an ambiguous non-idempotent dispatch.
-- [Specialist authority trust](specialist-authority-trust.md) — membership and mailbox personas are not professional authority; governance bootstrap and legacy review must not invent verification.
+- [Human decision permissions](specialist-authority-trust.md) — specialist authority is retired; ordinary access is not professional qualification, and old receipts cannot release new effects.
 - [Degraded intent-corpus actions](degraded-intent-corpus-actions.md) — fail closed only for operations that may depend on unavailable custom intents; keep provably reference-only work available.
 - [React Hook Form runtime values](react-hook-form-runtime-values.md) — sync default loaders cannot use the async callback form; parse or register numeric values before API serialization.
 - [Clerk API smoke probes](clerk-api-smoke-probes.md) — API readiness checks must look like CORS/fetch requests; navigation headers can trigger Clerk handshake redirects.
@@ -60,7 +60,7 @@
 - [Controlled demo email browser harness](controlled-demo-email-harness.md) — fake provider tests stay behind the deny fence; opaque email fixtures must satisfy every final sensitive-class gate.
 - [Workforce runtime boundaries](workforce-runtime-boundaries.md) — opt-in snapshot semantics, real persisted fixtures, and checkpoint fencing independent of task-state presence.
 - [Protected audit boundaries](protected-audit-boundaries.md) — independent readiness needs generation-fenced checkpoints and provider-verified drill receipts; local flags are insufficient.
-- [Governance authority boundaries](governance-authority-boundaries.md) — tenant administration is not specialist authority; provisional planning and prospective revision adoption never authorize live effects.
+- [Policy review boundaries](governance-authority-boundaries.md) — live policy permissions plus explicit version-bound review; provisional planning and publishing never implicitly activate cases.
 - [HR policy grounding](hr-policy-grounding.md) — approved extracts stay separate from case evidence; full source context and live authorization matter at each disclosure boundary.
 - [Sensitive record boundaries](sensitive-record-boundaries.md) — opaque content defaults confidential; policy changes, holds, deletion, and external disclosure share a fence.
 - [Early-tenure evidence](early-tenure-evidence-boundaries.md) — historical authority receipts, actual-start revision fencing, and member-addressed reminders without unverified email binding.

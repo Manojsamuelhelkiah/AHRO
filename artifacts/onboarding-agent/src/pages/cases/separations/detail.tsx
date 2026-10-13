@@ -81,7 +81,7 @@ function TaskCard({ t, caseId, version, run, busy, ktRequired }: { ktRequired: b
       </div>
       {mode && (
         <div className="mt-3 space-y-3 border-t border-[var(--border)] pt-3">
-          {mode === 'assign' && <Field label="Owner (verified Clerk principal id)" hint="Must hold this task's authority scope. Checked by the server."><Input data-testid={`input-owner-${t.id}`} value={owner} onChange={(e) => setOwner(e.target.value)} /><Button size="sm" variant="outline" disabled={!user?.id || busy} onClick={() => setOwner(user?.id ?? '')}>Use my account</Button></Field>}
+          {mode === 'assign' && <Field label="Owner (named member principal id)" hint="Must have current case-edit and approval permissions. Checked by the server; assigning an owner grants no access."><Input data-testid={`input-owner-${t.id}`} value={owner} onChange={(e) => setOwner(e.target.value)} /><Button size="sm" variant="outline" disabled={!user?.id || busy} onClick={() => setOwner(user?.id ?? '')}>Use my account</Button></Field>}
           {mode === 'blocked' && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={uncertain} onChange={(e) => setUncertain(e.target.checked)} /> Status is uncertain (not confirmed blocked)</label>}
           {mode === 'evidence' && (
             <div className="space-y-2">

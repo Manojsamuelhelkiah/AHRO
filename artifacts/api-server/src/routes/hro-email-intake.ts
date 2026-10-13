@@ -12,6 +12,10 @@ import { SeparationError } from "../lib/offboarding/model";
 import { logger } from "../lib/logger";
 import { readEmailPrivateBody } from "../lib/hro-email-private-source";
 import { getEmailRotation, stageEmailRotation, readmitEmailRequests } from "../lib/hro-email-rotation";
+import { bindApprovalEmail } from "../lib/onboarding/approval-email-binding";
+import { db } from "@workspace/db";
+import { resolveEffectiveAccessInTransaction } from "../lib/access-governance";
+import { isSharedDemoPrincipalInTransaction } from "../lib/human-permissions";
 const router: IRouter = Router();
 const handle = (fn: (r: Request, s: Response) => Promise<unknown>) => async (r: Request, s: Response) => {
   s.setHeader("Cache-Control", "no-store");
@@ -30,6 +34,16 @@ const parse = (schema: { safeParse: (v: unknown) => { success: boolean; data?: u
   return p.data;
 };
 const actor = (r: Request) => r.authUserId!;
+router.get("/onboarding/human-permissions", handle(async (r, s) => {
+  const organizationId = getOrganizationId(r);
+  const permissions = await db.transaction(async tx => {
+    if (await isSharedDemoPrincipalInTransaction(tx, actor(r))) return { allows: [] };
+    return resolveEffectiveAccessInTransaction(tx, { organizationId, principalType: "human", principalId: actor(r),
+      purpose: "current-human-action-controls" });
+  });
+  s.json({ allows: permissions.allows });
+}));
+router.put("/onboarding/approval-email-binding", handle(async (r, s) => s.json(await bindApprovalEmail(getOrganizationId(r), actor(r), r.body))));
 router.get("/onboarding/email-intake", handle(async (r, s) => s.json(await emailIntakeReadiness(getOrganizationId(r), actor(r)))));
 router.post("/onboarding/email-intake", handle(async (r, s) => s.status(201).json(await configureEmailIntake(getOrganizationId(r), actor(r), parse(ConfigureHroEmailIntakeBody, r.body)))));
 router.patch("/onboarding/email-intake/routes/:routeId", handle(async (r, s) => s.json(await updateEmailRoute(getOrganizationId(r), actor(r), String(r.params.routeId), parse(UpdateHroEmailRouteBody, r.body)))));

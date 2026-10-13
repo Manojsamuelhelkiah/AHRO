@@ -10,13 +10,7 @@ import {
   usePostGovernanceDecisionsKeyReviews,
   useGetGovernanceRequirements,
   usePutGovernanceRequirementsKeyCoverage,
-  useGetGovernanceAssignments,
-  usePostGovernanceAuthorityBootstrap,
-  usePostGovernanceAssignmentsIdRevoke,
-  usePostGovernanceAssignments,
-  usePostGovernanceAssignmentsIdVerify,
   useGetGovernanceHistory,
-  useGovernanceAuthorityOptions,
   type GovernanceDecision,
   type GovernanceRequirement,
    type GovernanceAssignment,
@@ -27,6 +21,7 @@ import {
   type GovernanceCaseImpactResponse,
 } from '../hooks/use-governance-impact';
 import { useOrganizationRole } from '../hooks/use-organization-role';
+import { useHumanPermissions } from '../hooks/use-human-permissions';
 import { useUser } from '@clerk/react';
 import { CheckSquare, Shield, Check, X, AlertTriangle, Clock, History, AlertCircle, FileKey } from 'lucide-react';
 import { format } from 'date-fns';
@@ -123,7 +118,8 @@ function DecisionCard({ decision, assignments, canDraft }: {
   const [showHistory, setShowHistory] = useState(false);
   const [showReview, setShowReview] = useState(false);
 
-  const isReviewer = hasActiveAuthority(assignments, decision.accountableRole, userId);
+  const permissions = useHumanPermissions();
+  const isReviewer = permissions.data?.allows.includes('tool.policy.manage') === true && !permissions.isError;
 
   const handlePropose = () => {
     let parsedValue = draftValue;
@@ -362,7 +358,8 @@ function RequirementCard({ req, assignments, userId }: {
   };
 
   const isComplete = coverage.implemented && coverage.tested && coverage.configured && coverage.approvedForLive;
-  const canAttest = hasActiveAuthority(assignments, req.reviewOwnerRole, userId);
+  const permissions = useHumanPermissions();
+  const canAttest = permissions.data?.allows.includes('tool.policy.manage') === true && !permissions.isError;
   const missingPrerequisites = [
     !coverage.implemented && 'implemented',
     !coverage.tested && 'tested',
@@ -467,7 +464,7 @@ function RequirementCard({ req, assignments, userId }: {
             )}
              {!isComplete && <p className="mt-2 text-[var(--text-xs)] text-[var(--status-amber-fg)]">Incomplete launch prerequisites: {missingPrerequisites.join(', ')}.</p>}
              {isComplete && <p className="mt-2 text-[var(--text-xs)] text-[var(--text-muted)]">These recorded coverage facts do not establish provider activation or source-recorded evidence for a live action.</p>}
-             {!canAttest && <p className="mt-2 text-[var(--text-xs)] text-[var(--text-muted)]">A currently active, verified {req.reviewOwnerRole} assignment is required to attest this coverage.</p>}
+             {!canAttest && <p className="mt-2 text-[var(--text-xs)] text-[var(--text-muted)]">Current policy-management permission is required to attest this coverage.</p>}
           </div>
         )}
       </div>
@@ -477,163 +474,6 @@ function RequirementCard({ req, assignments, userId }: {
         </Button>
       )}
     </div>
-  );
-}
-
-function AuthorityManager() {
-  const { loading: roleLoading } = useOrganizationRole();
-  const options = useGovernanceAuthorityOptions(!roleLoading);
-  const { data: assignments, isLoading, error: assignmentsError } = useGetGovernanceAssignments({ query: { refetchInterval: 60000, refetchIntervalInBackground: true } });
-  const revoke = usePostGovernanceAssignmentsIdRevoke();
-  const verify = usePostGovernanceAssignmentsIdVerify();
-  const nominate = usePostGovernanceAssignments();
-  const bootstrap = usePostGovernanceAuthorityBootstrap();
-  const [bootstrapRef, setBootstrapRef] = useState('');
-  const [bootstrapRole, setBootstrapRole] = useState('');
-  const [bootstrapAssignee, setBootstrapAssignee] = useState('');
-  const [verificationRefs, setVerificationRefs] = useState<Record<number, string>>({});
-  const [actionError, setActionError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const canVerify = options.isSuccess && !options.isRefetchError && options.data.canVerify;
-  const canNominate = options.isSuccess && !options.isRefetchError && options.data.canNominate;
-  const busy = bootstrap.isPending || nominate.isPending || verify.isPending || revoke.isPending;
-  const chosenMember = options.data?.members.find((member) => member.clerkUserId === bootstrapAssignee);
-  const chosenRole = options.data?.roles.find((role) => role.id === bootstrapRole);
-  const canSubmit = !busy && !options.isError && !!chosenMember && !!chosenRole && !!bootstrapRef.trim();
-  const memberName = (id: string) => {
-    const member = options.data?.members.find((item) => item.clerkUserId === id);
-    return member?.name || member?.email || id;
-  };
-  const fail = (error: unknown) => {
-    setActionError(errorMessage(error, 'Action failed. Reload before retrying.'));
-    setSuccessMessage('');
-  };
-  const resetForm = () => {
-    setBootstrapRef(''); setBootstrapRole(''); setBootstrapAssignee('');
-    setActionError('');
-  };
-
-  if (isLoading) return <LoadingBlock>Loading authorities...</LoadingBlock>;
-
-  return (
-    <Card id="authority-assignments">
-      <div className="p-[var(--space-md)] bg-[var(--surface-alt)] border-b border-[var(--border)]">
-        <h3 className="font-bold text-[var(--text-base)] text-[var(--text-primary)] flex items-center gap-2">
-          <Shield className="w-4 h-4 text-[var(--primary)]" /> Verified Authorities
-        </h3>
-        <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">
-          Server-verified roles allowed to approve or reject policy decisions. Self-declaration is not permitted.
-        </p>
-      </div>
-      <CardContent className="p-0">
-        {assignmentsError && <p role="alert" className="p-4 text-[var(--status-red)]">{errorMessage(assignmentsError, 'Could not load authorities.')}</p>}
-        <div className="divide-y divide-[var(--border)]">
-          {assignments?.map(a => (
-            <div key={a.id} className="p-[var(--space-md)] flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                   <span className="font-semibold text-[var(--text-sm)] text-[var(--text-primary)]">{options.data?.roles.find((role) => role.id === a.role)?.label ?? a.role}</span>
-                   <Badge className={cn("shadow-none text-[10px] uppercase", assignmentState(a) === 'active' ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : assignmentState(a) === 'pending' || assignmentState(a) === 'expired' ? 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]' : 'bg-[var(--status-red-bg)] text-[var(--status-red-fg)]')}>
-                     {assignmentState(a) === 'active' ? 'Verified active' : assignmentState(a) === 'pending' ? 'Nominated — pending verification' : assignmentState(a)}
-                   </Badge>
-                </div>
-                <div className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">
-                    Assignee: <span>{memberName(a.assigneeUserId)}</span> <span className="font-mono">({a.assigneeUserId})</span> &bull; {a.verificationStatus === 'verified' ? <>Verified by: <span>{memberName(a.verifiedByUserId)}</span> <span className="font-mono">({a.verifiedByUserId})</span></> : 'Owner/admin nomination only — not approval authority'}
-                </div>
-                 <p className="mt-1 text-[var(--text-xs)] text-[var(--text-muted)]">Appointment reference: {a.verificationReference}</p>
-                 {a.expiresAt && <div className={cn("mt-1 text-[var(--text-xs)]", assignmentState(a) === 'expired' ? 'text-[var(--status-red-fg)]' : 'text-[var(--text-muted)]')}>Expires {format(new Date(a.expiresAt), 'MMM d, yyyy p')}{assignmentState(a) === 'expired' ? ' — no longer active' : ''}</div>}
-                 {assignmentState(a) === 'pending' && canVerify && (
-                   <div className="mt-2 flex items-center gap-2">
-                     <input
-                       type="text"
-                        aria-label={`Verification reference for ${memberName(a.assigneeUserId)}`}
-                        placeholder="Appointment verification reference"
-                       className="text-[var(--text-sm)] rounded-[var(--radius-md)] h-[24px] px-[8px] border border-input outline-none focus:border-[var(--primary)] bg-background max-w-[200px]"
-                        value={verificationRefs[a.id] ?? ''}
-                        onChange={(event) => setVerificationRefs((refs) => ({ ...refs, [a.id]: event.target.value }))}
-                     />
-                      <Button size="sm" variant="outline" className="h-[24px] px-2 text-[10px]" disabled={busy || !verificationRefs[a.id]?.trim()} onClick={() => {
-                         setActionError(''); setSuccessMessage('');
-                         verify.mutate({ id: a.id, verificationReference: verificationRefs[a.id].trim() }, {
-                           onSuccess: () => { setVerificationRefs((refs) => ({ ...refs, [a.id]: '' })); setSuccessMessage('Nomination verified.'); },
-                           onError: fail,
-                         });
-                     }}>
-                        Submit for server verification
-                     </Button>
-                   </div>
-                )}
-                {a.revokedAt && (
-                  <Badge className="bg-[var(--status-red-bg)] text-[var(--status-red-fg)] shadow-none text-[10px] mt-2">Revoked {format(new Date(a.revokedAt), 'MMM d')}</Badge>
-                )}
-              </div>
-               {!a.revokedAt && canVerify && (
-                 <Button variant="outline" size="sm" disabled={busy} onClick={() => {
-                   setActionError(''); setSuccessMessage('');
-                   revoke.mutate(a.id, { onSuccess: () => setSuccessMessage('Authority revoked.'), onError: fail });
-                 }} className="text-[var(--status-red)] hover:text-[var(--status-red)] hover:bg-[var(--status-red-bg)]">
-                  Revoke
-                </Button>
-              )}
-            </div>
-          ))}
-           {!assignmentsError && !assignments?.length && (
-            <div className="p-6 text-center text-[var(--text-muted)] text-[var(--text-sm)]">
-               No authority nominations or verified assignments are recorded.
-            </div>
-          )}
-        </div>
-        
-        <div className="p-[var(--space-md)] bg-[var(--surface-soft)] border-t border-[var(--border)]">
-          <h4 className="text-[var(--text-sm)] font-semibold mb-2">Authority nomination and operator assignment</h4>
-          <p className="text-[var(--text-xs)] text-[var(--text-muted)] mb-3">An authenticated Super Admin or server-verified governance operator can create, verify and revoke assignments for the selected client. Other owners and admins can nominate a member, but nomination alone grants no authority. Specialist appointments require a recorded verification reference.</p>
-          {options.isLoading && <p role="status">Loading client members and authority roles…</p>}
-          {options.isError && <p role="alert" className="text-[var(--status-red)]">{errorMessage(options.error, 'Could not load client members and roles.')} <Button size="sm" variant="outline" onClick={() => void options.refetch()}>Retry</Button></p>}
-          {options.data && <p className="mb-3 text-[var(--text-xs)] text-[var(--text-muted)]">Client scope: {options.data.organizationId}. Only active members of this client can be selected.</p>}
-          {options.data && !options.data.members.length && <p>No active client members are available for appointment.</p>}
-          {(canVerify || canNominate) && <>
-          <div className="flex flex-col md:flex-row gap-2">
-             <select
-               aria-label="Authority role"
-              className="flex-1 text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] border border-input outline-none focus:border-[var(--primary)] bg-background max-w-[150px]"
-              value={bootstrapRole}
-              onChange={e => setBootstrapRole(e.target.value)}
-             ><option value="">Choose authority role</option>{options.data?.roles.map((role) => <option key={role.id} value={role.id}>{role.label}</option>)}</select>
-             <select
-               aria-label="Client member"
-              className="flex-1 text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] border border-input outline-none focus:border-[var(--primary)] bg-background max-w-[200px]"
-              value={bootstrapAssignee}
-              onChange={e => setBootstrapAssignee(e.target.value)}
-             ><option value="">Choose client member</option>{options.data?.members.map((member) => <option key={member.clerkUserId} value={member.clerkUserId}>{member.name || member.email || 'Unnamed member'}{member.name && member.email ? ` · ${member.email}` : ''} · {member.role} · {member.clerkUserId}</option>)}</select>
-            <input 
-              type="text" 
-               aria-label={canVerify ? "Appointment verification reference" : "Nomination reason"}
-               placeholder={canVerify ? "Approved appointment verification reference" : "Reason for nomination"}
-              className="flex-1 text-[var(--text-sm)] rounded-[var(--radius-md)] h-[32px] px-[10px] border border-input outline-none focus:border-[var(--primary)] bg-background"
-              value={bootstrapRef}
-              onChange={e => setBootstrapRef(e.target.value)}
-            />
-            <div className="flex gap-2 shrink-0">
-               {!canVerify && canNominate && <Button size="sm" variant="outline" disabled={!canSubmit} onClick={() => {
-                 setActionError(''); setSuccessMessage('');
-                 nominate.mutate({ role: bootstrapRole, assigneeUserId: bootstrapAssignee, assignmentReason: bootstrapRef.trim() }, { onSuccess: () => { resetForm(); setSuccessMessage('Member nominated. Verification is still required; no authority has been granted.'); }, onError: fail });
-              }}>
-                Nominate
-               </Button>}
-               {canVerify && <Button size="sm" disabled={!canSubmit} onClick={() => {
-                 setActionError(''); setSuccessMessage('');
-                 bootstrap.mutate({ role: bootstrapRole, assigneeUserId: bootstrapAssignee, verificationReference: bootstrapRef.trim() }, { onSuccess: () => { resetForm(); setSuccessMessage('Verified authority appointed.'); }, onError: fail });
-              }}>
-                 {bootstrap.isPending ? 'Appointing…' : 'Appoint verified authority'}
-               </Button>}
-            </div>
-          </div>
-          </>}
-          {actionError && <p role="alert" className="text-[var(--status-red)] mt-2">{actionError}</p>}
-          {successMessage && <p role="status" className="mt-2">{successMessage}</p>}
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -683,13 +523,13 @@ function NewDecisionForm({ canDraft }: { canDraft: boolean }) {
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-3 p-[var(--space-md)]">
-        <div><h3 className="font-bold text-[var(--text-base)] text-[var(--text-primary)]">Draft a policy decision</h3><p className="mt-1 text-[var(--text-xs)] text-[var(--text-muted)]">Drafting is available to organization owners and admins. Approval remains restricted to an active verified specialist.</p></div>
+        <div><h3 className="font-bold text-[var(--text-base)] text-[var(--text-primary)]">Draft a policy decision</h3><p className="mt-1 text-[var(--text-xs)] text-[var(--text-muted)]">Drafting requires an authorized owner/admin with policy-management permission. A named reviewer must explicitly review the current revision. Access does not establish professional qualifications.</p></div>
         <Button onClick={() => setOpen((value) => !value)} variant={open ? 'outline' : 'default'}>{open ? 'Cancel draft' : 'New decision'}</Button>
       </div>
       {open && <CardContent className="grid grid-cols-1 gap-3 border-t border-[var(--border)] p-[var(--space-md)] md:grid-cols-2">
         <label className="text-[var(--text-xs)] font-semibold">Decision key<input value={key} onChange={(event) => setKey(event.target.value)} placeholder="e.g. GD-CUSTOM-01" className="mt-1 h-9 w-full rounded border border-input bg-background px-2 font-mono font-normal" /></label>
         <label className="text-[var(--text-xs)] font-semibold">Title<input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-1 h-9 w-full rounded border border-input bg-background px-2 font-normal" /></label>
-        <label className="text-[var(--text-xs)] font-semibold">Accountable specialist role<input value={accountableRole} onChange={(event) => setAccountableRole(event.target.value)} placeholder="e.g. Legal" className="mt-1 h-9 w-full rounded border border-input bg-background px-2 font-normal" /></label>
+        <label className="text-[var(--text-xs)] font-semibold">Reviewer routing label<input value={accountableRole} onChange={(event) => setAccountableRole(event.target.value)} placeholder="e.g. Legal (routing only)" className="mt-1 h-9 w-full rounded border border-input bg-background px-2 font-normal" /></label>
         <label className="text-[var(--text-xs)] font-semibold">Review due (optional)<input type="datetime-local" value={reviewDueAt} onChange={(event) => setReviewDueAt(event.target.value)} className="mt-1 h-9 w-full rounded border border-input bg-background px-2 font-normal" /></label>
         <label className="text-[var(--text-xs)] font-semibold md:col-span-2">Proposed value<textarea value={proposedValue} onChange={(event) => setProposedValue(event.target.value)} placeholder="Text, or a JSON value" className="mt-1 min-h-16 w-full rounded border border-input bg-background p-2 font-mono font-normal" /></label>
         <label className="text-[var(--text-xs)] font-semibold">Rationale<textarea value={rationale} onChange={(event) => setRationale(event.target.value)} className="mt-1 min-h-16 w-full rounded border border-input bg-background p-2 font-normal" /></label>
@@ -771,13 +611,15 @@ function GovernanceAuditHistory() {
 }
 
 export function PolicyReviewPage() {
-  const [tab, setTab] = useState<'decisions' | 'requirements' | 'authorities' | 'history'>('decisions');
+  const [tab, setTab] = useState<'decisions' | 'requirements' | 'history'>('decisions');
   const { user } = useUser();
   const { isHR } = useOrganizationRole();
   
   const { data: decisions, isLoading: isLoadingDecisions } = useGetGovernanceDecisions({ query: { refetchInterval: 30000, refetchIntervalInBackground: true } });
   const { data: requirements, isLoading: isLoadingReqs } = useGetGovernanceRequirements({ query: { refetchInterval: 30000, refetchIntervalInBackground: true } });
-  const { data: assignments } = useGetGovernanceAssignments({ query: { refetchInterval: 60000, refetchIntervalInBackground: true } });
+  const permissions = useHumanPermissions();
+  const assignments: GovernanceAssignment[] = [];
+  const canDraft = isHR && permissions.data?.allows.includes('tool.policy.manage') === true && !permissions.isError;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
@@ -803,14 +645,6 @@ export function PolicyReviewPage() {
         >
           Requirements Register
         </button>
-        <button 
-          onClick={() => setTab('authorities')}
-          role="tab"
-          aria-selected={tab === 'authorities'}
-          className={cn("min-w-0 pb-2 text-left text-[var(--text-sm)] font-semibold transition-colors border-b-2", tab === 'authorities' ? "border-[var(--primary)] text-[var(--primary)]" : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]")}
-        >
-          Authorities
-        </button>
         <button
           onClick={() => setTab('history')}
           role="tab"
@@ -824,10 +658,10 @@ export function PolicyReviewPage() {
       <div>
         {tab === 'decisions' && (
           <div className="space-y-4">
-             <NewDecisionForm canDraft={isHR} />
+             <NewDecisionForm canDraft={canDraft} />
              <AffectedCases />
             {isLoadingDecisions ? <LoadingBlock>Loading decisions...</LoadingBlock> : (
-               decisions?.map(d => <DecisionCard key={d.key} decision={d} assignments={assignments || []} canDraft={isHR} />)
+               decisions?.map(d => <DecisionCard key={d.key} decision={d} assignments={assignments || []} canDraft={canDraft} />)
             )}
             {!isLoadingDecisions && !decisions?.length && (
               <div className="text-center p-8 text-[var(--text-muted)] bg-[var(--surface-alt)] rounded-lg border border-[var(--border)]">
@@ -858,9 +692,6 @@ export function PolicyReviewPage() {
           </Card>
         )}
 
-        {tab === 'authorities' && (
-          <AuthorityManager />
-        )}
          {tab === 'history' && <GovernanceAuditHistory />}
       </div>
     </div>

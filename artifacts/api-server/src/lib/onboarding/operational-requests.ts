@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { hasHumanPermissions } from "../human-permissions";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -1617,30 +1618,10 @@ export async function applyOperationalRequestAction(input: {
           throw new OperationalRequestAuthorizationError("This workforce task is assigned to a different authenticated tenant user.");
         }
       } else {
-        const authorities = await tx.select({
-          userId: onbPolicyAuthorities.userId,
-          authorityRole: onbPolicyAuthorities.authorityRole,
-          site: onbPolicyAuthorities.site,
-        })
-          .from(onbPolicyAuthorities)
-          .where(and(
-            eq(onbPolicyAuthorities.organizationId, input.organizationId),
-            eq(onbPolicyAuthorities.userId, input.actorUserId),
-            eq(onbPolicyAuthorities.caseId, input.caseId),
-            eq(onbPolicyAuthorities.itemId, request.id),
-            isNull(onbPolicyAuthorities.revokedAt),
-          ));
-        const authority = authorities.find((candidate: {
-          userId: string;
-          authorityRole: string;
-          site: string;
-        }) =>
-          candidate.site === authorityScope &&
-          workforceAuthorityRoleId(candidate.authorityRole) === workforceAuthorityRoleId(request.responsibleRole ?? ""),
-        );
-        if (!authority) {
+        if (!await hasHumanPermissions(tx, { organizationId: input.organizationId, actorUserId: input.actorUserId!,
+          caseId: input.caseId, requiredKeys: ["tool.approval.decide", "flow.case.edit"] })) {
           throw new OperationalRequestAuthorizationError(
-            "This unassigned workforce task requires a server-side authority binding for its accountable role and case.",
+            "This unassigned workforce task requires current case approval and flow edit permissions.",
           );
         }
       }

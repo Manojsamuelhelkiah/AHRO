@@ -1,15 +1,15 @@
 ---
-name: Specialist authority trust
-description: Trust limits for governance bootstrap, remote decisions, and historical authority migration.
+name: Human decision permission boundaries
+description: Specialist authority is retired; ordinary access and explicit human review do not establish professional qualifications.
 ---
 
-Workspace membership, contact-role labels, and intended email personas do not establish specialist competence. Operator attestation is not directory verification or external governance approval.
+Specialist authority verification, assignments and bootstrap are retired. Use current tenant/case effective permissions and explicit human decisions, not a replacement role/scope registry. Routing roles and ordinary access do not establish professional competence.
 
-**Why:** Authenticated workspace access proves who can enter the application, not who may authorize payroll, legal decisions, or medical clearance. An allowlisted shared mailbox cannot reliably identify the individual responder.
+**Why:** The user explicitly selected complete retirement, superseding separate specialist verification requirements. This does not remove policy governance, professional source evidence, privacy safeguards, independent human review or execution fences.
 
-**How to apply:** Permit email decisions only with explicit governance authorization and independently verified identity-provider ownership of the exact responder address; otherwise direct responders to authenticated decision intake. Bootstrap requires explicit externally approved governance evidence through the protected operator procedure; never approve real governance merely to demonstrate the UI. Preserve old approvals as history and require a new authority-bound review before new effects, without retroactively asserting verified authority.
+**How to apply:** Human decisions require exact approval-decision permission; policy actions require policy-management permission, alongside existing flow/field permissions. Email setup additionally requires a named current client owner/admin. Retain old specialist evidence as history only. Require explicit fresh revision/evidence-bound review before unexecuted effects; never migrate receipts into approvals, reactivate legacy routes, resume held work or replay completed/ambiguous effects automatically.
 
-Revocation must serialize with both authority grants and actual provider dispatch, not just an earlier approval check.
+Permission revocation must serialize with actual provider dispatch, not just an earlier approval check.
 
 **Why:** A correct check followed by an unfenced write can race a revocation and authorize an effect after the grant has ceased to be valid.
 
@@ -17,9 +17,9 @@ Revocation must serialize with both authority grants and actual provider dispatc
 
 Identity-provider ownership of an email address does not authenticate a received message.
 
-**Why:** A forged From header can name a legitimate specialist. Directory verification alone would then falsely attribute the forged decision to that person.
+**Why:** A forged From header can name a legitimate member. Directory verification alone would then falsely attribute the forged decision to that person.
 
-**How to apply:** Remote decisions require independently verified message-bound transport proof as well as current scoped assignment. Never trust a sender-supplied Authentication-Results header or an unsigned message body; unsupported messages must receive an explicit authenticated-app handoff.
+**How to apply:** Remote decisions require independently verified message-bound transport proof, a separately consented exact uniquely verified named-member email binding, and current scoped effective permissions. Neither a mailbox persona nor a retained specialist assignment supplies that binding. Never trust a sender-supplied Authentication-Results header or an unsigned body; unsupported messages receive an authenticated-app handoff.
 
 Use FK-compatible case locks when a fenced provider callback inserts child records through another database connection.
 

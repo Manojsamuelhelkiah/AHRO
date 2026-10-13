@@ -220,6 +220,7 @@ export async function reopenOnboardingApproval(
     decidedBy: null,
     decidedAuthorityId: null,
     decidedAuthorityRevision: null,
+    permissionDecision: null,
     ...(opts.authorityScope === undefined ? {} : { authorityScope: opts.authorityScope }),
     comment: opts.invalidationOnly ? null : `${opts.reason}${opts.actor ? ` (${opts.actor})` : ""}`,
   }).where(and(

@@ -181,16 +181,16 @@ async function ensureFixture() {
     { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: administrator, role: "member" },
     { organizationId: DEMO_ORGANIZATION_ID, clerkUserId: reviewer, role: "member" },
   ]);
-  const [privacyReviewer] = await db.insert(onbGovernanceAuthorityAssignments).values({
-    organizationId: DEMO_ORGANIZATION_ID,
-    authorityRole: "privacy",
-    assigneeUserId: reviewer,
-    verificationStatus: "verified",
-    verifiedByUserId: administrator,
-    verificationReference: `browser-regression:${suffix}:verified-privacy-reviewer`,
-    expiresAt: new Date(Date.now() + 60 * 60_000),
-  }).returning({ id: onbGovernanceAuthorityAssignments.id });
-  if (!privacyReviewer) throw new Error("Unable to seed a verified browser-regression privacy reviewer.");
+  const policyReviewer = `browser-permission-policy-reviewer-${suffix}`;
+  await db.insert(organizationMembershipsTable).values({
+    organizationId: DEMO_ORGANIZATION_ID, clerkUserId: policyReviewer, role: "member",
+  });
+  await db.insert(accessNamedGrants).values({
+    organizationId: DEMO_ORGANIZATION_ID, principalType: "human", principalId: policyReviewer,
+    resourceKey: "tool.policy.manage", resourceType: "tool", scope: "tenant", effect: "allow", status: "active",
+    source: "named", createdByUserId: administrator, approvedByUserId: administrator, approvedAt: new Date(),
+  });
+  const { recordHumanPermissionDecision } = await import("./src/lib/human-permissions.ts");
   // These approvals exist only in the disposable test schema, and authorize
   // only the in-process fake provider behind the existing network deny fence.
   const { ensureGovernanceSeeded, reviewGovernanceDecision } =
@@ -203,16 +203,7 @@ async function ensureFixture() {
       eq(onbGovernanceDecisions.isCurrent, true),
     ));
     if (!decision) throw new Error(`Missing browser-regression governance decision ${key}`);
-    await db.insert(onbGovernanceAuthorityAssignments).values({
-      organizationId: DEMO_ORGANIZATION_ID,
-      authorityRole: decision.accountableRole,
-      assigneeUserId: reviewer,
-      verificationStatus: "verified",
-      verifiedByUserId: administrator,
-      verificationReference: `browser-regression:${suffix}:${key}:verified-reviewer`,
-      expiresAt: new Date(Date.now() + 60 * 60_000),
-    });
-    await reviewGovernanceDecision(DEMO_ORGANIZATION_ID, { userId: reviewer, role: "member" }, key, {
+    await reviewGovernanceDecision(DEMO_ORGANIZATION_ID, { userId: policyReviewer, role: "member" }, key, {
       revision: 1,
       outcome: "approved",
       reason: "Disposable browser fixture approval for fake controlled Demo email only.",
@@ -265,6 +256,10 @@ async function ensureFixture() {
   if (missingClasses.length > 0) {
     const revision = 1_000_000 + Number.parseInt(randomUUID().replaceAll("-", "").slice(0, 6), 16);
     ownedPolicyRevisions.add(revision);
+    const privacyReviewer = await db.transaction(tx => recordHumanPermissionDecision(tx, {
+      organizationId: DEMO_ORGANIZATION_ID, actorUserId: policyReviewer, requiredKeys: ["tool.policy.manage"],
+      reviewedRevision: revision, decision: "policy-approved",
+    }));
     await db.insert(onbSensitiveLifecyclePolicies).values(missingClasses.map((dataClass) => ({
       organizationId: DEMO_ORGANIZATION_ID,
       dataClass,
@@ -282,7 +277,7 @@ async function ensureFixture() {
       permittedProviders: ["gmail"],
       policyReference: `browser-regression:${suffix}:${dataClass}`,
       approvalReference: `browser-regression:${suffix}:${dataClass}`,
-      approvedByUserId: administrator,
+      approvedByUserId: policyReviewer,
       approvedAuthorityAssignmentId: privacyReviewer.id,
       isCurrent: true,
     })));
@@ -382,6 +377,30 @@ app.post("/api/test/offboarding-session", (req, res) => {
 
 app.get("/api/test/ready", (_req, res) => {
   res.json({ ready: true, providerBoundary: "deny-external-providers" });
+});
+
+// An ordinary named member in the disposable schema, with no specialist rows.
+// This seam creates only a held review; it never initializes an engine/provider.
+app.post("/api/test/permission-approval", async (req, res, next) => {
+  try {
+    if (sessions.get(cookieValue(req, "browser_e2e_session")) !== offboardingFixture.actor)
+      return res.status(403).json({ message: "Controlled operator required" });
+    const [c] = await db.insert(onbCases).values({
+      organizationId: offboardingFixture.org, workerName: "Permission browser fixture",
+      workerEmail: `permission-${randomUUID()}@example.invalid`, hireType: "external-fte",
+      workerCategory: "employee", role: "Engineer", department: "Testing", geography: "US",
+      workforceContext: { workCountry: "US" }, legalEntity: "Fixture US", managerName: "Manager",
+      recruiterName: "Requester", joiningDate: "2031-01-01", createdByUserId: offboardingFixture.legal,
+      lifecycleStage: "preboarding", orchestrationStatus: "waiting-approval", orchestrationCheckpoint: "waiting:manual-review",
+    }).returning();
+    const [approval] = await db.insert(dbPackage.onbApprovals).values({
+      organizationId: offboardingFixture.org, caseId: c.id, agent: "human-review",
+      ruleRef: "Permission browser review", hitlPattern: "approve-before-act", recommendation: "Review the current version",
+      rationale: "Disposable provider-blocked fixture only", resumeAction: "none",
+      requestedByUserId: offboardingFixture.legal, authorityScope: "legal-approve",
+    }).returning();
+    res.json({ caseId: c.id, approvalId: approval.id, version: approval.version });
+  } catch (error) { next(error); }
 });
 
 app.post("/api/onboarding/demo-login", (req, res) => {

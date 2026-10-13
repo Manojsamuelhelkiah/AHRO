@@ -3,8 +3,11 @@ import {
   db,
   DEMO_ORGANIZATION_ID,
   onbSensitiveLifecyclePolicies,
+  organizationMembershipsTable,
+  accessNamedGrants,
 } from "@workspace/db";
 import { SENSITIVE_DATA_CLASSES } from "../lib/onboarding/sensitive-lifecycle";
+import { recordHumanPermissionDecision } from "../lib/human-permissions";
 
 type SensitiveLifecycleFixtureOptions = {
   permittedProviders?: string[];
@@ -48,10 +51,27 @@ export async function seedApprovedSensitiveLifecyclePolicies(
     throw new Error("Sensitive lifecycle test fixture refuses to overwrite a non-test policy.");
   }
 
-  await Promise.all(SENSITIVE_DATA_CLASSES.map(async (dataClass) => {
+  await db.transaction(async tx => {
+    const reviewer = `test-permission-reviewer:${organizationId}`;
+    await tx.insert(organizationMembershipsTable).values({
+      organizationId, clerkUserId: reviewer, role: "member",
+    }).onConflictDoNothing();
+    const grants = await tx.select().from(accessNamedGrants).where(and(
+      eq(accessNamedGrants.organizationId, organizationId), eq(accessNamedGrants.principalId, reviewer),
+    ));
+    if (!grants.length) await tx.insert(accessNamedGrants).values({
+      organizationId, principalType: "human", principalId: reviewer, scope: "tenant",
+      resourceType: "tool", resourceKey: "tool.policy.manage", source: "named", effect: "allow", status: "active",
+      createdByUserId: "independent-test-access-owner", approvedByUserId: "independent-test-access-owner", approvedAt: new Date(),
+    });
+    for (const dataClass of SENSITIVE_DATA_CLASSES) {
+    const decision = await recordHumanPermissionDecision(tx, {
+      organizationId, actorUserId: reviewer, requiredKeys: ["tool.policy.manage"],
+      reviewedRevision: 1, evidenceGeneration: 1, decision: "policy-approved",
+    });
     const policyReference = `${TEST_POLICY_REFERENCE_PREFIX}${dataClass}:v1`;
     const approvalReference = `${TEST_APPROVAL_REFERENCE_PREFIX}${dataClass}:v1`;
-    await db.insert(onbSensitiveLifecyclePolicies).values({
+    await tx.insert(onbSensitiveLifecyclePolicies).values({
       organizationId,
       dataClass,
       jurisdiction: "US",
@@ -63,8 +83,8 @@ export async function seedApprovedSensitiveLifecyclePolicies(
       permittedProviders,
       policyReference,
       approvalReference,
-      approvedByUserId: "test-sensitive-lifecycle-specialist",
-      approvedAuthorityAssignmentId: 1,
+       approvedByUserId: reviewer,
+       approvedAuthorityAssignmentId: decision.id,
       isCurrent: true,
       supersededAt: null,
     }).onConflictDoUpdate({
@@ -82,11 +102,12 @@ export async function seedApprovedSensitiveLifecyclePolicies(
         permittedProviders,
         policyReference,
         approvalReference,
-        approvedByUserId: "test-sensitive-lifecycle-specialist",
-        approvedAuthorityAssignmentId: 1,
+         approvedByUserId: reviewer,
+         approvedAuthorityAssignmentId: decision.id,
         isCurrent: true,
         supersededAt: null,
       },
     });
-  }));
+    }
+  });
 }

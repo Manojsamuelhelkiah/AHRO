@@ -4,7 +4,6 @@ import { getPinnedOrganizationIdForPage } from "@workspace/api-client-react";
 import { AlertTriangle, Check, History, LockKeyhole, Plus, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { Badge, Button, Card, CardContent, IconTile, LoadingBlock, cn } from "@/components/ui-shared";
 import { useOrganizationRole } from "@/hooks/use-organization-role";
-import { useGovernanceAuthorityOptions } from "@/hooks/use-governance";
 
 type PrincipalType = "user" | "agent";
 type CatalogItem = { key: string; label: string; sensitivity: string; kind: string };
@@ -218,7 +217,9 @@ export function AccessGovernanceSettings() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
   const [transfer, setTransfer] = useState<{ group: UserGroup; ownerUserId: string; acknowledged: boolean } | null>(null);
-  const ownerDirectory = useGovernanceAuthorityOptions(canManage && !!transfer);
+  // The existing access snapshot is the tenant member directory. Stewardship
+  // never depends on a specialist appointment directory.
+  const ownerDirectory = snapshotQuery;
   const [agentName, setAgentName] = useState("");
   const [agentOwner, setAgentOwner] = useState("");
   const registeringAgent = useRef(false);
@@ -653,7 +654,7 @@ export function AccessGovernanceSettings() {
                 </section>
 
                 <section className="border-t border-[var(--border)] pt-5">
-                  <SectionTitle title="User groups" detail="Groups organize existing humans and registered agents. Optional starter groups grant no permissions or specialist authority. Members, agent registration, and security-group access are configured separately." />
+                  <SectionTitle title="User groups" detail="Groups organize existing humans and registered agents. Optional starter groups grant no permissions or professional qualifications. Members, agent registration, and security-group access are configured separately." />
                   {canManage && <form className="mb-3 flex flex-wrap items-end gap-2" onSubmit={(event) => {
                     event.preventDefault();
                     void createUserGroup();
@@ -742,11 +743,11 @@ export function AccessGovernanceSettings() {
                         void perform(() => accessRequest(`/user-groups/${encodeURIComponent(reviewed.group.id)}/owner`, {
                           method: "POST",
                           body: JSON.stringify({ ownerUserId: reviewed.ownerUserId, expectedVersion: reviewed.group.version, acknowledgeAccessImpact: true }),
-                        }), "Stewardship transferred. Retained memberships need fresh review; no access or specialist authority was granted.")
+                        }), "Stewardship transferred. Retained memberships need fresh review; no access was granted.")
                           .then((ok) => { if (ok) setTransfer(null); });
                       }}>
                         <p className="text-sm font-semibold">Transfer stewardship of {transfer.group.name}</p>
-                        <p className="text-xs text-[var(--text-secondary)]">Members, attachments, expiry settings, and starter identity are retained. All current and pending memberships will be put on hold for fresh review by the new owner. Access through this group is suspended until reviewed; other independent access paths are unchanged. This does not appoint a policy maintainer, verify a specialist, add the new owner as a member, or grant access.</p>
+                        <p className="text-xs text-[var(--text-secondary)]">Members, attachments, expiry settings, and starter identity are retained. All current and pending memberships will be put on hold for fresh review by the new owner. Access through this group is suspended until reviewed; other independent access paths are unchanged. This does not appoint a policy maintainer, add the new owner as a member, or grant access.</p>
                         <p className="text-xs text-[var(--text-muted)]">If you transfer stewardship to yourself, another owner must submit fresh membership requests before you can approve them. The new owner cannot approve their own membership.</p>
                         {ownerDirectory.isLoading && <p className="text-xs">Loading active owner names…</p>}
                         {ownerDirectory.isError && <p role="alert" className="text-xs text-[var(--status-red)]">Owner names could not be loaded. <button type="button" onClick={() => void ownerDirectory.refetch()}>Retry</button></p>}

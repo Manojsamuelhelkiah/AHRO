@@ -26,6 +26,7 @@ import {
   type TransferBasis,
 } from "@workspace/db";
 import { roleMayExerciseScope } from "./decision-authority";
+import { hasHumanPermissions } from "../human-permissions";
 import { appendProtectedAuditInTransaction } from "./protected-audit";
 import { withSensitiveLifecycleFence } from "./sensitive-lifecycle";
 
@@ -101,58 +102,20 @@ function deriveKpiOutcome(metric: typeof KPI_METRICS[number], measurement: Recor
 
 async function authority(tx: any, input: {
   organizationId: string; actorUserId: string; scope: OnbAuthorityScope;
-  jurisdiction?: string;
+  jurisdiction?: string; policyAction?: boolean;
 }) {
-  const now = new Date();
-  const [governance, membership] = await Promise.all([
-    tx.select().from(onbAuthorityGovernance).where(eq(onbAuthorityGovernance.organizationId, input.organizationId)),
-    tx.select({ id: organizationMembershipsTable.id }).from(organizationMembershipsTable).where(and(
-      eq(organizationMembershipsTable.organizationId, input.organizationId),
-      eq(organizationMembershipsTable.clerkUserId, input.actorUserId),
-      isNull(organizationMembershipsTable.revokedAt),
-    )),
-  ]);
-  if (governance[0]?.status !== "governance-approved" || !membership[0]) {
-    throw new TransferValidationError("A current governance-approved tenant membership is required.");
-  }
-  const rows = await tx.select().from(onbAuthorityAssignments).where(and(
-    eq(onbAuthorityAssignments.organizationId, input.organizationId),
-    eq(onbAuthorityAssignments.personUserId, input.actorUserId),
-    eq(onbAuthorityAssignments.status, "active"),
-    lte(onbAuthorityAssignments.validFrom, now),
-    or(isNull(onbAuthorityAssignments.validUntil), gt(onbAuthorityAssignments.validUntil, now)),
-  )).for("update");
-  const match = rows.find((row: typeof onbAuthorityAssignments.$inferSelect) =>
-    row.scopes.includes(input.scope) &&
-    roleMayExerciseScope(row.authorityRole, input.scope) &&
-    row.caseId === null &&
-    !row.siteScope &&
-    (!row.jurisdictionScope || row.jurisdictionScope === input.jurisdiction),
-  );
-  if (!match) throw new TransferValidationError("A current exact authority assignment is required for this workforce-transfer action.");
-  return match;
+  if (!await hasHumanPermissions(tx, { organizationId: input.organizationId, actorUserId: input.actorUserId,
+    requiredKeys: [input.policyAction ? "tool.policy.manage" : "tool.approval.decide", "flow.case.edit", "data.case.profile.edit"] }))
+    throw new TransferValidationError("Current action, case-flow and profile edit permissions are required.");
+  return { id: `${input.policyAction ? "human-permission/v1:policy:" : "human-permission/v1:"}${input.actorUserId}`, revision: 1, personUserId: input.actorUserId };
 }
-async function recordedAuthorityIsCurrent(tx: any, organizationId: string, assignmentId: string, assignmentRevision: number, scope: OnbAuthorityScope, jurisdiction?: string) {
-  const now = new Date();
-  const [[governance], [assignment]] = await Promise.all([
-    tx.select({ status: onbAuthorityGovernance.status }).from(onbAuthorityGovernance).where(eq(onbAuthorityGovernance.organizationId, organizationId)),
-    tx.select().from(onbAuthorityAssignments).where(and(
-    eq(onbAuthorityAssignments.organizationId, organizationId),
-    eq(onbAuthorityAssignments.id, assignmentId),
-    eq(onbAuthorityAssignments.revision, assignmentRevision),
-    eq(onbAuthorityAssignments.status, "active"),
-    lte(onbAuthorityAssignments.validFrom, now),
-    or(isNull(onbAuthorityAssignments.validUntil), gt(onbAuthorityAssignments.validUntil, now)),
-  )),
-  ]);
-  if (governance?.status !== "governance-approved" || !assignment || !assignment.scopes.includes(scope) || !roleMayExerciseScope(assignment.authorityRole, scope) ||
-    (assignment.jurisdictionScope !== null && assignment.jurisdictionScope !== jurisdiction)) return false;
-  const [membership] = await tx.select({ id: organizationMembershipsTable.id }).from(organizationMembershipsTable).where(and(
-    eq(organizationMembershipsTable.organizationId, organizationId),
-    eq(organizationMembershipsTable.clerkUserId, assignment.personUserId),
-    isNull(organizationMembershipsTable.revokedAt),
-  ));
-  return Boolean(membership);
+async function recordedAuthorityIsCurrent(tx: any, organizationId: string, assignmentId: string, assignmentRevision: number, scope: OnbAuthorityScope, jurisdiction?: string, policyRequired = false) {
+  if (policyRequired && !assignmentId.startsWith("human-permission/v1:policy:")) return false;
+  const policyAction = assignmentId.startsWith("human-permission/v1:policy:");
+  const prefix = policyAction ? "human-permission/v1:policy:" : "human-permission/v1:";
+  if (!assignmentId.startsWith(prefix) || assignmentRevision !== 1) return false;
+  return hasHumanPermissions(tx, { organizationId, actorUserId: assignmentId.slice(prefix.length),
+    requiredKeys: [policyAction ? "tool.policy.manage" : "tool.approval.decide", "flow.case.edit", "data.case.profile.edit"] });
 }
 async function programTx(tx: any, organizationId: string, programId: string) {
   const [program] = await tx.select().from(onbTransferPrograms).where(and(
@@ -166,10 +129,10 @@ async function assertPopulationLegalCollectionAllowed(tx: any, input: { organiza
     tx.select().from(onbTransferPathways).where(and(eq(onbTransferPathways.organizationId, input.organizationId), eq(onbTransferPathways.programId, input.programId), eq(onbTransferPathways.jurisdiction, input.jurisdiction), eq(onbTransferPathways.decision, "approved"))),
     tx.select().from(onbTransferDataGovernance).where(and(eq(onbTransferDataGovernance.organizationId, input.organizationId), eq(onbTransferDataGovernance.programId, input.programId), eq(onbTransferDataGovernance.jurisdiction, input.jurisdiction), gt(onbTransferDataGovernance.retentionUntil, new Date()))),
   ]);
-  if (!pathway[0] || !await recordedAuthorityIsCurrent(tx, input.organizationId, pathway[0].authorityAssignmentId, pathway[0].authorityAssignmentRevision, "legal-approve", input.jurisdiction)) {
+  if (!pathway[0] || !await recordedAuthorityIsCurrent(tx, input.organizationId, pathway[0].authorityAssignmentId, pathway[0].authorityAssignmentRevision, "legal-approve", input.jurisdiction, true)) {
     throw new TransferConflictError("A current approved Legal pathway for this population country is required before sensitive workforce data is accepted.");
   }
-  if (!governance[0] || !await recordedAuthorityIsCurrent(tx, input.organizationId, governance[0].authorityAssignmentId, governance[0].authorityAssignmentRevision, "legal-approve", input.jurisdiction)) {
+  if (!governance[0] || !await recordedAuthorityIsCurrent(tx, input.organizationId, governance[0].authorityAssignmentId, governance[0].authorityAssignmentRevision, "legal-approve", input.jurisdiction, true)) {
     throw new TransferConflictError("A current Legal-approved lawful basis and retention schedule is required before sensitive workforce data is accepted.");
   }
   return { pathway: pathway[0], governance: governance[0] };
@@ -249,7 +212,7 @@ export async function createTransferProgram(input: {
   const proposedBasis = enumValue(input.proposedBasis, BASIS, "proposedBasis") as TransferBasis;
   const legalDay1 = iso(input.legalDay1, "legalDay1");
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
-    await authority(tx, { organizationId: input.organizationId, actorUserId: input.actorUserId, scope: "hr-compliance-approve" });
+    await authority(tx, { organizationId: input.organizationId, actorUserId: input.actorUserId, scope: "hr-compliance-approve", policyAction: true });
     const id = randomUUID();
     const [program] = await tx.insert(onbTransferPrograms).values({
       id, organizationId: input.organizationId, name, sourceLegalEntity, destinationLegalEntity, countries,
@@ -297,7 +260,7 @@ export async function recordTransferPathway(input: {
     const program = await programTx(tx, input.organizationId, input.programId);
     if (program.version !== expectedVersion) throw new TransferConflictError(`Program changed since it was loaded (current version ${program.version}).`);
     if (!program.countries.includes(jurisdiction)) throw new TransferValidationError("Pathway jurisdiction must be one of the program countries.");
-    const assignment = await authority(tx, { organizationId: input.organizationId, actorUserId: input.actorUserId, scope: "legal-approve", jurisdiction });
+    const assignment = await authority(tx, { organizationId: input.organizationId, actorUserId: input.actorUserId, scope: "legal-approve", jurisdiction, policyAction: true });
     await tx.insert(onbTransferPathways).values({
       organizationId: input.organizationId, programId: program.id, jurisdiction, decision, offerRequirement, bgvApplicability,
       reviewReference, authorityAssignmentId: assignment.id, authorityAssignmentRevision: assignment.revision, decidedByUserId: input.actorUserId,
@@ -326,7 +289,7 @@ export async function recordTransferDataGovernance(input: {
     const program = await programTx(tx, input.organizationId, input.programId);
     if (program.version !== expectedVersion) throw new TransferConflictError(`Program changed since it was loaded (current version ${program.version}).`);
     if (!program.countries.includes(jurisdiction)) throw new TransferValidationError("Data-governance jurisdiction must be one of the program countries.");
-    const assignment = await authority(tx, { organizationId: input.organizationId, actorUserId: input.actorUserId, scope: "legal-approve", jurisdiction });
+    const assignment = await authority(tx, { organizationId: input.organizationId, actorUserId: input.actorUserId, scope: "legal-approve", jurisdiction, policyAction: true });
     await tx.insert(onbTransferDataGovernance).values({
       organizationId: input.organizationId, programId: program.id, jurisdiction, lawfulBasisReference: text(input.lawfulBasisReference, "lawfulBasisReference"),
       retentionReference: text(input.retentionReference, "retentionReference"), retentionUntil,
@@ -850,7 +813,7 @@ export async function recordTransferKpiEvidence(input: {
       }
     }
     const [definition] = await tx.select().from(onbTransferKpiDefinitions).where(and(eq(onbTransferKpiDefinitions.organizationId, input.organizationId), eq(onbTransferKpiDefinitions.programId, program.id), eq(onbTransferKpiDefinitions.metric, metric))).orderBy(desc(onbTransferKpiDefinitions.revision)).limit(1).for("update");
-    if (!definition || !await recordedAuthorityIsCurrent(tx, input.organizationId, definition.authorityAssignmentId, definition.authorityAssignmentRevision, "hr-compliance-approve")) throw new TransferConflictError("A current approved KPI definition with a source and denominator is required before KPI evidence is recorded.");
+    if (!definition || !await recordedAuthorityIsCurrent(tx, input.organizationId, definition.authorityAssignmentId, definition.authorityAssignmentRevision, "hr-compliance-approve", undefined, true)) throw new TransferConflictError("A current approved KPI definition with a source and denominator is required before KPI evidence is recorded.");
     if (!definition.cohortSnapshot.includes(sourceRecordId)) throw new TransferConflictError("Evidence sourceRecordId is not a member of the definition's approved cohort.");
     if (metric === "consultation-timely") {
       const [milestone] = await tx.select({
@@ -922,7 +885,7 @@ export async function recordTransferKpiDefinition(input: {
   const metric = enumValue(input.metric, KPI_METRICS, "metric");
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
     const program = await programTx(tx, input.organizationId, input.programId);
-    const actor = await authority(tx, { organizationId: input.organizationId, actorUserId: input.actorUserId, scope: "hr-compliance-approve" });
+    const actor = await authority(tx, { organizationId: input.organizationId, actorUserId: input.actorUserId, scope: "hr-compliance-approve", policyAction: true });
     const [prior] = await tx.select({ revision: onbTransferKpiDefinitions.revision }).from(onbTransferKpiDefinitions).where(and(
       eq(onbTransferKpiDefinitions.organizationId, input.organizationId), eq(onbTransferKpiDefinitions.programId, program.id), eq(onbTransferKpiDefinitions.metric, metric),
     )).orderBy(desc(onbTransferKpiDefinitions.revision)).limit(1).for("update");
@@ -952,29 +915,25 @@ type TransferReadAccess = {
 };
 async function readProgramAccess(tx: any, organizationId: string, actorUserId: string, program: Pick<typeof onbTransferPrograms.$inferSelect, "countries">): Promise<TransferReadAccess> {
   const access: TransferReadAccess = { hr: false, legalCountries: new Set(), payrollCountries: new Set(), itCountries: new Set() };
-  try {
-    await authority(tx, { organizationId, actorUserId, scope: "hr-compliance-approve" });
-    access.hr = true;
-    return access;
-  } catch (error) {
-    if (!(error instanceof TransferValidationError)) throw error;
-  }
+  const base = ["flow.case.read", "data.case.profile.read"] as const;
+  if (!await hasHumanPermissions(tx, { organizationId, actorUserId, requiredKeys: base }))
+    throw new TransferValidationError("Current client-scoped case read permissions are required.");
+  const [legal, payroll, security, confidential] = await Promise.all([
+    hasHumanPermissions(tx, { organizationId, actorUserId, requiredKeys: ["data.case.notes.read", "data.identity.read"] }),
+    hasHumanPermissions(tx, { organizationId, actorUserId, requiredKeys: ["data.payroll.read"] }),
+    hasHumanPermissions(tx, { organizationId, actorUserId, requiredKeys: ["data.case.notes.read", "data.identity.read"] }),
+    hasHumanPermissions(tx, { organizationId, actorUserId, requiredKeys: ["data.case.notes.read", "data.bgv.read", "data.medical.read"] }),
+  ]);
+  // The full HR projection contains several private classes. A reviewer
+  // routing label must never substitute for any of their read permissions.
+  access.hr = legal && payroll && security && confidential;
   for (const country of program.countries) {
-    for (const [scope, countries] of [
-      ["legal-approve", access.legalCountries],
-      ["payroll-approve", access.payrollCountries],
-      ["it-security-approve", access.itCountries],
-    ] as const) {
-      try {
-        await authority(tx, { organizationId, actorUserId, scope, jurisdiction: country });
-        countries.add(country);
-      } catch (error) {
-        if (!(error instanceof TransferValidationError)) throw error;
-      }
-    }
+    if (legal) access.legalCountries.add(country);
+    if (payroll) access.payrollCountries.add(country);
+    if (security) access.itCountries.add(country);
   }
-  if (!access.legalCountries.size && !access.payrollCountries.size && !access.itCountries.size) {
-    throw new TransferValidationError("A current HR, Legal, Payroll, or IT authority assignment for a transfer program country is required.");
+  if (!access.hr && !access.legalCountries.size && !access.payrollCountries.size && !access.itCountries.size) {
+    throw new TransferValidationError("Current permission to read the relevant legal, payroll, or access data is required.");
   }
   return access;
 }

@@ -84,24 +84,21 @@ async function demoAuditFilter(req: Request, res: Response): Promise<Pick<AuditF
     return null;
   }
 
-  const assignments = await db.select({
-    caseId: onbAuthorityAssignments.caseId,
+  const candidates = await db.select({
+    caseId: onbCases.id,
     notes: onbCases.notes,
     scenarioKey: onbCases.scenarioKey,
     syntheticProvenance: onbCases.syntheticProvenance,
-  }).from(onbAuthorityAssignments).innerJoin(onbCases, and(
-    eq(onbCases.organizationId, onbAuthorityAssignments.organizationId),
-    eq(onbCases.id, onbAuthorityAssignments.caseId),
-  )).where(and(
-    eq(onbAuthorityAssignments.organizationId, DEMO_ORGANIZATION_ID),
-    eq(onbAuthorityAssignments.personUserId, userId),
-    eq(onbAuthorityAssignments.status, "active"),
-    eq(onbAuthorityAssignments.source, SYNTHETIC_DEMO_AUTHORITY_SOURCE),
-    isNull(onbAuthorityAssignments.revokedAt),
-  ));
-  const caseReferences = [...new Set(assignments
-    .filter((row) => row.caseId !== null && isSyntheticOfflineCase(row))
-    .map((row) => protectedAuditCaseReference(row.caseId!)))];
+  }).from(onbCases).where(eq(onbCases.organizationId, DEMO_ORGANIZATION_ID));
+  const caseReferences: string[] = [];
+  for (const candidate of candidates.filter(isSyntheticOfflineCase)) {
+    const access = await resolveEffectiveAccess({
+      organizationId, principalType: "human", principalId: userId,
+      caseId: candidate.caseId, purpose: "demo-history-audit",
+    });
+    if (access.allows.includes("flow.case.read"))
+      caseReferences.push(protectedAuditCaseReference(candidate.caseId));
+  }
   return { caseReferences, includeUnscopedActorId: userId };
 }
 

@@ -64,6 +64,17 @@ import { registeredDemoProfile } from "../lib/demo-principal";
 import { isHistoricalTestRecord } from "../lib/onboarding/historical-test-record";
 
 const router: IRouter = Router();
+
+router.use((req, res, next) => {
+  const retired = /^\/onboarding\/authority\/(?:governance(?:\/|$)|bootstrap(?:\/|$)|assignments(?:\/|$)|unresolved-approvals(?:\/|$))/i.test(req.path) ||
+    /^\/onboarding\/policy-authorities(?:\/|$)/i.test(req.path) ||
+    /^\/governance\/(?:assignments(?:\/|$)|authority-bootstrap(?:\/|$)|authority-options(?:\/|$))/i.test(req.path);
+  if (retired) {
+    res.status(410).json({ message: "Specialist authority administration is retired. Use ordinary scoped access governance and explicit human decisions. Historical records are unchanged." });
+    return;
+  }
+  next();
+});
 // Deleted namespaces must not fall through to organization-id matching.
 // These tombstones perform no authentication bootstrap, parsing or mutation.
 router.use(["/organizations/demo-controller-setup", "/onboarding/demo-controller"], (_req, res) => {
@@ -77,12 +88,10 @@ router.use(candidatePublicRouter);
 // Independent employees authenticate here, before HRO membership resolution.
 router.use(employeeVaultSourceRouter);
 router.use(employeeVaultRouter);
-// TA middleware uses a tenant-pinned HMAC source contract rather than a
-// browser Clerk session. Its own middleware authenticates every request.
+// TA middleware authenticates its tenant-pinned HMAC source contract.
 router.use(onboardingTaIntakeRouter);
 router.use((req, res, next) => {
-  // Provider webhooks authenticate themselves and the demo-login bootstrap
-  // must remain reachable before a Clerk session exists.
+  // Provider webhooks and demo-login bootstrap authenticate independently.
   if (
     req.path.startsWith("/onboarding/webhooks/") ||
     req.path.startsWith("/onboarding/ta-intake/") ||
@@ -100,11 +109,9 @@ router.use((req, res, next) => {
 });
 router.use(hroRequestContext);
 router.use(requireUatAdmission);
-// Retirement precedes lifecycle-specific checks, while admission remains intact.
 router.use(caseRetirementFence);
-// Imported service requests have no onboarding execution adapter. Keep every
-// onboarding mutation fail-closed, including direct calls bypassing the UI.
-// DELETE retains the existing hold-aware deletion path.
+// Service requests have no onboarding execution adapter; deletion keeps its
+// existing hold-aware path. Separation closure remains specification-blocked.
 router.use("/onboarding/cases/:caseId", async (req, res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) { next(); return; }
   const caseId = Number(req.params.caseId);

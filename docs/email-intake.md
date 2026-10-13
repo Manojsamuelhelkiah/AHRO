@@ -15,8 +15,8 @@ remains unavailable pending section 4.6.
 1. Open **Cases → Email intake** (also linked from Settings and Systems). The
    displayed address comes from the connected Gmail profile, not a configured
    label, inferred domain, masked address or assumed alias.
-2. A current authorized administrator with independently granted HR-compliance
-   and Legal authority reviews the exact primary mailbox-to-client binding.
+2. A named, current client owner or administrator with effective case-flow
+   and profile edit permissions reviews the exact primary mailbox-to-client binding.
    Record the approval reference. Choose zero hours for future mail only, or an
    explicitly approved backfill of up to 48 hours. No complete historical inbox
    import or replay of previously consumed messages is performed.

@@ -60,15 +60,12 @@ test("MIME is bounded, remote links are inert and operational mail ownership is 
 });
 test("tenant isolation, full conversion matrix, private source retention, stale edits and concurrent exactly-once conversion", { timeout: 180_000 }, async () => {
   const org = `email-intake-${randomUUID()}`, other = `${org}-other`, actor = `${org}:reviewer`;
-  const roles: Array<[OnbAuthorityRole, OnbAuthorityScope]> = [["hr-compliance", "hr-compliance-approve"], ["legal", "legal-approve"], ["payroll", "payroll-approve"], ["occupational-health", "occupational-health-approve"]];
   const setup = async (id: string) => {
     await db.insert(organizationsTable).values({ id, name: "Denied provider email fixture", slug: id, joinCodeHash: `${id}:unused`, createdByUserId: actor });
     await seedApprovedSensitiveLifecyclePolicies(id);
-    await db.insert(organizationMembershipsTable).values({ organizationId: id, clerkUserId: actor, role: "member" });
-    await db.insert(onbAuthorityGovernance).values({ organizationId: id, status: "governance-approved", revision: 1, approvedByUserId: "fixture-independent", approvedAt: new Date(), governanceSource: "provider-denied-regression-only" });
+    await db.insert(organizationMembershipsTable).values({ organizationId: id, clerkUserId: actor, role: "admin" });
     for (const key of ["flow.case.read", "flow.case.edit", "data.case.profile.read", "data.case.profile.edit", "data.case.notes.read", "data.case.notes.edit", "data.identity.read", "data.medical.read", "data.payroll.read", "data.bgv.read"])
       await db.insert(accessNamedGrants).values({ organizationId: id, principalType: "human", principalId: actor, scope: "tenant", resourceType: key.startsWith("flow.") ? "flow" : "field", resourceKey: key, source: "named", effect: "allow", status: "active", createdByUserId: "fixture-independent", approvedByUserId: "fixture-independent", approvedAt: new Date() });
-    for (const [role, scope] of roles) await db.insert(onbAuthorityAssignments).values({ id: `${id}:${role}`, organizationId: id, personUserId: actor, authorityRole: role, scopes: [scope], validFrom: new Date(Date.now() - 60_000), validUntil: new Date(Date.now() + 3600_000), grantorUserId: "fixture-independent", source: "provider-denied-regression-only", governanceDecisionRef: "fixture-independent" });
   };
   const requestFor = async (providerId: string) => (await db.select().from(hroEmailRequests).where(eq(hroEmailRequests.providerMessageId, providerId)))[0];
   try {
@@ -172,10 +169,9 @@ test("tenant isolation, full conversion matrix, private source retention, stale 
 
     // Rotation never relies on shared sender identity and cannot reopen the old marker.
     const independent = `${org}:independent-routing-reviewer`;
-    await db.insert(organizationMembershipsTable).values({ organizationId: org, clerkUserId: independent, role: "member" });
+    await db.insert(organizationMembershipsTable).values({ organizationId: org, clerkUserId: independent, role: "admin" });
     for (const key of ["flow.case.read", "flow.case.edit", "data.case.profile.read", "data.case.profile.edit", "data.case.notes.edit", "data.identity.read", "data.medical.read", "data.payroll.read", "data.bgv.read"])
       await db.insert(accessNamedGrants).values({ organizationId: org, principalType: "human", principalId: independent, scope: "tenant", resourceType: key.startsWith("flow.") ? "flow" : "field", resourceKey: key, source: "named", effect: "allow", status: "active", createdByUserId: "fixture-independent", approvedByUserId: "fixture-independent", approvedAt: new Date() });
-    for (const [role, scope] of roles) await db.insert(onbAuthorityAssignments).values({ id: `${org}:independent:${role}`, organizationId: org, personUserId: independent, authorityRole: role, scopes: [scope], validFrom: new Date(Date.now() - 60_000), validUntil: new Date(Date.now() + 3600_000), grantorUserId: "fixture-independent", source: "provider-denied-regression-only", governanceDecisionRef: "fixture-independent" });
     const priorRoute = (await db.select().from(hroMailboxIngress).where(eq(hroMailboxIngress.id, a.id)))[0];
     const [retentionHold] = await db.insert(onbSensitiveLifecycleHolds).values({
       organizationId: org, dataClass: "identity", reason: "Fixture conservative pre-case retention hold", reference: "fixture-retention-hold",
@@ -258,7 +254,10 @@ test("tenant isolation, full conversion matrix, private source retention, stale 
     const currentRoutes = await db.select().from(hroMailboxIngress).where(inArray(hroMailboxIngress.id, [a.id, approved.id]));
     assert.equal(resolveEmailRoute(a.subjectMarker, mailbox, new Date(), currentRoutes), null);
     assert.equal(resolveEmailRoute(approved.subjectMarker, mailbox, new Date(), currentRoutes)?.id, approved.id);
-    await db.update(onbAuthorityAssignments).set({ status: "revoked", revision: 2 }).where(eq(onbAuthorityAssignments.id, `${org}:independent:legal`));
+    await db.update(accessNamedGrants).set({ revokedAt: new Date() }).where(and(
+      eq(accessNamedGrants.organizationId, org), eq(accessNamedGrants.principalId, independent),
+      eq(accessNamedGrants.resourceKey, "data.case.profile.edit"),
+    ));
     const unselected = await requestFor(pageMessages[0].id);
     await assert.rejects(readmitEmailRequests(org, actor, a.id, { ...admittedInput, requests: [select(unselected)] }, provider), /current independent review/);
   } finally {

@@ -221,6 +221,7 @@ import {
   decisionAuthorityStillCurrent,
 } from "../lib/onboarding/decision-authority";
 import { appendApprovalDecisionHistory, reopenApprovalInTransaction } from "../lib/onboarding/approval-version";
+import { hasHumanPermissions } from "../lib/human-permissions";
 import {
   activeReplacementDecision,
   applyChecklistOverrides,
@@ -329,6 +330,10 @@ import { CURATED_OFFLINE_EXAMPLES } from "../lib/onboarding/offline-example-exte
 
 const router: IRouter = Router();
 router.use((req, res, next) => {
+  if (/^\/onboarding\/(?:authority\/(?:governance|bootstrap|assignments|unresolved-approvals)|policy-authorities)(?:\/|$)/i.test(req.path)) {
+    res.status(410).json({ code: "SPECIALIST_AUTHORITY_RETIRED", message: "Specialist authority management is retired. Historical records are retained; use ordinary access governance and explicit current-version human review." });
+    return;
+  }
   if (isRetiredCaseCapabilityRequest(req.method, req.path)) {
     retiredCaseCapabilityResponse(req, res, next);
     return;
@@ -1708,6 +1713,12 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
         decidedAt,
         decidedAuthorityId: authority.authorityId,
         decidedAuthorityRevision: authority.revision,
+        permissionDecision: {
+          schema: "human-permission/v1", organizationId, caseId: id,
+          actorUserId: decisionActor, requiredKeys: ["tool.approval.decide", "flow.case.edit"],
+          reviewedRevision: gateApproval.version, evidenceGeneration: gateApproval.version,
+          decision: "approved", recordedAt: new Date().toISOString(), ownerAdminRequired: false,
+        },
       }).where(and(
         eq(onbApprovals.organizationId, organizationId),
         eq(onbApprovals.id, gateApproval.id),
@@ -1765,7 +1776,7 @@ router.post("/onboarding/cases/:id/offer-acceptance", async (req, res, next) => 
       return;
     }
     if (outcome.kind === "unauthorized") {
-      res.status(403).json({ message: "A current HR/compliance specialist authority assignment is required to confirm Offer-Acceptance Package." });
+      res.status(403).json({ message: "Current approval-decision and case-flow edit permissions and an independent named reviewer are required to confirm Offer-Acceptance Package." });
       return;
     }
     if (outcome.kind === "authority-evidence-missing") {
@@ -2373,7 +2384,7 @@ router.put("/onboarding/cases/:id/checklist/:itemId", async (req, res, next) => 
         "not-custom": "Connector-managed checklist items cannot be changed manually.",
         disabled: "Disabled checklist items cannot be changed.",
         "evidence-required": "This independent evidence gate can only be completed through its designated evidence workflow; a manual toggle, reminder, or agent result is not accepted.",
-        unauthorized: "A current HR/compliance specialist authority assignment and explicit readiness-edit grant are required to attest a checklist item.",
+        unauthorized: "Current approval-decision, case-flow and readiness-edit permissions are required to attest a checklist item.",
         "lifecycle-blocked": "This narrative update is blocked until all required sensitive-data lifecycle policies are approved for the case jurisdiction.",
       };
       res.status(
@@ -2543,7 +2554,7 @@ router.delete("/onboarding/policy-authorities/:userId/:authorityRole", async (re
 
 /** Deliberately returns only stable tenant identities and membership roles for
  * assignment controls; names/emails are not invented or used as authority IDs. */
-router.get("/onboarding/policy-authority-members", async (req, res, next) => {
+router.get("/onboarding/members", async (req, res, next) => {
   try {
     if (!requireHrChecklistRole(req, res)) return;
     const members = await db.select({
@@ -2869,7 +2880,7 @@ router.put("/onboarding/cases/:caseId/bgv-notifications", async (req, res, next)
     });
     if (!hasSensitiveAccess(sensitiveAccess, ["bgv"], "edit")) {
       res.status(403).json({
-        message: "A current HR/compliance specialist authority assignment is required to change BGV recipients.",
+        message: "Current decision, case-flow and applicable sensitive-field edit permissions are required to change BGV recipients.",
         code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
       });
       return;
@@ -2896,7 +2907,7 @@ router.put("/onboarding/cases/:caseId/bgv-notifications", async (req, res, next)
     res.json(result);
   } catch (error) {
     if (error instanceof SensitiveAuthorityRequiredError) {
-      res.status(403).json({ message: "A current HR/compliance specialist authority assignment is required to change BGV recipients.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      res.status(403).json({ message: "Current decision, case-flow and applicable sensitive-field edit permissions are required to change BGV recipients.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
       return;
     }
     if (error instanceof BgvNotificationNotFoundError) {
@@ -2929,7 +2940,7 @@ router.post("/onboarding/cases/:caseId/bgv-notifications/reconcile", async (req,
     });
     if (!hasSensitiveAccess(sensitiveAccess, ["bgv"], "edit")) {
       res.status(403).json({
-        message: "A current HR/compliance specialist authority assignment is required to reconcile BGV notifications.",
+        message: "Current decision, case-flow and applicable sensitive-field permissions are required to reconcile BGV notifications.",
         code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
       });
       return;
@@ -2959,7 +2970,7 @@ router.post("/onboarding/cases/:caseId/bgv-notifications/reconcile", async (req,
     res.json(result);
   } catch (error) {
     if (error instanceof SensitiveAuthorityRequiredError) {
-      res.status(403).json({ message: "A current HR/compliance specialist authority assignment is required to reconcile BGV notifications.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      res.status(403).json({ message: "Current decision, case-flow and applicable sensitive-field permissions are required to reconcile BGV notifications.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
       return;
     }
     if (error instanceof BgvNotificationNotFoundError) {
@@ -3083,7 +3094,7 @@ router.post("/onboarding/cases/:caseId/operational-requests", async (req, res, n
     });
   } catch (error) {
     if (error instanceof SensitiveAuthorityRequiredError) {
-      res.status(403).json({ message: "Current payroll specialist authority and explicit payroll edit access are required.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      res.status(403).json({ message: "Current approval-decision, case-flow and payroll edit permissions are required.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
       return;
     }
     if (error instanceof OperationalRequestNotFoundError) {
@@ -3159,7 +3170,7 @@ router.post("/onboarding/cases/:caseId/operational-requests/:requestId/actions",
     });
   } catch (error) {
     if (error instanceof SensitiveAuthorityRequiredError) {
-      res.status(403).json({ message: "Current payroll specialist authority and explicit payroll edit access are required.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      res.status(403).json({ message: "Current approval-decision, case-flow and payroll edit permissions are required.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
       return;
     }
     if (error instanceof OperationalRequestNotFoundError) {
@@ -3427,7 +3438,7 @@ router.get("/onboarding/cases/:id/evidence", async (req, res, next) => {
     }));
   } catch (error) {
     if (error instanceof SensitiveAuthorityRequiredError) {
-      return res.status(403).json({ message: "A current specialist authority assignment is required to requeue this sensitive document scan.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
+      return res.status(403).json({ message: "Current document-tool, flow and applicable sensitive-field edit permissions are required to requeue this scan.", code: "SENSITIVE_RECORD_ACCESS_REQUIRED" });
     }
     return next(error);
   }
@@ -3465,7 +3476,7 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
     const sensitiveClasses = sensitiveClassForDocument(target);
     if (!hasSensitiveAccess(sensitiveAccess, sensitiveClasses, "edit")) {
       return res.status(403).json({
-        message: "A current specialist authority assignment is required to decide this sensitive document.",
+        message: "Current document-review, case-flow and applicable sensitive-field edit permissions are required to decide this document.",
         code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
       });
     }
@@ -3555,7 +3566,7 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/decision", async (req, r
   } catch (error) {
     if (error instanceof SensitiveAuthorityRequiredError) {
       return res.status(403).json({
-        message: "A current specialist authority assignment and explicit document-edit, document-review, readiness-edit, and document-tool grants are required to decide this document.",
+        message: "Current document-edit, document-review, readiness-edit, document-tool and applicable sensitive-field grants are required to decide this document.",
         code: "DOCUMENT_ACCESS_REQUIRED",
       });
     }
@@ -3600,7 +3611,7 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/retry-malware-scan", asy
     });
     if (!hasSensitiveAccess(sensitiveAccess, sensitiveClassForDocument(document), "edit")) {
       return res.status(403).json({
-        message: "A current specialist authority assignment is required to requeue this sensitive document scan.",
+        message: "Current document-tool, flow and applicable sensitive-field edit permissions are required to requeue this scan.",
         code: "SENSITIVE_RECORD_ACCESS_REQUIRED",
       });
     }
@@ -3635,7 +3646,7 @@ router.post("/onboarding/cases/:id/evidence/:evidenceId/retry-malware-scan", asy
   } catch (error) {
     if (error instanceof SensitiveAuthorityRequiredError) {
       return res.status(403).json({
-        message: "A current specialist authority assignment and explicit document-edit, document-review, readiness-edit, and document-tool grants are required to requeue this scan.",
+        message: "Current document-edit, document-review, readiness-edit, document-tool and applicable sensitive-field grants are required to requeue this scan.",
         code: "DOCUMENT_ACCESS_REQUIRED",
       });
     }
@@ -4420,9 +4431,11 @@ router.post("/onboarding/authority/governance/withdraw", async (req, res, next) 
 router.get("/onboarding/authority/nonwaivable-safety-policy", async (req, res, next) => {
   try {
     const organizationId = getOrganizationId(req);
-    const permitted = await db.transaction((tx) => canAdministerAuthority(tx, organizationId, req.authUserId!));
+    const permitted = await db.transaction((tx) => hasHumanPermissions(tx, {
+      organizationId, actorUserId: req.authUserId!, requiredKeys: ["tool.policy.manage"],
+    }));
     if (!permitted) {
-      res.status(403).json({ message: "A current governance-approved authority administrator is required." });
+      res.status(403).json({ message: "Current tenant-scoped policy-management permission is required." });
       return;
     }
     const value = await getSetting(organizationId, NONWAIVABLE_SAFETY_POLICY_KEY);
@@ -4442,7 +4455,9 @@ router.post("/onboarding/authority/nonwaivable-safety-policy", async (req, res, 
     const organizationId = getOrganizationId(req);
     const saved = await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
-      if (!(await canAdministerAuthority(tx, organizationId, req.authUserId!))) return null;
+      if (!(await hasHumanPermissions(tx, {
+        organizationId, actorUserId: req.authUserId!, requiredKeys: ["tool.policy.manage"],
+      }))) return null;
       const [existing] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
         eq(onbSettings.organizationId, organizationId), eq(onbSettings.key, NONWAIVABLE_SAFETY_POLICY_KEY),
       )).for("update");
@@ -4474,7 +4489,7 @@ router.post("/onboarding/authority/nonwaivable-safety-policy", async (req, res, 
       return next;
     });
     if (!saved) {
-      res.status(403).json({ message: "A current governance-approved authority administrator is required." });
+      res.status(403).json({ message: "Current tenant-scoped policy-management permission is required." });
       return;
     }
     res.json({ itemIds: saved, message: "Protected safety identifiers are append-only. Existing case snapshots remain immutable." });
@@ -4891,7 +4906,17 @@ router.get("/onboarding/approvals/:id/capability", async (req, res, next) => {
       return;
     }
     if (approval.status !== "pending") {
-      res.json({ canDecide: false, reason: "approval_not_pending", version: approval.version });
+      const review = await db.transaction(async tx => {
+        const requiresFreshReview = approval.status === "approved" && !await decisionAuthorityStillCurrent(tx, approval);
+        const [c] = await tx.select({ lifecycleStage: onbCases.lifecycleStage }).from(onbCases).where(and(
+          eq(onbCases.organizationId, organizationId), eq(onbCases.id, approval.caseId),
+        ));
+        const canRequestFreshReview = requiresFreshReview && !!c && c.lifecycleStage !== "complete" &&
+          await hasHumanPermissions(tx, { organizationId, actorUserId: req.authUserId!, caseId: approval.caseId,
+            requiredKeys: ["flow.case.edit", "data.case.profile.edit"] });
+        return { requiresFreshReview, canRequestFreshReview };
+      });
+      res.json({ canDecide: false, reason: review.requiresFreshReview ? "fresh_human_review_required" : "approval_not_pending", version: approval.version, ...review });
       return;
     }
     if (!Number.isSafeInteger(approval.version) || approval.version < 1) {
@@ -4924,10 +4949,73 @@ router.get("/onboarding/approvals/:id/capability", async (req, res, next) => {
       canDecide: authority.allowed,
       reason: authority.allowed ? null : authority.reason,
       version: approval.version,
+      reviewOnly: approval.ruleRef === OFFER_ACCEPTANCE_GATE_RULE && approval.resumeAction === "none",
     });
   } catch (err) {
     next(err);
   }
+});
+
+/** Renew only the review cycle: never resume work or replay provider outcomes. */
+router.post("/onboarding/approvals/:id/fresh-review", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id), expectedVersion = req.body?.expectedVersion;
+    if (!Number.isSafeInteger(id) || id < 1 || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1 ||
+        !req.body || Object.keys(req.body).some(key => key !== "expectedVersion")) {
+      res.status(400).json({ message: "A current integer approval version is required." }); return;
+    }
+    const organizationId = getOrganizationId(req);
+    const result = await withSensitiveLifecycleFence(organizationId, () => db.transaction(async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
+      const [ownership] = await tx.select({ caseId: onbApprovals.caseId }).from(onbApprovals).where(and(
+        eq(onbApprovals.organizationId, organizationId), eq(onbApprovals.id, id),
+      ));
+      if (!ownership) return { status: 404, message: "Approval not found." };
+      const [c] = await tx.select().from(onbCases).where(and(
+        eq(onbCases.organizationId, organizationId), eq(onbCases.id, ownership.caseId),
+      )).for("update");
+      if (!c || c.lifecycleStage === "complete" || isHistoricalTestRecord(c) ||
+          (await getUatCaseIsolation(c)).isolated)
+        return { status: 409, message: "Completed or historical cases cannot renew operational approvals." };
+      if (!await hasHumanPermissions(tx, { organizationId, actorUserId: req.authUserId!, caseId: c.id,
+        requiredKeys: ["flow.case.edit", "data.case.profile.edit"] }))
+        return { status: 403, message: "Current case-flow and profile edit permissions are required." };
+      const [approval] = await tx.select().from(onbApprovals).where(and(
+        eq(onbApprovals.organizationId, organizationId), eq(onbApprovals.id, id),
+      )).for("update");
+      if (!approval || approval.version !== expectedVersion || approval.status !== "approved")
+        return { status: 409, message: "The approval changed. Refresh before requesting review." };
+      if (await decisionAuthorityStillCurrent(tx, approval))
+        return { status: 409, message: "The existing current-version permission-based decision remains valid." };
+      const [ambiguous] = await tx.select({ key: onbEffectJournal.logicalOperationKey }).from(onbEffectJournal).where(and(
+        eq(onbEffectJournal.organizationId, organizationId), eq(onbEffectJournal.caseId, c.id),
+        inArray(onbEffectJournal.status, ["dispatching", "unknown_effect_manual_repair"]),
+      )).limit(1);
+      if (ambiguous) return { status: 409, message: "An in-flight or ambiguous provider effect requires reconciliation before fresh review. Nothing was replayed." };
+      const renewed = await reopenApprovalInTransaction(tx, {
+        organizationId, caseId: c.id, approvalId: approval.id, reopenStatuses: ["approved"],
+        actor: req.authUserId!, reason: "Fresh human review requested; historical specialist receipts cannot authorize new effects.",
+      });
+      if (approval.ruleRef === OFFER_ACCEPTANCE_GATE_RULE && c.offerAcceptanceComplete) {
+        // Renew permission evidence only. The historical acceptance fact and
+        // provider history remain intact, and this review has no continuation.
+        await tx.update(onbApprovals).set({ resumeAction: "none" }).where(and(
+          eq(onbApprovals.organizationId, organizationId), eq(onbApprovals.id, approval.id),
+          eq(onbApprovals.version, renewed.version), eq(onbApprovals.status, "pending"),
+        ));
+      }
+      // A genuinely new request supplies provenance for this review cycle, not
+      // a retrospective claim about the requester of the historical decision.
+      if (!approval.requestedByUserId && !c.createdByUserId) {
+        await tx.update(onbApprovals).set({ requestedByUserId: req.authUserId! }).where(and(
+          eq(onbApprovals.organizationId, organizationId), eq(onbApprovals.id, approval.id),
+          eq(onbApprovals.version, renewed.version), eq(onbApprovals.status, "pending"),
+        ));
+      }
+      return { status: 200, version: renewed.version, reviewRequired: true, released: false };
+    }));
+    res.status(result.status).json(result);
+  } catch (error) { next(error); }
 });
 
 router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
@@ -4951,7 +5039,7 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       res.status(404).json({ message: "Approval not found" });
       return;
     }
-      if (a.ruleRef === OFFER_ACCEPTANCE_GATE_RULE) {
+      if (a.ruleRef === OFFER_ACCEPTANCE_GATE_RULE && a.resumeAction !== "none") {
         res.status(409).json({
           message: "Offer-Acceptance Package requires dedicated offer-acceptance confirmation; generic approval decisions cannot release this stage.",
           code: "dedicated_offer_acceptance_confirmation_required",
@@ -4986,7 +5074,7 @@ router.post("/onboarding/approvals/:id/decide", async (req, res, next) => {
       res.status(403).json({
         message: result.reason === "readiness_access_required"
           ? "An explicit data.case.readiness.edit grant is required for this approval decision."
-          : "A current governance-approved, tenant-scoped specialist authority is required for this decision. Organization membership, a contact role, and a persona do not grant decision authority.",
+          : "Current client/case approval-decision, flow-edit and applicable field permissions and an independent named reviewer are required. Labels and personas grant no access.",
         code: result.reason === "readiness_access_required" ? "CASE_READINESS_ACCESS_REQUIRED" : result.reason,
       });
       return;

@@ -16,6 +16,11 @@ const requestedTestFile = process.env.TEST_FILE?.trim();
 const ownedWorkspaceSuites = new Set([
   "src/lib/onboarding/client-operations-settings.test.ts",
   "src/routes/user-group-super-admin.test.ts",
+  "src/lib/hro-email-intake.test.ts",
+  "src/lib/onboarding/decision-authority.test.ts",
+  "src/lib/onboarding/approval-versioning.test.ts",
+  "src/routes/onboarding-gate-routes.test.ts",
+  "src/routes/onboarding-evidence.test.ts",
   "src/routes/candidate-portal-security.test.ts",
   "src/lib/onboarding/operational-requests.test.ts",
   "src/routes/organization-isolation.test.ts",

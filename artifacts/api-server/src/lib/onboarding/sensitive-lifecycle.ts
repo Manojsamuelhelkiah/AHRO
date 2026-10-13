@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { hasHumanPermissions, recordHumanPermissionDecision, recordedHumanPermissionDecisionCurrent } from "../human-permissions";
 import { isSeparationOrLegacyExit } from "./separation-isolation";
 import { withHroOrganizationContext, withHroCaseContext } from "../hro-context/manager";
 import { currentHroContext } from "../hro-context/core";
@@ -380,19 +381,11 @@ export async function verifiedSensitiveAuthorityInTransaction(
   tx: any,
   organizationId: string,
   actorUserId: string,
+  reviewedRevision = 0,
 ) {
-  const now = new Date();
-  const [assignment] = await tx.select().from(onbGovernanceAuthorityAssignments).where(and(
-    eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
-    eq(onbGovernanceAuthorityAssignments.assigneeUserId, actorUserId),
-    inArray(onbGovernanceAuthorityAssignments.authorityRole, ["privacy", "legal"]),
-    eq(onbGovernanceAuthorityAssignments.verificationStatus, "verified"),
-    isNull(onbGovernanceAuthorityAssignments.revokedAt),
-    or(isNull(onbGovernanceAuthorityAssignments.expiresAt), gt(onbGovernanceAuthorityAssignments.expiresAt, now)),
-  )).for("update");
-  if (!assignment) {
+  if (!await hasHumanPermissions(tx, { organizationId, actorUserId, requiredKeys: ["tool.policy.manage"] })) {
     throw new SensitiveLifecyclePermissionError(
-      "A current server-verified privacy or legal authority assignment is required; tenant ownership is not authority.",
+      "Current policy-management permission is required for this action.",
     );
   }
   const [membership] = await tx.select({ id: organizationMembershipsTable.id })
@@ -402,7 +395,8 @@ export async function verifiedSensitiveAuthorityInTransaction(
       isNull(organizationMembershipsTable.revokedAt),
     ));
   if (!membership) throw new SensitiveLifecyclePermissionError("A current tenant membership is required.");
-  return assignment;
+  return recordHumanPermissionDecision(tx, { organizationId, actorUserId, requiredKeys: ["tool.policy.manage"],
+    reviewedRevision, decision: reviewedRevision ? "policy-approved" : "permission-check" });
 }
 
 function policyView(row: typeof onbSensitiveLifecyclePolicies.$inferSelect) {
@@ -429,7 +423,7 @@ async function writePolicyInTransaction(
   actorUserId: string,
   input: PolicyInput,
 ) {
-  const authority = await verifiedSensitiveAuthorityInTransaction(tx, organizationId, actorUserId);
+  const authority = await verifiedSensitiveAuthorityInTransaction(tx, organizationId, actorUserId, input.expectedRevision + 1);
   const [current] = await tx.select().from(onbSensitiveLifecyclePolicies).where(and(
     eq(onbSensitiveLifecyclePolicies.organizationId, organizationId),
     eq(onbSensitiveLifecyclePolicies.dataClass, input.dataClass),
@@ -888,6 +882,11 @@ export async function evaluateSensitiveLifecycleGate(input: {
     eq(onbSensitiveLifecyclePolicies.isCurrent, true),
   ));
   if (!policy) return { allowed: false, reason: "No approved class-specific sensitive lifecycle policy exists for this jurisdiction." };
+  if ((input.disclosure || input.collection !== false) && !await db.transaction(tx =>
+    recordedHumanPermissionDecisionCurrent(tx, input.organizationId, policy.approvedAuthorityAssignmentId,
+      ["tool.policy.manage"], policy.revision, undefined, policy.approvedByUserId))) {
+    return { allowed: false, reason: "A fresh current-revision human policy review with live policy-management permission is required; historical specialist receipts cannot authorize collection or disclosure." };
+  }
   if (input.disclosure && (!policy.providerSharingApproved || !input.providerId ||
       !policy.permittedProviders.includes(input.providerId))) {
     return { allowed: false, reason: "The approved sensitive lifecycle policy does not authorize this concrete provider disclosure." };
@@ -971,6 +970,12 @@ export async function evaluateCaseDerivedLifecycleGateInTransaction(tx: any, inp
       reason: `Case-derived sensitive collection is unresolved: current approved policies are missing for ${missing.join(", ")}. Opaque mixed narratives are not auto-classified.`,
       missingDataClasses: missing,
     };
+  }
+  for (const policy of policies) {
+    if (!await recordedHumanPermissionDecisionCurrent(tx, input.organizationId, policy.approvedAuthorityAssignmentId,
+      ["tool.policy.manage"], policy.revision, undefined, policy.approvedByUserId)) {
+      return { allowed: false as const, reason: `The current ${policy.dataClass} policy requires fresh permission-based human review. Historical specialist approval cannot authorize new collection.` };
+    }
   }
   // Approval snapshots are independently retained and append-only. Their
   // legacy/opaque shape means a new live case cannot safely claim that its
@@ -1098,6 +1103,9 @@ async function opaqueCasePolicySetInTransaction(tx: any, input: {
   for (const dataClass of OPAQUE_CASE_DERIVED_CLASSES) {
     const policy = byClass.get(dataClass);
     if (!policy) return { state: "blocked" as const, message: `Opaque case envelope is unresolved: no current approved ${dataClass} policy exists for this jurisdiction.` };
+    if (!await recordedHumanPermissionDecisionCurrent(tx, input.organizationId, policy.approvedAuthorityAssignmentId,
+      ["tool.policy.manage"], policy.revision, undefined, policy.approvedByUserId))
+      return { state: "blocked" as const, message: `The current ${dataClass} policy requires fresh permission-based human review before irreversible lifecycle effects.` };
     const expected = input.expected?.[dataClass];
     if (expected && (expected.id !== policy.id || expected.revision !== policy.revision)) {
       return { state: "blocked" as const, message: `Policy revision changed for ${dataClass}; opaque envelope deletion requires a fresh all-class evaluation.` };

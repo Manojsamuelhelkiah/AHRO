@@ -184,5 +184,5 @@ Evidence:
 - Independent provider-verified audit receipt
 
 Limits:
-- Tenant administration is not specialist authority.
+- Tenant membership alone is not decision permission; ordinary access is not professional qualification.
 - Restricted history and protected effect journals are retained; retirement does not purge records.

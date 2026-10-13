@@ -17,6 +17,7 @@ import {
 import { canonicalAuthorityRoleId } from "./workforce-policies";
 import { isPlatformSuperAdmin } from "../private-platform-admin";
 import { makeSharedTick } from "./shared-tick";
+import { hasHumanPermissions, recordHumanPermissionDecision } from "../human-permissions";
 import {
   assertGovernanceMutationAllowed,
   finalizeAmbiguousGovernanceDispatch,
@@ -438,6 +439,8 @@ export async function createGovernanceDecision(
   const impactedWorkflows = cleanStringArray(input.impactedWorkflows, "impactedWorkflows");
   validateCustomRuntimeScope(input.proposedValue, impactedWorkflows);
   const created = await db.transaction(async (tx) => {
+    if (!await hasHumanPermissions(tx, { organizationId, actorUserId: actor.userId, requiredKeys: ["tool.policy.manage"] }))
+      throw new GovernancePermissionError("Current policy-management permission is required.");
     await assertGovernanceMutationAllowed(tx, organizationId);
     const [decision] = await tx.insert(onbGovernanceDecisions).values({
       organizationId, key, revision: 1,
@@ -491,6 +494,8 @@ export async function reviseGovernanceDecision(
     ? undefined
     : cleanStringArray(input.impactedWorkflows, "impactedWorkflows");
   const created = await db.transaction(async (tx) => {
+    if (!await hasHumanPermissions(tx, { organizationId, actorUserId: actor.userId, requiredKeys: ["tool.policy.manage"] }))
+      throw new GovernancePermissionError("Current policy-management permission is required.");
     await assertGovernanceMutationAllowed(tx, organizationId);
     const [current] = await tx.select().from(onbGovernanceDecisions).where(and(
       eq(onbGovernanceDecisions.organizationId, organizationId),
@@ -512,7 +517,8 @@ export async function reviseGovernanceDecision(
       (nextWorkflows !== undefined &&
         JSON.stringify(nextWorkflows) !== JSON.stringify(current.impactedWorkflows))
     ) {
-      requireVerifiedOperator(actor, organizationId);
+      if (!await hasHumanPermissions(tx, { organizationId, actorUserId: actor.userId, requiredKeys: ["tool.policy.manage"] }))
+        throw new GovernancePermissionError("Current policy-management permission is required to revise reviewer routing or workflow impact.");
     }
     const revision = current.revision + 1;
     const reviewDueAt = input.reviewDueAt === undefined ? current.reviewDueAt : dueDate(input.reviewDueAt);
@@ -563,20 +569,13 @@ async function activeAuthorityInTransaction(
   organizationId: string,
   userId: string,
   authorityRole: string,
+  reviewedRevision = 0,
 ) {
-  const now = new Date();
-  const [assignment] = await tx.select().from(onbGovernanceAuthorityAssignments).where(and(
-    eq(onbGovernanceAuthorityAssignments.organizationId, organizationId),
-    eq(onbGovernanceAuthorityAssignments.assigneeUserId, userId),
-    eq(onbGovernanceAuthorityAssignments.authorityRole, authorityRole),
-    eq(onbGovernanceAuthorityAssignments.verificationStatus, "verified"),
-    isNull(onbGovernanceAuthorityAssignments.revokedAt),
-    or(
-      isNull(onbGovernanceAuthorityAssignments.expiresAt),
-      gt(onbGovernanceAuthorityAssignments.expiresAt, now),
-    ),
-  )).orderBy(desc(onbGovernanceAuthorityAssignments.createdAt)).limit(1).for("update");
-  return assignment ?? null;
+  if (!await hasHumanPermissions(tx, { organizationId, actorUserId: userId, requiredKeys: ["tool.policy.manage"] })) return null;
+  return recordHumanPermissionDecision(tx, {
+    organizationId, actorUserId: userId, requiredKeys: ["tool.policy.manage"],
+    reviewedRevision, decision: "explicit-policy-review",
+  });
 }
 
 export async function reviewGovernanceDecision(
@@ -602,8 +601,8 @@ export async function reviewGovernanceDecision(
     if (!["draft", "provisional"].includes(decision.status)) {
       throw new GovernanceConflictError("This decision revision has already been reviewed.");
     }
-    const authority = await activeAuthorityInTransaction(tx, organizationId, actor.userId, decision.accountableRole);
-    if (!authority) throw new GovernancePermissionError("Verified active specialist authority is required for this review.");
+    const authority = await activeAuthorityInTransaction(tx, organizationId, actor.userId, decision.accountableRole, revision);
+    if (!authority) throw new GovernancePermissionError("Current policy-management permission is required for this review.");
     const reason = cleanText(input.reason, "reason")!;
     const verificationReference = cleanText(input.verificationReference, "verificationReference")!;
     const [review] = await tx.insert(onbGovernanceDecisionReviews).values({
@@ -697,8 +696,8 @@ export async function updateGovernanceRequirementCoverage(
     if (requirement.version !== expectedVersion) {
       throw new GovernanceConflictError(`Requirement changed since version ${expectedVersion}; reload before retrying.`);
     }
-    const authority = await activeAuthorityInTransaction(tx, organizationId, actor.userId, requirement.reviewOwnerRole);
-    if (!authority) throw new GovernancePermissionError("Verified active specialist authority is required to attest requirement coverage.");
+    const authority = await activeAuthorityInTransaction(tx, organizationId, actor.userId, requirement.reviewOwnerRole, requirement.version + 1);
+    if (!authority) throw new GovernancePermissionError("Current policy-management permission is required to attest requirement coverage.");
     const bool = (value: unknown, current: boolean, field: string) => {
       if (value === undefined) return current;
       if (typeof value !== "boolean") throw new GovernanceValidationError(`${field} must be boolean.`);
@@ -740,6 +739,7 @@ export async function assignGovernanceAuthority(
   actor: GovernanceActor,
   input: { role?: unknown; assigneeUserId?: unknown; verificationReference?: unknown; expiresAt?: unknown },
 ) {
+  throw new GovernancePermissionError("Specialist authority assignment management is retired. Historical records cannot be changed through this action.");
   requireVerifiedOperator(actor, organizationId);
   const assigneeUserId = cleanText(input.assigneeUserId, "assigneeUserId")!;
   const assignment = await db.transaction(async (tx) => {
@@ -779,6 +779,7 @@ export async function requestGovernanceAuthority(
   actor: GovernanceActor,
   input: { role?: unknown; assigneeUserId?: unknown; assignmentReason?: unknown },
 ) {
+  throw new GovernancePermissionError("Specialist authority nominations are retired. Use ordinary access governance.");
   requireEditor(actor);
   const assigneeUserId = cleanText(input.assigneeUserId, "assigneeUserId")!;
   const assignment = await db.transaction(async (tx) => {
@@ -815,6 +816,7 @@ export async function verifyGovernanceAuthority(
   assignmentId: unknown,
   verificationReference: unknown,
 ) {
+  throw new GovernancePermissionError("Specialist authority verification is retired. Historical records cannot be changed through this action.");
   requireVerifiedOperator(actor, organizationId);
   const id = Number(assignmentId);
   if (!Number.isInteger(id) || id < 1) throw new GovernanceValidationError("A valid assignment id is required.");
@@ -857,6 +859,7 @@ export async function revokeGovernanceAuthority(
   actor: GovernanceActor,
   assignmentId: unknown,
 ) {
+  throw new GovernancePermissionError("Specialist authority revocation is retired. Use ordinary access governance; historical records are retained.");
   requireVerifiedOperator(actor, organizationId);
   const id = Number(assignmentId);
   if (!Number.isInteger(id) || id < 1) throw new GovernanceValidationError("A valid assignment id is required.");

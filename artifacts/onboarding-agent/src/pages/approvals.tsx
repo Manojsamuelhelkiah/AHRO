@@ -8,7 +8,7 @@ import { format } from 'date-fns';
 import { ShieldAlert } from 'lucide-react';
 import { Link, useLocation, useSearch } from 'wouter';
 import { useEffect } from 'react';
-import { useApprovalAction } from '../hooks/use-approval-action';
+import { useApprovalAction, useApprovalCapability, useFreshApprovalReview } from '../hooks/use-approval-action';
 import {
   getApprovalRefetchInterval,
   getApprovalVersionLabel,
@@ -160,6 +160,8 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
   const [comment, setComment] = useState('');
   const { user } = useUser();
   const action = useApprovalAction(approval);
+  const capability = useApprovalCapability(approval);
+  const freshReview = useFreshApprovalReview(approval);
 
   const handleDecide = (decision: string) => {
     if (decision !== 'approved' && decision !== 'rejected') return;
@@ -168,7 +170,7 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
 
   const isPending = approval.status === 'pending';
   const isAcknowledgement = isApprovalAcknowledgement(approval);
-  const isGateA = approval.ruleRef === 'Gate A — offer-acceptance package';
+  const isGateA = approval.ruleRef === 'Gate A — offer-acceptance package' && !capability.data?.reviewOnly;
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const { data: history, isLoading: historyLoading } = useGetOnboardingApprovalHistory(approval.id, {
@@ -245,6 +247,17 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
               </span>
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'right', marginTop: '8px' }}>
                 <p>Reviewed by <strong>{approval.decidedBy ?? ""}</strong></p>
+                {capability.data?.requiresFreshReview && (
+                  <div className="mt-2 space-y-2 rounded border border-[var(--status-amber)] p-2 text-left">
+                    <p>This historical or no-longer-current decision does not authorize new effects. Unexecuted work needs a fresh human review; completed provider outcomes will not be replayed.</p>
+                    {capability.data.canRequestFreshReview && (
+                      <Button size="sm" variant="outline" disabled={freshReview.isPending || capability.isRefetchError}
+                        onClick={() => freshReview.mutate()}>
+                        {freshReview.isPending ? "Requesting review…" : "Request fresh human review"}
+                      </Button>
+                    )}
+                  </div>
+                )}
                 {approval.comment && <p className="italic border-t pt-1 mt-1" style={{ borderColor: 'var(--border)' }}>"{approval.comment}"</p>}
               </div>
             </div>
@@ -299,7 +312,7 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
                   onFocus={e => e.currentTarget.style.borderColor = 'var(--primary)'}
                   onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
                 />
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>The server will verify your current specialist assignment, scope, governance approval, and separation of duties before recording this decision.</p>
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>The server checks current client/case permissions, evidence revision and requester separation before recording this explicit decision. Permission does not establish professional qualifications.</p>
               </div>
               <div className="flex items-center gap-3 shrink-0 w-full lg:w-auto">
                 {!isAcknowledgement && (
@@ -332,12 +345,12 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
             )}
             {action.isAuthorityLoading && (
               <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-3" role="status">
-                Checking current specialist authority…
+                Checking current decision permissions…
               </p>
             )}
             {!action.isAuthorityLoading && !action.isAuthorized && (
               <p className="text-[var(--text-xs)] text-[var(--status-red)] mt-3" role="alert">
-                A governance-approved specialist assignment is required. Organization membership and display personas do not grant decision authority.
+                Current approval-decision and case-flow permissions, applicable field permissions, and an independent named reviewer are required. Membership labels and display personas do not grant access.
               </p>
             )}
             {!action.hasValidVersion && (

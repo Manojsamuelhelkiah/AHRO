@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   getPinnedOrganizationIdForPage,
-  type GetGovernanceAuthorityOptions200,
 } from "@workspace/api-client-react";
 
 export type DecisionStatus = "draft" | "provisional" | "approved" | "rejected" | "superseded";
@@ -170,39 +169,6 @@ export function usePutGovernanceRequirementsKeyCoverage() {
   });
 }
 
-export function useGetGovernanceAssignments(options?: { query?: { refetchInterval?: number; refetchIntervalInBackground?: boolean } }) {
-  return useQuery({ 
-    queryKey: keys.assignments(), 
-    queryFn: () => get<{ assignments: GovernanceAssignment[] }>("/api/governance/assignments").then(r => r.assignments),
-    ...options?.query
-  });
-}
-
-export function usePostGovernanceAssignments() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { role: string; assigneeUserId: string; assignmentReason: string }) => post<{ assignment: GovernanceAssignment }>("/api/governance/assignments", data),
-    onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
-  });
-}
-
-export function useGovernanceAuthorityOptions(enabled: boolean) {
-  const organizationId = getPinnedOrganizationIdForPage();
-  return useQuery({
-    queryKey: [...keys.all, "authority-options", organizationId],
-    queryFn: () => get<GetGovernanceAuthorityOptions200>("/api/governance/authority-options"),
-    enabled,
-    refetchInterval: 60000,
-  });
-}
-
-export function usePostGovernanceAssignmentsIdRevoke() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => post<{ assignment: GovernanceAssignment }>(`/api/governance/assignments/${id}/revoke`),
-    onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
-  });
-}
 
 export function useGetGovernanceHistory() {
   return useQuery({ queryKey: keys.history(), queryFn: () => get<{ history: GovernanceHistoryEvent[] }>("/api/governance/history").then(r => r.history), refetchInterval: 30000 });
@@ -213,18 +179,3 @@ export function usePostGovernanceRemindersDispatch() {
   return useMutation({ mutationFn: () => post<{ dispatched: number }>("/api/governance/reminders/dispatch"), onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }) });
 }
 
-export function usePostGovernanceAuthorityBootstrap() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { role: string; assigneeUserId: string; verificationReference: string }) => post<{ assignment: GovernanceAssignment }>("/api/governance/authority-bootstrap", data),
-    onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
-  });
-}
-
-export function usePostGovernanceAssignmentsIdVerify() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { id: number; verificationReference: string }) => post<{ assignment: GovernanceAssignment }>(`/api/governance/assignments/${vars.id}/verify`, { verificationReference: vars.verificationReference }),
-    onSuccess: () => invalidateGovernanceAndDemoReadiness(qc),
-  });
-}

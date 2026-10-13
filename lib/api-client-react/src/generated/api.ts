@@ -56,7 +56,6 @@ import type {
   AgentInvocationFailure,
   AgentInvocationInput,
   AgentInvocationResponse,
-  BootstrapOnboardingAuthorityGovernanceBody,
   ClientOperationsSettings,
   ClientOperationsUpdate,
   ConfigureHrPolicyDrift200,
@@ -85,16 +84,12 @@ import type {
   FlowClass,
   FlowOverride,
   FlowOverrideInput,
-  GetGovernanceAuthorityOptions200,
+  GetCurrentHumanPermissions200,
   GetHroEmailRotationParams,
   GetOnboardingActionCenterParams,
   GetOnboardingGuardrails200,
   GetOnboardingOutcomeKpisParams,
   GlobalAssumption,
-  GovernanceAssignmentResponse,
-  GovernanceAssignmentsResponse,
-  GovernanceAuthorityAssignmentInput,
-  GovernanceAuthorityNominationInput,
   GovernanceDecisionHistoryResponse,
   GovernanceDecisionInput,
   GovernanceDecisionResponse,
@@ -191,9 +186,6 @@ import type {
   OnbApprovalCapability,
   OnbApprovalDecision,
   OnbApprovalHistory,
-  OnbAuthorityAssignment,
-  OnbAuthorityAssignmentRequest,
-  OnbAuthorityGovernanceState,
   OnbBgvStatus,
   OnbCase,
   OnbCaseExplanation,
@@ -292,6 +284,8 @@ import type {
   RefreshOnboardingPolicyRecommendationsBody,
   ReleaseSensitiveLifecycleHoldBody,
   RemovedOrganizationMember,
+  RequestFreshOnboardingApprovalReview200,
+  RequestFreshOnboardingApprovalReviewBody,
   RequestOnboardingOfferPackageEmail200,
   ResolveIntentRouteInput,
   ResolvedIntentRoute,
@@ -301,7 +295,6 @@ import type {
   ReviewGovernanceDecisionBody,
   ReviewHrPolicyEvaluation200,
   ReviseGovernanceDecisionBody,
-  RevokeOnboardingAuthorityAssignmentBody,
   Rollup,
   RollupRequest,
   RoutingSummary,
@@ -364,6 +357,8 @@ import type {
   UpdateOnbSettings,
   UpdateOnboardingBgvNotificationsRequest,
   UpdateOrganizationPrimaryCountry200,
+  UpdateOwnApprovalEmailBinding200,
+  UpdateOwnApprovalEmailBindingBody,
   VaultCheck,
   VaultCheckInput,
   VaultConsentInput,
@@ -377,9 +372,7 @@ import type {
   VaultProductSettings,
   VaultReuse,
   VaultShareRequest,
-  VaultSourceEnvelope,
-  VerifyGovernanceAuthorityBody,
-  WithdrawOnboardingAuthorityGovernanceBody
+  VaultSourceEnvelope
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -2359,21 +2352,21 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getAdmitSeparationSourceEventMutationOptions(options));
     }
 
-export const getGetGovernanceAuthorityOptionsUrl = () => {
+export const getGetCurrentHumanPermissionsUrl = () => {
 
 
 
 
-  return `/api/governance/authority-options`
+  return `/api/onboarding/human-permissions`
 }
 
 /**
- * Requires an owner/admin or authenticated verified governance operator. Only active members of the pinned client are included. Names are display labels, never authority or identity proof.
- * @summary List client-scoped members and authority roles for appointments
+ * UI capability hints only. Every mutation and continuation independently rechecks live tenant and case permissions.
+ * @summary Current tenant-scoped action permissions for the signed-in named member
  */
-export const getGovernanceAuthorityOptions = async ( options?: RequestInit): Promise<GetGovernanceAuthorityOptions200> => {
+export const getCurrentHumanPermissions = async ( options?: RequestInit): Promise<GetCurrentHumanPermissions200> => {
 
-  return customFetch<GetGovernanceAuthorityOptions200>(getGetGovernanceAuthorityOptionsUrl(),
+  return customFetch<GetCurrentHumanPermissions200>(getGetCurrentHumanPermissionsUrl(),
   {
     ...options,
     method: 'GET'
@@ -2386,45 +2379,45 @@ export const getGovernanceAuthorityOptions = async ( options?: RequestInit): Pro
 
 
 
-export const getGetGovernanceAuthorityOptionsQueryKey = () => {
+export const getGetCurrentHumanPermissionsQueryKey = () => {
     return [
-    `/api/governance/authority-options`
+    `/api/onboarding/human-permissions`
     ] as const;
     }
 
 
-export const getGetGovernanceAuthorityOptionsQueryOptions = <TData = Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetCurrentHumanPermissionsQueryOptions = <TData = Awaited<ReturnType<typeof getCurrentHumanPermissions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCurrentHumanPermissions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetGovernanceAuthorityOptionsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetCurrentHumanPermissionsQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>> = ({ signal }) => getGovernanceAuthorityOptions({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentHumanPermissions>>> = ({ signal }) => getCurrentHumanPermissions({ signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCurrentHumanPermissions>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetGovernanceAuthorityOptionsQueryResult = NonNullable<Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>>
-export type GetGovernanceAuthorityOptionsQueryError = ErrorType<void>
+export type GetCurrentHumanPermissionsQueryResult = NonNullable<Awaited<ReturnType<typeof getCurrentHumanPermissions>>>
+export type GetCurrentHumanPermissionsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List client-scoped members and authority roles for appointments
+ * @summary Current tenant-scoped action permissions for the signed-in named member
  */
 
-export function useGetGovernanceAuthorityOptions<TData = Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>, TError = ErrorType<void>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGovernanceAuthorityOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetCurrentHumanPermissions<TData = Awaited<ReturnType<typeof getCurrentHumanPermissions>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCurrentHumanPermissions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetGovernanceAuthorityOptionsQueryOptions(options)
+  const queryOptions = getGetCurrentHumanPermissionsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -2436,6 +2429,151 @@ export function useGetGovernanceAuthorityOptions<TData = Awaited<ReturnType<type
 
 
 
+
+export const getRequestFreshOnboardingApprovalReviewUrl = (id: number,) => {
+
+
+
+
+  return `/api/onboarding/approvals/${id}/fresh-review`
+}
+
+/**
+ * Requires current case-flow and profile edit permissions. Retains historical decisions, holds pending work, and never resumes work or resets completed or ambiguous provider outcomes.
+ * @summary Explicitly renew an unfinished case's obsolete human review cycle
+ */
+export const requestFreshOnboardingApprovalReview = async (id: number,
+    requestFreshOnboardingApprovalReviewBody: RequestFreshOnboardingApprovalReviewBody, options?: RequestInit): Promise<RequestFreshOnboardingApprovalReview200> => {
+
+  return customFetch<RequestFreshOnboardingApprovalReview200>(getRequestFreshOnboardingApprovalReviewUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(requestFreshOnboardingApprovalReviewBody)
+  }
+);}
+
+
+
+
+
+export const getRequestFreshOnboardingApprovalReviewMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestFreshOnboardingApprovalReview>>, TError,{id: number;data: BodyType<RequestFreshOnboardingApprovalReviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestFreshOnboardingApprovalReview>>, TError,{id: number;data: BodyType<RequestFreshOnboardingApprovalReviewBody>}, TContext> => {
+
+const mutationKey = ['requestFreshOnboardingApprovalReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestFreshOnboardingApprovalReview>>, {id: number;data: BodyType<RequestFreshOnboardingApprovalReviewBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  requestFreshOnboardingApprovalReview(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestFreshOnboardingApprovalReviewMutationResult = NonNullable<Awaited<ReturnType<typeof requestFreshOnboardingApprovalReview>>>
+    export type RequestFreshOnboardingApprovalReviewMutationBody = BodyType<RequestFreshOnboardingApprovalReviewBody>
+    export type RequestFreshOnboardingApprovalReviewMutationError = ErrorType<void>
+
+    /**
+ * @summary Explicitly renew an unfinished case's obsolete human review cycle
+ */
+export const useRequestFreshOnboardingApprovalReview = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestFreshOnboardingApprovalReview>>, TError,{id: number;data: BodyType<RequestFreshOnboardingApprovalReviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestFreshOnboardingApprovalReview>>,
+        TError,
+        {id: number;data: BodyType<RequestFreshOnboardingApprovalReviewBody>},
+        TContext
+      > => {
+      return useMutation(getRequestFreshOnboardingApprovalReviewMutationOptions(options));
+    }
+
+export const getUpdateOwnApprovalEmailBindingUrl = () => {
+
+
+
+
+  return `/api/onboarding/approval-email-binding`
+}
+
+/**
+ * Consent and identity binding only. Does not grant permissions, decide pending work, or send mail. Remote decisions also require verified full-body Gmail DKIM transport, sender/case/version checks and current effective permissions.
+ * @summary Bind or withdraw the signed-in member's uniquely verified email for remote replies
+ */
+export const updateOwnApprovalEmailBinding = async (updateOwnApprovalEmailBindingBody: UpdateOwnApprovalEmailBindingBody, options?: RequestInit): Promise<UpdateOwnApprovalEmailBinding200> => {
+
+  return customFetch<UpdateOwnApprovalEmailBinding200>(getUpdateOwnApprovalEmailBindingUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateOwnApprovalEmailBindingBody)
+  }
+);}
+
+
+
+
+
+export const getUpdateOwnApprovalEmailBindingMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOwnApprovalEmailBinding>>, TError,{data: BodyType<UpdateOwnApprovalEmailBindingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOwnApprovalEmailBinding>>, TError,{data: BodyType<UpdateOwnApprovalEmailBindingBody>}, TContext> => {
+
+const mutationKey = ['updateOwnApprovalEmailBinding'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOwnApprovalEmailBinding>>, {data: BodyType<UpdateOwnApprovalEmailBindingBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateOwnApprovalEmailBinding(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOwnApprovalEmailBindingMutationResult = NonNullable<Awaited<ReturnType<typeof updateOwnApprovalEmailBinding>>>
+    export type UpdateOwnApprovalEmailBindingMutationBody = BodyType<UpdateOwnApprovalEmailBindingBody>
+    export type UpdateOwnApprovalEmailBindingMutationError = ErrorType<void>
+
+    /**
+ * @summary Bind or withdraw the signed-in member's uniquely verified email for remote replies
+ */
+export const useUpdateOwnApprovalEmailBinding = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOwnApprovalEmailBinding>>, TError,{data: BodyType<UpdateOwnApprovalEmailBindingBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOwnApprovalEmailBinding>>,
+        TError,
+        {data: BodyType<UpdateOwnApprovalEmailBindingBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateOwnApprovalEmailBindingMutationOptions(options));
+    }
 
 export const getStartUatSignInUrl = () => {
 
@@ -6753,7 +6891,7 @@ export const getCreateGovernanceDecisionUrl = () => {
 }
 
 /**
- * Owner/admin may draft only. Approval requires separately verified specialist authority.
+ * A named owner/admin with current policy-management permission may draft. Independent explicit review is still required.
  * @summary Create a draft decision revision one
  */
 export const createGovernanceDecision = async (governanceDecisionInput: GovernanceDecisionInput, options?: RequestInit): Promise<GovernanceDecisionResponse> => {
@@ -6975,7 +7113,7 @@ export const getReviewGovernanceDecisionUrl = (key: string,) => {
 }
 
 /**
- * Requires an active server-verified assignment for the decision's accountable role. Tenant administration alone is insufficient.
+ * Requires current effective tool.policy.manage permission and an explicit decision on the exact current revision. Reviewer roles are routing metadata, not professional qualifications.
  * @summary Approve or reject one exact decision revision
  */
 export const reviewGovernanceDecision = async (key: string,
@@ -7187,370 +7325,6 @@ export const useUpdateGovernanceRequirementCoverage = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getUpdateGovernanceRequirementCoverageMutationOptions(options));
-    }
-
-export const getListGovernanceAssignmentsUrl = () => {
-
-
-
-
-  return `/api/governance/assignments`
-}
-
-/**
- * @summary List verified authority assignments
- */
-export const listGovernanceAssignments = async ( options?: RequestInit): Promise<GovernanceAssignmentsResponse> => {
-
-  return customFetch<GovernanceAssignmentsResponse>(getListGovernanceAssignmentsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListGovernanceAssignmentsQueryKey = () => {
-    return [
-    `/api/governance/assignments`
-    ] as const;
-    }
-
-
-export const getListGovernanceAssignmentsQueryOptions = <TData = Awaited<ReturnType<typeof listGovernanceAssignments>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listGovernanceAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListGovernanceAssignmentsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listGovernanceAssignments>>> = ({ signal }) => listGovernanceAssignments({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listGovernanceAssignments>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type ListGovernanceAssignmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listGovernanceAssignments>>>
-export type ListGovernanceAssignmentsQueryError = ErrorType<unknown>
-
-
-/**
- * @summary List verified authority assignments
- */
-
-export function useListGovernanceAssignments<TData = Awaited<ReturnType<typeof listGovernanceAssignments>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listGovernanceAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getListGovernanceAssignmentsQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getAssignGovernanceAuthorityUrl = () => {
-
-
-
-
-  return `/api/governance/assignments`
-}
-
-/**
- * A server allow-listed verified operator creates verified authority. Owner/admin may only create a pending nomination, which has no review authority until verified.
- * @summary Assign or nominate specialist authority
- */
-export const assignGovernanceAuthority = async (governanceAuthorityAssignmentInputGovernanceAuthorityNominationInput: GovernanceAuthorityAssignmentInput | GovernanceAuthorityNominationInput, options?: RequestInit): Promise<GovernanceAssignmentResponse> => {
-
-  return customFetch<GovernanceAssignmentResponse>(getAssignGovernanceAuthorityUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(governanceAuthorityAssignmentInputGovernanceAuthorityNominationInput)
-  }
-);}
-
-
-
-
-
-export const getAssignGovernanceAuthorityMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignGovernanceAuthority>>, TError,{data: BodyType<GovernanceAuthorityAssignmentInput | GovernanceAuthorityNominationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof assignGovernanceAuthority>>, TError,{data: BodyType<GovernanceAuthorityAssignmentInput | GovernanceAuthorityNominationInput>}, TContext> => {
-
-const mutationKey = ['assignGovernanceAuthority'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignGovernanceAuthority>>, {data: BodyType<GovernanceAuthorityAssignmentInput | GovernanceAuthorityNominationInput>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  assignGovernanceAuthority(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type AssignGovernanceAuthorityMutationResult = NonNullable<Awaited<ReturnType<typeof assignGovernanceAuthority>>>
-    export type AssignGovernanceAuthorityMutationBody = BodyType<GovernanceAuthorityAssignmentInput | GovernanceAuthorityNominationInput>
-    export type AssignGovernanceAuthorityMutationError = ErrorType<void>
-
-    /**
- * @summary Assign or nominate specialist authority
- */
-export const useAssignGovernanceAuthority = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignGovernanceAuthority>>, TError,{data: BodyType<GovernanceAuthorityAssignmentInput | GovernanceAuthorityNominationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof assignGovernanceAuthority>>,
-        TError,
-        {data: BodyType<GovernanceAuthorityAssignmentInput | GovernanceAuthorityNominationInput>},
-        TContext
-      > => {
-      return useMutation(getAssignGovernanceAuthorityMutationOptions(options));
-    }
-
-export const getVerifyGovernanceAuthorityUrl = (id: number,) => {
-
-
-
-
-  return `/api/governance/assignments/${id}/verify`
-}
-
-/**
- * @summary Verify a pending owner/admin authority nomination
- */
-export const verifyGovernanceAuthority = async (id: number,
-    verifyGovernanceAuthorityBody: VerifyGovernanceAuthorityBody, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getVerifyGovernanceAuthorityUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(verifyGovernanceAuthorityBody)
-  }
-);}
-
-
-
-
-
-export const getVerifyGovernanceAuthorityMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyGovernanceAuthority>>, TError,{id: number;data: BodyType<VerifyGovernanceAuthorityBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof verifyGovernanceAuthority>>, TError,{id: number;data: BodyType<VerifyGovernanceAuthorityBody>}, TContext> => {
-
-const mutationKey = ['verifyGovernanceAuthority'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyGovernanceAuthority>>, {id: number;data: BodyType<VerifyGovernanceAuthorityBody>}> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  verifyGovernanceAuthority(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type VerifyGovernanceAuthorityMutationResult = NonNullable<Awaited<ReturnType<typeof verifyGovernanceAuthority>>>
-    export type VerifyGovernanceAuthorityMutationBody = BodyType<VerifyGovernanceAuthorityBody>
-    export type VerifyGovernanceAuthorityMutationError = ErrorType<void>
-
-    /**
- * @summary Verify a pending owner/admin authority nomination
- */
-export const useVerifyGovernanceAuthority = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyGovernanceAuthority>>, TError,{id: number;data: BodyType<VerifyGovernanceAuthorityBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof verifyGovernanceAuthority>>,
-        TError,
-        {id: number;data: BodyType<VerifyGovernanceAuthorityBody>},
-        TContext
-      > => {
-      return useMutation(getVerifyGovernanceAuthorityMutationOptions(options));
-    }
-
-export const getBootstrapGovernanceAuthorityUrl = () => {
-
-
-
-
-  return `/api/governance/authority-bootstrap`
-}
-
-/**
- * Same server-verified operator controls as assignment; this is not a tenant-admin escalation path.
- * @summary Bootstrap verified specialist authority
- */
-export const bootstrapGovernanceAuthority = async (governanceAuthorityAssignmentInput: GovernanceAuthorityAssignmentInput, options?: RequestInit): Promise<GovernanceAssignmentResponse> => {
-
-  return customFetch<GovernanceAssignmentResponse>(getBootstrapGovernanceAuthorityUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(governanceAuthorityAssignmentInput)
-  }
-);}
-
-
-
-
-
-export const getBootstrapGovernanceAuthorityMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bootstrapGovernanceAuthority>>, TError,{data: BodyType<GovernanceAuthorityAssignmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof bootstrapGovernanceAuthority>>, TError,{data: BodyType<GovernanceAuthorityAssignmentInput>}, TContext> => {
-
-const mutationKey = ['bootstrapGovernanceAuthority'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bootstrapGovernanceAuthority>>, {data: BodyType<GovernanceAuthorityAssignmentInput>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  bootstrapGovernanceAuthority(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type BootstrapGovernanceAuthorityMutationResult = NonNullable<Awaited<ReturnType<typeof bootstrapGovernanceAuthority>>>
-    export type BootstrapGovernanceAuthorityMutationBody = BodyType<GovernanceAuthorityAssignmentInput>
-    export type BootstrapGovernanceAuthorityMutationError = ErrorType<void>
-
-    /**
- * @summary Bootstrap verified specialist authority
- */
-export const useBootstrapGovernanceAuthority = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bootstrapGovernanceAuthority>>, TError,{data: BodyType<GovernanceAuthorityAssignmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof bootstrapGovernanceAuthority>>,
-        TError,
-        {data: BodyType<GovernanceAuthorityAssignmentInput>},
-        TContext
-      > => {
-      return useMutation(getBootstrapGovernanceAuthorityMutationOptions(options));
-    }
-
-export const getRevokeGovernanceAuthorityUrl = (id: number,) => {
-
-
-
-
-  return `/api/governance/assignments/${id}/revoke`
-}
-
-/**
- * @summary Revoke a verified authority assignment
- */
-export const revokeGovernanceAuthority = async (id: number, options?: RequestInit): Promise<GovernanceAssignmentResponse> => {
-
-  return customFetch<GovernanceAssignmentResponse>(getRevokeGovernanceAuthorityUrl(id),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getRevokeGovernanceAuthorityMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeGovernanceAuthority>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof revokeGovernanceAuthority>>, TError,{id: number}, TContext> => {
-
-const mutationKey = ['revokeGovernanceAuthority'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeGovernanceAuthority>>, {id: number}> = (props) => {
-          const {id} = props ?? {};
-
-          return  revokeGovernanceAuthority(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type RevokeGovernanceAuthorityMutationResult = NonNullable<Awaited<ReturnType<typeof revokeGovernanceAuthority>>>
-
-    export type RevokeGovernanceAuthorityMutationError = ErrorType<void>
-
-    /**
- * @summary Revoke a verified authority assignment
- */
-export const useRevokeGovernanceAuthority = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeGovernanceAuthority>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof revokeGovernanceAuthority>>,
-        TError,
-        {id: number},
-        TContext
-      > => {
-      return useMutation(getRevokeGovernanceAuthorityMutationOptions(options));
     }
 
 export const getListGovernanceHistoryUrl = (params?: ListGovernanceHistoryParams,) => {
@@ -18795,79 +18569,6 @@ export const useVerifyOnboardingChecklistEvidence = <TError = ErrorType<void>,
       return useMutation(getVerifyOnboardingChecklistEvidenceMutationOptions(options));
     }
 
-export const getAssignOnboardingPolicyAuthorityUrl = (userId: string,
-    authorityRole: string,) => {
-
-
-
-
-  return `/api/onboarding/policy-authorities/${userId}/${authorityRole}`
-}
-
-/**
- * @summary Assign a tenant member as a server-authoritative policy evidence authority
- */
-export const assignOnboardingPolicyAuthority = async (userId: string,
-    authorityRole: string, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getAssignOnboardingPolicyAuthorityUrl(userId,authorityRole),
-  {
-    ...options,
-    method: 'PUT'
-
-
-  }
-);}
-
-
-
-
-
-export const getAssignOnboardingPolicyAuthorityMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>, TError,{userId: string;authorityRole: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>, TError,{userId: string;authorityRole: string}, TContext> => {
-
-const mutationKey = ['assignOnboardingPolicyAuthority'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>, {userId: string;authorityRole: string}> = (props) => {
-          const {userId,authorityRole} = props ?? {};
-
-          return  assignOnboardingPolicyAuthority(userId,authorityRole,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type AssignOnboardingPolicyAuthorityMutationResult = NonNullable<Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>>
-
-    export type AssignOnboardingPolicyAuthorityMutationError = ErrorType<void>
-
-    /**
- * @summary Assign a tenant member as a server-authoritative policy evidence authority
- */
-export const useAssignOnboardingPolicyAuthority = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>, TError,{userId: string;authorityRole: string}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof assignOnboardingPolicyAuthority>>,
-        TError,
-        {userId: string;authorityRole: string},
-        TContext
-      > => {
-      return useMutation(getAssignOnboardingPolicyAuthorityMutationOptions(options));
-    }
-
 export const getCorrectOnboardingWorkforceContextUrl = (id: number,) => {
 
 
@@ -19695,593 +19396,6 @@ export function useGetOnboardingApprovalHistory<TData = Awaited<ReturnType<typeo
 
 
 
-
-export const getGetOnboardingAuthorityGovernanceUrl = () => {
-
-
-
-
-  return `/api/onboarding/authority/governance`
-}
-
-/**
- * @summary Current tenant governance state and caller authority administration eligibility
- */
-export const getOnboardingAuthorityGovernance = async ( options?: RequestInit): Promise<OnbAuthorityGovernanceState> => {
-
-  return customFetch<OnbAuthorityGovernanceState>(getGetOnboardingAuthorityGovernanceUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetOnboardingAuthorityGovernanceQueryKey = () => {
-    return [
-    `/api/onboarding/authority/governance`
-    ] as const;
-    }
-
-
-export const getGetOnboardingAuthorityGovernanceQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingAuthorityGovernance>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingAuthorityGovernance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingAuthorityGovernanceQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingAuthorityGovernance>>> = ({ signal }) => getOnboardingAuthorityGovernance({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingAuthorityGovernance>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetOnboardingAuthorityGovernanceQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingAuthorityGovernance>>>
-export type GetOnboardingAuthorityGovernanceQueryError = ErrorType<unknown>
-
-
-/**
- * @summary Current tenant governance state and caller authority administration eligibility
- */
-
-export function useGetOnboardingAuthorityGovernance<TData = Awaited<ReturnType<typeof getOnboardingAuthorityGovernance>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingAuthorityGovernance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetOnboardingAuthorityGovernanceQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getBootstrapOnboardingAuthorityGovernanceUrl = () => {
-
-
-
-
-  return `/api/onboarding/authority/bootstrap`
-}
-
-/**
- * @summary Record operator attestation only; does not approve production authority
- */
-export const bootstrapOnboardingAuthorityGovernance = async (bootstrapOnboardingAuthorityGovernanceBody: BootstrapOnboardingAuthorityGovernanceBody, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getBootstrapOnboardingAuthorityGovernanceUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(bootstrapOnboardingAuthorityGovernanceBody)
-  }
-);}
-
-
-
-
-
-export const getBootstrapOnboardingAuthorityGovernanceMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bootstrapOnboardingAuthorityGovernance>>, TError,{data: BodyType<BootstrapOnboardingAuthorityGovernanceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof bootstrapOnboardingAuthorityGovernance>>, TError,{data: BodyType<BootstrapOnboardingAuthorityGovernanceBody>}, TContext> => {
-
-const mutationKey = ['bootstrapOnboardingAuthorityGovernance'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bootstrapOnboardingAuthorityGovernance>>, {data: BodyType<BootstrapOnboardingAuthorityGovernanceBody>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  bootstrapOnboardingAuthorityGovernance(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type BootstrapOnboardingAuthorityGovernanceMutationResult = NonNullable<Awaited<ReturnType<typeof bootstrapOnboardingAuthorityGovernance>>>
-    export type BootstrapOnboardingAuthorityGovernanceMutationBody = BodyType<BootstrapOnboardingAuthorityGovernanceBody>
-    export type BootstrapOnboardingAuthorityGovernanceMutationError = ErrorType<void>
-
-    /**
- * @summary Record operator attestation only; does not approve production authority
- */
-export const useBootstrapOnboardingAuthorityGovernance = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bootstrapOnboardingAuthorityGovernance>>, TError,{data: BodyType<BootstrapOnboardingAuthorityGovernanceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof bootstrapOnboardingAuthorityGovernance>>,
-        TError,
-        {data: BodyType<BootstrapOnboardingAuthorityGovernanceBody>},
-        TContext
-      > => {
-      return useMutation(getBootstrapOnboardingAuthorityGovernanceMutationOptions(options));
-    }
-
-export const getWithdrawOnboardingAuthorityGovernanceUrl = () => {
-
-
-
-
-  return `/api/onboarding/authority/governance/withdraw`
-}
-
-/**
- * @summary Immediately withdraw tenant specialist authority governance
- */
-export const withdrawOnboardingAuthorityGovernance = async (withdrawOnboardingAuthorityGovernanceBody: WithdrawOnboardingAuthorityGovernanceBody, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getWithdrawOnboardingAuthorityGovernanceUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(withdrawOnboardingAuthorityGovernanceBody)
-  }
-);}
-
-
-
-
-
-export const getWithdrawOnboardingAuthorityGovernanceMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof withdrawOnboardingAuthorityGovernance>>, TError,{data: BodyType<WithdrawOnboardingAuthorityGovernanceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof withdrawOnboardingAuthorityGovernance>>, TError,{data: BodyType<WithdrawOnboardingAuthorityGovernanceBody>}, TContext> => {
-
-const mutationKey = ['withdrawOnboardingAuthorityGovernance'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof withdrawOnboardingAuthorityGovernance>>, {data: BodyType<WithdrawOnboardingAuthorityGovernanceBody>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  withdrawOnboardingAuthorityGovernance(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type WithdrawOnboardingAuthorityGovernanceMutationResult = NonNullable<Awaited<ReturnType<typeof withdrawOnboardingAuthorityGovernance>>>
-    export type WithdrawOnboardingAuthorityGovernanceMutationBody = BodyType<WithdrawOnboardingAuthorityGovernanceBody>
-    export type WithdrawOnboardingAuthorityGovernanceMutationError = ErrorType<void>
-
-    /**
- * @summary Immediately withdraw tenant specialist authority governance
- */
-export const useWithdrawOnboardingAuthorityGovernance = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof withdrawOnboardingAuthorityGovernance>>, TError,{data: BodyType<WithdrawOnboardingAuthorityGovernanceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof withdrawOnboardingAuthorityGovernance>>,
-        TError,
-        {data: BodyType<WithdrawOnboardingAuthorityGovernanceBody>},
-        TContext
-      > => {
-      return useMutation(getWithdrawOnboardingAuthorityGovernanceMutationOptions(options));
-    }
-
-export const getListOnboardingAuthorityAssignmentsUrl = () => {
-
-
-
-
-  return `/api/onboarding/authority/assignments`
-}
-
-/**
- * @summary List specialist authority assignments (restricted)
- */
-export const listOnboardingAuthorityAssignments = async ( options?: RequestInit): Promise<OnbAuthorityAssignment[]> => {
-
-  return customFetch<OnbAuthorityAssignment[]>(getListOnboardingAuthorityAssignmentsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListOnboardingAuthorityAssignmentsQueryKey = () => {
-    return [
-    `/api/onboarding/authority/assignments`
-    ] as const;
-    }
-
-
-export const getListOnboardingAuthorityAssignmentsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingAuthorityAssignments>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingAuthorityAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListOnboardingAuthorityAssignmentsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingAuthorityAssignments>>> = ({ signal }) => listOnboardingAuthorityAssignments({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingAuthorityAssignments>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type ListOnboardingAuthorityAssignmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingAuthorityAssignments>>>
-export type ListOnboardingAuthorityAssignmentsQueryError = ErrorType<void>
-
-
-/**
- * @summary List specialist authority assignments (restricted)
- */
-
-export function useListOnboardingAuthorityAssignments<TData = Awaited<ReturnType<typeof listOnboardingAuthorityAssignments>>, TError = ErrorType<void>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingAuthorityAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getListOnboardingAuthorityAssignmentsQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getCreateOnboardingAuthorityAssignmentUrl = () => {
-
-
-
-
-  return `/api/onboarding/authority/assignments`
-}
-
-/**
- * @summary Grant a scoped specialist authority assignment (restricted; self-grant prohibited)
- */
-export const createOnboardingAuthorityAssignment = async (onbAuthorityAssignmentRequest: OnbAuthorityAssignmentRequest, options?: RequestInit): Promise<OnbAuthorityAssignment> => {
-
-  return customFetch<OnbAuthorityAssignment>(getCreateOnboardingAuthorityAssignmentUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(onbAuthorityAssignmentRequest)
-  }
-);}
-
-
-
-
-
-export const getCreateOnboardingAuthorityAssignmentMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingAuthorityAssignment>>, TError,{data: BodyType<OnbAuthorityAssignmentRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createOnboardingAuthorityAssignment>>, TError,{data: BodyType<OnbAuthorityAssignmentRequest>}, TContext> => {
-
-const mutationKey = ['createOnboardingAuthorityAssignment'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createOnboardingAuthorityAssignment>>, {data: BodyType<OnbAuthorityAssignmentRequest>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  createOnboardingAuthorityAssignment(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CreateOnboardingAuthorityAssignmentMutationResult = NonNullable<Awaited<ReturnType<typeof createOnboardingAuthorityAssignment>>>
-    export type CreateOnboardingAuthorityAssignmentMutationBody = BodyType<OnbAuthorityAssignmentRequest>
-    export type CreateOnboardingAuthorityAssignmentMutationError = ErrorType<void>
-
-    /**
- * @summary Grant a scoped specialist authority assignment (restricted; self-grant prohibited)
- */
-export const useCreateOnboardingAuthorityAssignment = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingAuthorityAssignment>>, TError,{data: BodyType<OnbAuthorityAssignmentRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof createOnboardingAuthorityAssignment>>,
-        TError,
-        {data: BodyType<OnbAuthorityAssignmentRequest>},
-        TContext
-      > => {
-      return useMutation(getCreateOnboardingAuthorityAssignmentMutationOptions(options));
-    }
-
-export const getRevokeOnboardingAuthorityAssignmentUrl = (id: string,) => {
-
-
-
-
-  return `/api/onboarding/authority/assignments/${id}/revoke`
-}
-
-/**
- * @summary Revoke specialist authority; pending decisions and dispatches revalidate it
- */
-export const revokeOnboardingAuthorityAssignment = async (id: string,
-    revokeOnboardingAuthorityAssignmentBody: RevokeOnboardingAuthorityAssignmentBody, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getRevokeOnboardingAuthorityAssignmentUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(revokeOnboardingAuthorityAssignmentBody)
-  }
-);}
-
-
-
-
-
-export const getRevokeOnboardingAuthorityAssignmentMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeOnboardingAuthorityAssignment>>, TError,{id: string;data: BodyType<RevokeOnboardingAuthorityAssignmentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof revokeOnboardingAuthorityAssignment>>, TError,{id: string;data: BodyType<RevokeOnboardingAuthorityAssignmentBody>}, TContext> => {
-
-const mutationKey = ['revokeOnboardingAuthorityAssignment'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeOnboardingAuthorityAssignment>>, {id: string;data: BodyType<RevokeOnboardingAuthorityAssignmentBody>}> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  revokeOnboardingAuthorityAssignment(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type RevokeOnboardingAuthorityAssignmentMutationResult = NonNullable<Awaited<ReturnType<typeof revokeOnboardingAuthorityAssignment>>>
-    export type RevokeOnboardingAuthorityAssignmentMutationBody = BodyType<RevokeOnboardingAuthorityAssignmentBody>
-    export type RevokeOnboardingAuthorityAssignmentMutationError = ErrorType<void>
-
-    /**
- * @summary Revoke specialist authority; pending decisions and dispatches revalidate it
- */
-export const useRevokeOnboardingAuthorityAssignment = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeOnboardingAuthorityAssignment>>, TError,{id: string;data: BodyType<RevokeOnboardingAuthorityAssignmentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof revokeOnboardingAuthorityAssignment>>,
-        TError,
-        {id: string;data: BodyType<RevokeOnboardingAuthorityAssignmentBody>},
-        TContext
-      > => {
-      return useMutation(getRevokeOnboardingAuthorityAssignmentMutationOptions(options));
-    }
-
-export const getListOnboardingUnresolvedAuthorityApprovalsUrl = () => {
-
-
-
-
-  return `/api/onboarding/authority/unresolved-approvals`
-}
-
-/**
- * @summary Historical approvals lacking authority evidence, for review only
- */
-export const listOnboardingUnresolvedAuthorityApprovals = async ( options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getListOnboardingUnresolvedAuthorityApprovalsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getListOnboardingUnresolvedAuthorityApprovalsQueryKey = () => {
-    return [
-    `/api/onboarding/authority/unresolved-approvals`
-    ] as const;
-    }
-
-
-export const getListOnboardingUnresolvedAuthorityApprovalsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingUnresolvedAuthorityApprovals>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingUnresolvedAuthorityApprovals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getListOnboardingUnresolvedAuthorityApprovalsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingUnresolvedAuthorityApprovals>>> = ({ signal }) => listOnboardingUnresolvedAuthorityApprovals({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingUnresolvedAuthorityApprovals>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type ListOnboardingUnresolvedAuthorityApprovalsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingUnresolvedAuthorityApprovals>>>
-export type ListOnboardingUnresolvedAuthorityApprovalsQueryError = ErrorType<unknown>
-
-
-/**
- * @summary Historical approvals lacking authority evidence, for review only
- */
-
-export function useListOnboardingUnresolvedAuthorityApprovals<TData = Awaited<ReturnType<typeof listOnboardingUnresolvedAuthorityApprovals>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingUnresolvedAuthorityApprovals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getListOnboardingUnresolvedAuthorityApprovalsQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
-export const getAcknowledgeOnboardingUnresolvedAuthorityApprovalUrl = (id: number,) => {
-
-
-
-
-  return `/api/onboarding/authority/unresolved-approvals/${id}/acknowledge`
-}
-
-/**
- * @summary Acknowledge historical evidence without replaying a decision or effect
- */
-export const acknowledgeOnboardingUnresolvedAuthorityApproval = async (id: number, options?: RequestInit): Promise<void> => {
-
-  return customFetch<void>(getAcknowledgeOnboardingUnresolvedAuthorityApprovalUrl(id),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getAcknowledgeOnboardingUnresolvedAuthorityApprovalMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acknowledgeOnboardingUnresolvedAuthorityApproval>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof acknowledgeOnboardingUnresolvedAuthorityApproval>>, TError,{id: number}, TContext> => {
-
-const mutationKey = ['acknowledgeOnboardingUnresolvedAuthorityApproval'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acknowledgeOnboardingUnresolvedAuthorityApproval>>, {id: number}> = (props) => {
-          const {id} = props ?? {};
-
-          return  acknowledgeOnboardingUnresolvedAuthorityApproval(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type AcknowledgeOnboardingUnresolvedAuthorityApprovalMutationResult = NonNullable<Awaited<ReturnType<typeof acknowledgeOnboardingUnresolvedAuthorityApproval>>>
-
-    export type AcknowledgeOnboardingUnresolvedAuthorityApprovalMutationError = ErrorType<unknown>
-
-    /**
- * @summary Acknowledge historical evidence without replaying a decision or effect
- */
-export const useAcknowledgeOnboardingUnresolvedAuthorityApproval = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acknowledgeOnboardingUnresolvedAuthorityApproval>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof acknowledgeOnboardingUnresolvedAuthorityApproval>>,
-        TError,
-        {id: number},
-        TContext
-      > => {
-      return useMutation(getAcknowledgeOnboardingUnresolvedAuthorityApprovalMutationOptions(options));
-    }
 
 export const getListOnboardingConnectorsUrl = () => {
 

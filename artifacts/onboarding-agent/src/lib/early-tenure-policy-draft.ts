@@ -39,7 +39,10 @@ export function policyDraft(policy?: EarlyTenurePolicy): EarlyTenurePolicyDraft 
   return {
     probationLengthDays: String(policy?.probationLengthDays ?? ''),
     checkInDays: (policy?.checkIns?.map((item) => item.offsetDays) ?? [30, 60, 90]).join(', '),
-    decisionAuthorityScope: policy?.decisionAuthorityScope ?? 'hr-compliance-approve',
+    // Keep supported historical labels as routing metadata. An administrative
+    // scope is retired and must not silently become a different review label.
+    decisionAuthorityScope: policy?.decisionAuthorityScope === 'authority-administration'
+      ? '' : policy?.decisionAuthorityScope ?? 'hr-compliance-approve',
     hireTypes: csv(policy?.applicability?.hireTypes),
     workerCategories: csv(policy?.applicability?.workerCategories),
     legalEntities: csv(policy?.applicability?.legalEntities),

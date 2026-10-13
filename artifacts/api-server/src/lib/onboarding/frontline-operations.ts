@@ -18,6 +18,7 @@ import {
 import { hasTrustedBgvClearanceEvidence } from "./connector-evidence-provenance";
 import { hasCurrentVaultBgvReceipt } from "../employee-vault/reuse";
 import { hasCurrentAuthorityScope, roleMayExerciseScope } from "./decision-authority";
+import { hasHumanPermissions } from "../human-permissions";
 import { reopenApprovalInTransaction } from "./approval-version";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
@@ -174,56 +175,19 @@ async function currentAuthority(
   tx: any, c: typeof onbCases.$inferSelect, actorUserId: string, scope: OnbAuthorityScope,
 ) {
   if (!(await hasCurrentAuthorityScope(tx, { organizationId: c.organizationId, actorUserId, scope, caseId: c.id }))) {
-    throw new FrontlineValidationError("A current governance-approved, scoped authority is required for this frontline action.");
+    throw new FrontlineValidationError("Current case-scoped approval and flow-edit permissions are required for this frontline action.");
   }
-  const now = new Date();
-  const rows = await tx.select().from(onbAuthorityAssignments).where(and(
-    eq(onbAuthorityAssignments.organizationId, c.organizationId),
-    eq(onbAuthorityAssignments.personUserId, actorUserId),
-    eq(onbAuthorityAssignments.status, "active"),
-    lte(onbAuthorityAssignments.validFrom, now),
-    or(isNull(onbAuthorityAssignments.validUntil), gt(onbAuthorityAssignments.validUntil, now)),
-  )).for("update");
-  const authority = rows.find((row: typeof onbAuthorityAssignments.$inferSelect) =>
-    row.scopes.includes(scope) && roleMayExerciseScope(row.authorityRole, scope) &&
-    (row.caseId === null || row.caseId === c.id) &&
-    (!row.siteScope || row.siteScope === c.geography) &&
-    (!row.jurisdictionScope || row.jurisdictionScope === c.legalEntity),
-  );
-  if (!authority) throw new FrontlineValidationError("A current exact authority binding is required for this frontline action.");
-  return authority;
+  return { id: `human-permission/v1:${actorUserId}`, revision: 1, personUserId: actorUserId };
 }
 async function authorityStillLive(
   tx: any, c: typeof onbCases.$inferSelect, binding: {
     authorityScope: OnbAuthorityScope; authorityAssignmentId: string; authorityAssignmentRevision: number; recordedByUserId: string;
-  },
+  }, policyAction = false,
 ): Promise<boolean> {
-  const now = new Date();
-  const [governance, authority, membership] = await Promise.all([
-    tx.select({ status: onbAuthorityGovernance.status }).from(onbAuthorityGovernance)
-      .where(eq(onbAuthorityGovernance.organizationId, c.organizationId)),
-    tx.select().from(onbAuthorityAssignments).where(and(
-      eq(onbAuthorityAssignments.organizationId, c.organizationId),
-      eq(onbAuthorityAssignments.id, binding.authorityAssignmentId),
-      eq(onbAuthorityAssignments.revision, binding.authorityAssignmentRevision),
-      eq(onbAuthorityAssignments.personUserId, binding.recordedByUserId),
-      eq(onbAuthorityAssignments.status, "active"),
-      lte(onbAuthorityAssignments.validFrom, now),
-      or(isNull(onbAuthorityAssignments.validUntil), gt(onbAuthorityAssignments.validUntil, now)),
-    )),
-    tx.select({ id: organizationMembershipsTable.id }).from(organizationMembershipsTable).where(and(
-      eq(organizationMembershipsTable.organizationId, c.organizationId),
-      eq(organizationMembershipsTable.clerkUserId, binding.recordedByUserId),
-      isNull(organizationMembershipsTable.revokedAt),
-    )),
-  ]);
-  const row = authority[0];
-  return governance[0]?.status === "governance-approved" && Boolean(membership[0]) && Boolean(row) &&
-    row!.scopes.includes(binding.authorityScope) &&
-    roleMayExerciseScope(row!.authorityRole, binding.authorityScope) &&
-    (row!.caseId === null || row!.caseId === c.id) &&
-    (!row!.siteScope || row!.siteScope === c.geography) &&
-    (!row!.jurisdictionScope || row!.jurisdictionScope === c.legalEntity);
+  if (binding.authorityAssignmentId !== `human-permission/v1:${binding.recordedByUserId}` ||
+    binding.authorityAssignmentRevision !== 1) return false;
+  return hasHumanPermissions(tx, { organizationId: c.organizationId, actorUserId: binding.recordedByUserId,
+    caseId: c.id, requiredKeys: [policyAction ? "tool.policy.manage" : "tool.approval.decide", "flow.case.edit"] });
 }
 async function lockedState(tx: any, organizationId: string, caseId: number) {
   const [state] = await tx.select().from(onbFrontlineReleaseState).where(and(
@@ -358,7 +322,10 @@ export async function recordFrontlinePolicyException(input: {
     if (!policy.requiredFulfillment.includes(exceptionItem) || !policy.exceptions.permitted.includes(input.type)) {
       throw new FrontlineValidationError("This substitution/deferment is not explicitly permitted by the immutable frontline policy.");
     }
-    const authority = await currentAuthority(tx, c, input.actorUserId, "safety-approve");
+    if (!await hasHumanPermissions(tx, { organizationId: c.organizationId, caseId: c.id,
+      actorUserId: input.actorUserId, requiredKeys: ["tool.policy.manage", "flow.case.edit"] }))
+      throw new FrontlineValidationError("Current policy-management and case-flow edit permissions are required.");
+    const authority = { id: `human-permission/v1:${input.actorUserId}`, revision: 1, personUserId: input.actorUserId };
     const state = await lockedState(tx, input.organizationId, input.caseId);
     assertVersion(state, input.expectedVersion);
     const [created] = await tx.insert(onbFrontlinePolicyExceptions).values({
@@ -383,7 +350,9 @@ export async function revokeFrontlinePolicyException(input: {
     const c = await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
     if (!isFrontline(c)) throw new FrontlineValidationError("This case is not established as frontline/site work.");
     parseFrontlinePolicy(c.processPolicySnapshot ?? {});
-    await currentAuthority(tx, c, input.actorUserId, "safety-approve");
+    if (!await hasHumanPermissions(tx, { organizationId: c.organizationId, caseId: c.id,
+      actorUserId: input.actorUserId, requiredKeys: ["tool.policy.manage", "flow.case.edit"] }))
+      throw new FrontlineValidationError("Current policy-management and case-flow edit permissions are required.");
     const state = await lockedState(tx, input.organizationId, input.caseId);
     assertVersion(state, input.expectedVersion);
     const [exception] = await tx.select().from(onbFrontlinePolicyExceptions).where(and(
@@ -453,7 +422,7 @@ export async function recordFrontlineFulfillment(input: {
       if (!exception || !(await authorityStillLive(tx, c, {
         authorityScope: "safety-approve", authorityAssignmentId: exception.authorityAssignmentId,
         authorityAssignmentRevision: exception.authorityAssignmentRevision, recordedByUserId: exception.reviewedByUserId,
-      }))) throw new FrontlineValidationError("The requested substitution/deferment has no current live policy-review authority.");
+      }, true))) throw new FrontlineValidationError("The requested substitution/deferment requires current policy-management permission and fresh review.");
     }
     const [last] = await tx.select({ revision: onbFrontlineFulfillments.revision }).from(onbFrontlineFulfillments).where(and(
       eq(onbFrontlineFulfillments.organizationId, input.organizationId), eq(onbFrontlineFulfillments.caseId, input.caseId),
@@ -658,7 +627,7 @@ async function evaluateRelease(tx: any, c: typeof onbCases.$inferSelect) {
       if (!exception || !(await authorityStillLive(tx, c, {
         authorityScope: "safety-approve", authorityAssignmentId: exception.authorityAssignmentId,
         authorityAssignmentRevision: exception.authorityAssignmentRevision, recordedByUserId: exception.reviewedByUserId,
-      }))) blockers.push(`Physical ${requiredItem} substitution lacks current explicit policy review.`);
+      }, true))) blockers.push(`Physical ${requiredItem} substitution lacks current explicit policy review.`);
     }
   }
   return { blockers, fulfillment: [...latestFulfillment.values()].map(publicFulfillment) };
@@ -746,16 +715,20 @@ export async function getFrontlineEvidenceHistory(input: { organizationId: strin
       "payroll-approve", "legal-approve",
     ];
     const allowedScopes = new Set<OnbAuthorityScope>();
+    const base = ["flow.case.read", "data.case.profile.read"] as const;
+    // Historical routing labels classify evidence; they are not grants.
     for (const scope of evidenceScopes) {
-      if (await hasCurrentAuthorityScope(tx, {
-        organizationId: c.organizationId, caseId: c.id, actorUserId: input.actorUserId, scope,
-      })) allowedScopes.add(scope);
+      const privateKeys = scope === "payroll-approve" ? ["data.payroll.read" as const]
+        : scope === "occupational-health-approve" ? ["data.medical.read" as const]
+        : scope === "hr-compliance-approve" ? ["data.identity.read" as const, "data.bgv.read" as const]
+        : ["data.case.notes.read" as const, "data.medical.read" as const, "data.identity.read" as const, "data.bgv.read" as const];
+      if (await hasHumanPermissions(tx, { organizationId: c.organizationId, caseId: c.id,
+        actorUserId: input.actorUserId, requiredKeys: [...base, ...privateKeys] })) allowedScopes.add(scope);
     }
-    const canSeeExceptions = allowedScopes.has("safety-approve") || await hasCurrentAuthorityScope(tx, {
-      organizationId: c.organizationId, caseId: c.id, actorUserId: input.actorUserId, scope: "site-fulfillment-approve",
-    });
+    const canSeeExceptions = await hasHumanPermissions(tx, { organizationId: c.organizationId, caseId: c.id,
+      actorUserId: input.actorUserId, requiredKeys: [...base, "data.case.notes.read", "data.medical.read", "data.bgv.read", "data.identity.read"] });
     if (allowedScopes.size === 0 && !canSeeExceptions) {
-      throw new FrontlineValidationError("A current scoped authority is required for restricted frontline history.");
+      throw new FrontlineValidationError("Current case and applicable sensitive-field read permissions are required for restricted frontline history.");
     }
     const [evidence, exceptions] = await Promise.all([
       tx.select({

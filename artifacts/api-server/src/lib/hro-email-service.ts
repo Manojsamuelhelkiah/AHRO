@@ -1,7 +1,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, hroEmailRequests, hroEmailScan, hroMailboxIngress, onbCases, onbEvents, onbJobProfiles } from "@workspace/db";
-import { access, authority, confidentialRead, currentReceipt, receipt, type Tx } from "./offboarding/authority";
+import { access, confidentialRead, type Tx } from "./offboarding/authority";
+import { requireEmailRouteAdministrator, emailRouteReceiptCurrent as currentReceipt, emailRouteReceipt as receipt } from "./hro-email-authorization";
 import { SeparationError, object, text } from "./offboarding/model";
 import { audit, createSeparationInTransaction } from "./offboarding/service";
 import { connectedIntakeMailbox, emailHasOtherOwnership, type EmailProvider } from "./hro-email-ingestion";
@@ -26,7 +27,7 @@ export function emailRouteView(row: RouteRow) {
     subjectMarker: `[HRO-INTAKE:${row.token}]`, activatedAt: row.activatedAt?.toISOString() ?? null,
     backfillFrom: row.backfillFrom?.toISOString() ?? null,
     retiredAt: row.retiredAt?.toISOString() ?? null, replacementOfId: row.replacementOfId,
-    reviewRequired: Boolean(row.replacementOfId && !row.activatedAt) };
+    reviewRequired: !row.approval?.authorization || Boolean(row.replacementOfId && !row.activatedAt) };
 }
 export async function requireReview(tx: Tx, org: string, actor: string, write: boolean, row?: RequestRow) {
   await access(tx, org, actor, write, row?.caseId ?? undefined);
@@ -47,9 +48,7 @@ export async function emailIntakeReadiness(org: string, actor: string) {
     await access(tx, org, actor, false);
     let canConfigure = false, canReview = false;
     try {
-      await access(tx, org, actor, true);
-      await authority(tx, org, actor, "hr-compliance-approve");
-      await authority(tx, org, actor, "legal-approve");
+      await requireEmailRouteAdministrator(tx, org, actor);
       canConfigure = true;
     } catch (e) { if (!(e instanceof SeparationError)) throw e; }
     try { await requireReview(tx, org, actor, true); canReview = true; }
@@ -86,9 +85,9 @@ export async function configureEmailIntake(org: string, actor: string, raw: unkn
   const mailbox = await connectedIntakeMailbox(provider);
   if (!mailbox) throw new SeparationError("The connected Gmail address could not be verified. No route was enabled.", 409);
   return withSensitiveLifecycleFence(org, () => db.transaction(async tx => {
-    await access(tx, org, actor, true); await authority(tx, org, actor, "hr-compliance-approve");
+    await access(tx, org, actor, true); await requireEmailRouteAdministrator(tx, org, actor);
     await assertGovernanceMutationAllowed(tx, org);
-    const approval = await receipt(tx, { organizationId: org, actor, scope: "legal-approve", reference, generation: 1 });
+    const approval = await receipt(tx, { organizationId: org, actor, reference, generation: 1 });
     const now = new Date();
     if (input.routeId !== undefined) {
       const [old] = await tx.select().from(hroMailboxIngress).where(and(eq(hroMailboxIngress.organizationId, org), eq(hroMailboxIngress.id, text(input.routeId, "routeId")))).for("update");
@@ -122,7 +121,7 @@ export async function updateEmailRoute(org: string, actor: string, id: string, r
   const input = object(raw);
   const mailbox = input.enabled === true ? await connectedIntakeMailbox(provider) : null;
   return withSensitiveLifecycleFence(org, () => db.transaction(async tx => {
-    await access(tx, org, actor, true); await authority(tx, org, actor, "hr-compliance-approve"); await authority(tx, org, actor, "legal-approve");
+    await access(tx, org, actor, true); await requireEmailRouteAdministrator(tx, org, actor);
     const [route] = await tx.select().from(hroMailboxIngress).where(and(eq(hroMailboxIngress.id, id), eq(hroMailboxIngress.organizationId, org))).for("update");
     if (!route) throw new SeparationError("Route not found.", 404);
     if (route.revision !== input.expectedVersion) throw new SeparationError("Route changed. Reload before updating.", 409);

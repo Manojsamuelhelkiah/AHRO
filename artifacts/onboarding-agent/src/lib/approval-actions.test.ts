@@ -43,7 +43,7 @@ test('a failed current-authority preflight disables approval actions', () => {
     loading: true,
   });
   assert.equal(unknownRole.canAct, false);
-  assert.match(unknownRole.reason ?? '', /Checking current specialist authority/);
+  assert.match(unknownRole.reason ?? '', /Checking current decision permissions/);
 });
 
 test('only a current scoped capability enables a valid pending review', () => {
@@ -84,7 +84,7 @@ test('missing or invalid approval versions fail closed', () => {
 test('403, conflict, and network failures produce explicit review notices', () => {
   assert.match(
     getApprovalMutationErrorMessage({ status: 403 }),
-    /API 403.*current governance-approved specialist assignment/,
+    /API 403.*Current case-scoped decision and flow permissions/,
   );
   assert.equal(
     getApprovalMutationErrorMessage({ status: 409 }),

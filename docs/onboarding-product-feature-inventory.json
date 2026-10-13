@@ -234,7 +234,7 @@
       "guideTopic": "handoffs",
       "scenarioIds": [],
       "verification": "manual",
-      "availabilityNote": "Assignment does not grant specialist decision authority.",
+      "availabilityNote": "Assignment is routing metadata, not a permission grant or professional qualification.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
     },
@@ -280,13 +280,13 @@
         "/workforce-transfers/:id"
       ],
       "roles": [
-        "verified specialist",
+        "named authorized reviewer",
         "transfer operator"
       ],
       "guideTopic": "transfers",
       "scenarioIds": [],
       "verification": "manual",
-      "availabilityNote": "Role membership is distinct from verified specialist authority.",
+      "availabilityNote": "Current scoped permissions and explicit reviews govern decisions; role labels are not qualifications.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
     },
@@ -387,7 +387,7 @@
       ],
       "roles": [
         "owner/admin",
-        "verified specialist"
+        "named authorized reviewer"
       ],
       "guideTopic": "policy",
       "scenarioIds": [],
@@ -404,7 +404,7 @@
         "/policy-review"
       ],
       "roles": [
-        "verified specialist",
+        "named authorized reviewer",
         "owner/admin"
       ],
       "guideTopic": "policy",
@@ -532,7 +532,7 @@
       "guideTopic": "administration",
       "scenarioIds": [],
       "verification": "manual",
-      "availabilityNote": "Membership changes do not imply specialist authority.",
+      "availabilityNote": "Membership changes do not grant decision permissions or establish qualifications.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
     },
@@ -574,7 +574,7 @@
     },
     {
       "id": "PFC-032",
-      "name": "Verified specialist authority controls",
+      "name": "Permission-based human decision controls",
       "source": "product capability",
       "entryPoints": [
         "/settings",
@@ -582,13 +582,13 @@
         "/workforce-transfers"
       ],
       "roles": [
-        "verified specialist",
+        "named authorized reviewer",
         "owner/admin"
       ],
       "guideTopic": "handoffs",
       "scenarioIds": [],
       "verification": "manual",
-      "availabilityNote": "Authority is tenant-specific and must be independently evidenced.",
+      "availabilityNote": "Named members need current client/case permissions and explicit version-bound human review. Ordinary access does not establish professional qualifications. Legacy specialist receipts are history only.",
       "referenceCoverage": "mapped",
       "executionAssertion": "not-executed"
     },
@@ -790,7 +790,7 @@
       "summary": "Membership, assignment and mailbox personas are not professional authority.",
       "instructions": [
         "Review the exact case and evidence revision.",
-        "Check current specialist role, jurisdiction and scope.",
+        "Check current client/case permissions, jurisdiction and evidence revision; reviewer roles are routing metadata.",
         "Record the accountable decision without inventing external completion."
       ],
       "evidence": [
@@ -1044,7 +1044,7 @@
         "Independent provider-verified audit receipt"
       ],
       "exceptions": [
-        "Tenant administration is not specialist authority.",
+        "Tenant membership alone is not decision permission; ordinary access is not professional qualification.",
         "Restricted history and protected effect journals are retained; retirement does not purge records."
       ],
       "featureIds": [

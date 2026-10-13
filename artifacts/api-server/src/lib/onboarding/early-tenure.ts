@@ -23,6 +23,7 @@ import {
 } from "@workspace/db/schema";
 import { sendAdministrativeEmail } from "./channels";
 import { hasCurrentAuthorityScope, roleMayExerciseScope } from "./decision-authority";
+import { hasHumanPermissions } from "../human-permissions";
 import { isSyntheticOfflineCase } from "./synthetic-offline";
 import { isRetiredControllerCase } from "./controller-retirement";
 import { type OnboardingDbTransaction } from "./settings";
@@ -99,7 +100,7 @@ export function validateEarlyTenurePolicy(input: unknown): OnbEarlyTenurePolicy 
     bad("policy.probationLengthDays must be an integer from 1 to 730; 30/60/90 check-ins do not define probation.");
   }
   if (typeof body.decisionAuthorityScope !== "string" || !DECISION_SCOPES.includes(body.decisionAuthorityScope as OnbAuthorityScope)) {
-    bad("policy.decisionAuthorityScope must be an existing non-administrative authority scope.");
+    bad("policy.decisionAuthorityScope must be a supported non-administrative reviewer routing label. The retired administrative label must be explicitly replaced.");
   }
   if (!Array.isArray(body.obligations) || !body.obligations.length || body.obligations.length > 30) bad("policy.obligations must contain 1–30 obligations.");
   const obligationKeys = new Set<string>();
@@ -203,9 +204,9 @@ export async function saveEarlyTenurePolicy(input: {
   if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 0) bad("expectedVersion must be a non-negative integer.");
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
     await policyLock(tx, input.organizationId);
-    if (!(await hasCurrentAuthorityScope(tx, {
-      organizationId: input.organizationId, actorUserId: input.actorUserId, scope: "authority-administration",
-    }))) throw new Error("Current governance-approved authority-administration assignment is required to publish early-tenure policy.");
+    if (!(await hasHumanPermissions(tx, {
+      organizationId: input.organizationId, actorUserId: input.actorUserId, requiredKeys: ["tool.policy.manage"],
+    }))) throw new Error("Current policy-management permission is required to publish early-tenure policy.");
     const [current] = await tx.select().from(onbEarlyTenurePolicyVersions)
       .where(eq(onbEarlyTenurePolicyVersions.organizationId, input.organizationId))
       .orderBy(desc(onbEarlyTenurePolicyVersions.version)).limit(1).for("update");
@@ -234,8 +235,9 @@ async function requireCaseAuthority(tx: OnboardingDbTransaction, organizationId:
   // content. Retention coverage/holds must allow their collection before any
   // durable early-tenure write occurs.
   await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, { organizationId, caseId });
-  if (!(await hasCurrentAuthorityScope(tx, { organizationId, actorUserId, scope: "hr-compliance-approve", caseId }))) {
-    throw new Error("Current governance-approved HR compliance authority is required.");
+  if (!(await hasHumanPermissions(tx, { organizationId, actorUserId, caseId,
+    requiredKeys: ["flow.case.edit", "data.case.profile.edit"] }))) {
+    throw new Error("Current case-flow and profile edit permissions are required.");
   }
   return c;
 }
@@ -251,8 +253,9 @@ async function requireCaseSensitiveReadAuthority(
   )).for("update");
   if (!c) throw new Error("Case not found.");
   if (isSyntheticOfflineCase(c)) throw new Error("Synthetic/offline cases do not expose early-tenure evidence.");
-  if (!(await hasCurrentAuthorityScope(tx, { organizationId, actorUserId, scope: "hr-compliance-approve", caseId }))) {
-    throw new Error("Current governance-approved HR compliance authority is required.");
+  if (!(await hasHumanPermissions(tx, { organizationId, actorUserId, caseId,
+    requiredKeys: ["flow.case.read", "data.case.profile.read"] }))) {
+    throw new Error("Current case-flow and profile read permissions are required.");
   }
   return c;
 }
@@ -268,22 +271,7 @@ async function currentAuthorityBinding(
   if (!(await hasCurrentAuthorityScope(tx, {
     organizationId: c.organizationId, actorUserId, scope, caseId: c.id,
   }))) return null;
-  const now = new Date();
-  const rows = await tx.select().from(onbAuthorityAssignments).where(and(
-    eq(onbAuthorityAssignments.organizationId, c.organizationId),
-    eq(onbAuthorityAssignments.personUserId, actorUserId),
-    eq(onbAuthorityAssignments.status, "active"),
-    lte(onbAuthorityAssignments.validFrom, now),
-    sql`(${onbAuthorityAssignments.validUntil} is null or ${onbAuthorityAssignments.validUntil} > ${now})`,
-  )).for("update");
-  const row = rows.find((item) =>
-    item.scopes.includes(scope) &&
-    roleMayExerciseScope(item.authorityRole, scope) &&
-    (item.caseId === null || item.caseId === c.id) &&
-    (!item.siteScope || item.siteScope === c.geography) &&
-    (!item.jurisdictionScope || item.jurisdictionScope === c.legalEntity)
-  );
-  return row ? { id: row.id, revision: row.revision } : null;
+  return { id: `human-permission/v1:${actorUserId}`, revision: 1 };
 }
 
 export async function enrollEarlyTenureCase(input: {

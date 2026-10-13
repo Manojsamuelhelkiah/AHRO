@@ -23,18 +23,14 @@ import {
   verifyGovernanceAuthority,
 } from "../lib/onboarding/governance";
 import { GovernanceDispatchBlockedError } from "../lib/onboarding/governance-dispatch";
-import { getGovernanceAuthorityOptions, GovernanceDirectoryUnavailableError } from "../lib/onboarding/governance-authority-options";
-import { GetGovernanceAuthorityOptionsResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
-
-router.get("/governance/authority-options", async (req, res, next) => {
-  try {
-    res.json(GetGovernanceAuthorityOptionsResponse.parse(await getGovernanceAuthorityOptions(getOrganizationId(req), actor(req))));
-  } catch (error) {
-    if (clientError(error, res)) return;
-    next(error);
+router.use((req, res, next) => {
+  if (/^\/governance\/(?:assignments|authority-bootstrap|authority-options)(?:\/|$)/i.test(req.path)) {
+    res.status(410).json({ code: "SPECIALIST_AUTHORITY_RETIRED", message: "Specialist authority management is retired. Use ordinary access governance; historical records are retained." });
+    return;
   }
+  next();
 });
 
 function requestBody(value: unknown): Record<string, unknown> {
@@ -50,10 +46,6 @@ function actor(req: { authUserId?: string; organizationRole?: "owner" | "admin" 
 }
 
 function clientError(error: unknown, res: Response): boolean {
-  if (error instanceof GovernanceDirectoryUnavailableError) {
-    res.status(503).json({ message: error.message });
-    return true;
-  }
   if (error instanceof GovernanceValidationError) {
     res.status(400).json({ message: error.message });
     return true;
