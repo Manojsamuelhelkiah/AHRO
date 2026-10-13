@@ -5,6 +5,144 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface CatalogueAgentRegistrationInput {
+  /** @minLength 1 */
+  organizationId: string;
+  /** @minLength 1 */
+  catalogueKey: string;
+  /** @minLength 1 */
+  catalogueVersion: string;
+  /** @minLength 1 */
+  ownerUserId: string;
+  requestId: string;
+  /** @minimum 0 */
+  expectedBindingVersion: number;
+  replaceExisting?: boolean;
+  /** @minLength 1 */
+  agentId?: string;
+  /** @minimum 1 */
+  expectedPrincipalVersion?: number;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name?: string;
+}
+
+export type CatalogueBindingState = typeof CatalogueBindingState[keyof typeof CatalogueBindingState];
+
+
+export const CatalogueBindingState = {
+  registered: 'registered',
+  'principal-unavailable': 'principal-unavailable',
+  'owner-unavailable': 'owner-unavailable',
+  'review-required': 'review-required',
+} as const;
+
+export interface CatalogueBinding {
+  catalogueKey: string;
+  catalogueVersion: string;
+  agentId: string;
+  principalVersion: number;
+  version: number;
+  state?: CatalogueBindingState;
+}
+
+export interface CatalogueRegistrationResult {
+  /** Whether this is the first binding for the catalogue role. */
+  created: boolean;
+  /** Whether this request created a new principal rather than binding an existing identity. */
+  createdPrincipal: boolean;
+  binding: CatalogueBinding;
+}
+
+export type AgentCatalogueEntryMappingsItem = {
+  intentKey: string;
+  intentName: string;
+  intentVersion: string;
+  sourceVersion: string;
+  provenance: string[];
+  reviewStatus: string;
+  rationale: string;
+};
+
+export interface AgentCatalogueEntry {
+  key: string;
+  name: string;
+  version: string;
+  kind: string;
+  productFamilies: string[];
+  responsibility: string;
+  prerequisites: string[];
+  operationalCapability: string;
+  mappings: AgentCatalogueEntryMappingsItem[];
+}
+
+export type AgentCataloguePrincipalsItem = {
+  id: string;
+  name: string;
+  ownerUserId: string;
+  status: string;
+  version: number;
+};
+
+export type AgentCatalogueCustomMappingsItem = {
+  intentKey: string;
+  name: string;
+  sourceVersion: string;
+  status: string;
+  reviewStatus: string;
+};
+
+/**
+ * Missing means no directory profile; unavailable means directory lookup failed. Metadata conveys no authority.
+ */
+export type MemberIdentityResolution = typeof MemberIdentityResolution[keyof typeof MemberIdentityResolution];
+
+
+export const MemberIdentityResolution = {
+  resolved: 'resolved',
+  missing: 'missing',
+  unavailable: 'unavailable',
+  internal: 'internal',
+} as const;
+
+/**
+ * Internal classification uses the exact trusted smoke identity, never ID prefixes or profile names.
+ */
+export type MemberAccountKind = typeof MemberAccountKind[keyof typeof MemberAccountKind];
+
+
+export const MemberAccountKind = {
+  human: 'human',
+  internal: 'internal',
+} as const;
+
+export interface AccessOrganizationMember {
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  email?: string | null;
+  identityResolution?: MemberIdentityResolution;
+  accountKind?: MemberAccountKind;
+  clerkUserId: string;
+  role: string;
+}
+
+export interface AgentCatalogue {
+  organizationId: string;
+  clientName: string;
+  version: string;
+  canManage: boolean;
+  entries: AgentCatalogueEntry[];
+  registrations: CatalogueBinding[];
+  principals: AgentCataloguePrincipalsItem[];
+  owners: AccessOrganizationMember[];
+  customMappings: AgentCatalogueCustomMappingsItem[];
+  runtimeCapabilities: string[];
+  runtimeNotice: string;
+}
+
 export type CatalogMappingSource = typeof CatalogMappingSource[keyof typeof CatalogMappingSource];
 
 
@@ -2441,30 +2579,6 @@ export const OrganizationMemberRole = {
   member: 'member',
 } as const;
 
-/**
- * Missing means no directory profile; unavailable means directory lookup failed. Metadata conveys no authority.
- */
-export type MemberIdentityResolution = typeof MemberIdentityResolution[keyof typeof MemberIdentityResolution];
-
-
-export const MemberIdentityResolution = {
-  resolved: 'resolved',
-  missing: 'missing',
-  unavailable: 'unavailable',
-  internal: 'internal',
-} as const;
-
-/**
- * Internal classification uses the exact trusted smoke identity, never ID prefixes or profile names.
- */
-export type MemberAccountKind = typeof MemberAccountKind[keyof typeof MemberAccountKind];
-
-
-export const MemberAccountKind = {
-  human: 'human',
-  internal: 'internal',
-} as const;
-
 export interface OrganizationMember {
   /** @nullable */
   name?: string | null;
@@ -3524,17 +3638,6 @@ export interface AccessCatalogEntry {
   label: string;
   sensitivity: AccessCatalogEntrySensitivity;
   kind: AccessCatalogEntryKind;
-}
-
-export interface AccessOrganizationMember {
-  /** @nullable */
-  name?: string | null;
-  /** @nullable */
-  email?: string | null;
-  identityResolution?: MemberIdentityResolution;
-  accountKind?: MemberAccountKind;
-  clerkUserId: string;
-  role: string;
 }
 
 export type AccessAgentStatus = typeof AccessAgentStatus[keyof typeof AccessAgentStatus];

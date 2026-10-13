@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useListOnboardingAgents, getListOnboardingAgentsQueryKey, OnbAgent } from '@workspace/api-client-react';
 import { Search, Bot, Server, Globe, RotateCcw } from 'lucide-react';
+import { CatalogueSection } from './catalogue-section';
 import { Input, Button, Card, CardHeader, CardTitle, CardContent } from '@/components/ui-shared';
 
 export function AgentsPage() {
@@ -39,19 +40,26 @@ export function AgentsPage() {
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">AI Agents</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1 max-w-2xl">
-             Agents assigned to operational setup requests. Internal agents belong to this app; external agents belong to another system. The agents currently listed are simulations—not live agent executions or external integrations.
+             Catalogue roles, client-owned registered identities and simulation personas are separate. Registration is setup only, not permission approval or operational execution.
           </p>
         </div>
         <div className="relative w-full sm:w-72 shrink-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-muted)]" />
           <Input 
-             aria-label="Search AI agents"
-            placeholder="Search by name or capability..." 
+             aria-label="Search catalogue roles and simulation personas"
+            placeholder="Search role, responsibility, mapping, family..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-9 h-10 w-full bg-[var(--surface)] border-[var(--border)] focus:border-[var(--primary)]"
           />
         </div>
+      </div>
+
+      <CatalogueSection searchTerm={searchTerm} />
+
+      <div className="pt-4 border-t border-[var(--border)]">
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">Simulation personas</h2>
+        <p className="text-sm text-[var(--text-secondary)] mt-1 max-w-2xl">These are simulated personas, not registrations and not live execution.</p>
       </div>
 
       {isLoading && (
@@ -81,7 +89,7 @@ export function AgentsPage() {
       {!isLoading && !isError && filteredAgents.length === 0 && (
         <div className="flex flex-col items-center justify-center p-12 text-[var(--text-muted)] space-y-3 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] shadow-sm">
           <Bot className="h-10 w-10 opacity-20" />
-          <p className="text-sm font-medium">No agents found matching your search.</p>
+          <p className="text-sm font-medium">No simulation personas match your search.</p>
         </div>
       )}
 

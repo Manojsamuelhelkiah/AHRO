@@ -652,6 +652,10 @@ export function AccessGovernanceSettings() {
 
                 <section>
                   <SectionTitle title="Registered agents" detail="Registration records a named access identity and an accountable human owner. It does not create, deploy, connect or run an AI agent. Ownership does not grant permissions or select the initiating human. Effective access depends on current grants and the explicitly chosen initiator. Retiring a registration revokes active participation without deleting history." />
+                  <p className="mb-3 text-xs text-[var(--text-secondary)]">
+                    Use the <a href="/agents" className="font-semibold underline">Agent catalogue and registration</a> to explicitly bind a versioned domain role.
+                    Simulation personas are separate; catalogue setup never changes these principals' permissions.
+                  </p>
                   {canManage && <form className="mb-3 flex flex-wrap gap-2" onSubmit={(event) => {
                     event.preventDefault();
                     if (registeringAgent.current || !agentName.trim() || !agentOwner) return;

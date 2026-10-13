@@ -36,6 +36,7 @@ import pricingSheetsRouter from "./pricing-sheets";
 import enterpriseArchitectureRouter from "./enterprise-architecture";
 import intentRegistryRouter from "./intent-registry";
 import intentCatalogRouter from "./intent-catalog";
+import agentCatalogueRouter from "./agent-catalogue";
 import scenarioFilesRouter from "./scenario-files";
 import organizationsRouter from "./organizations";
 import candidatePublicRouter from "./candidate-public";
@@ -177,5 +178,6 @@ router.use(pricingRateSetsRouter);
 router.use(enterpriseArchitectureRouter);
 router.use(intentRegistryRouter);
 router.use(intentCatalogRouter);
+router.use(agentCatalogueRouter);
 
 export default router;

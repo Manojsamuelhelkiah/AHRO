@@ -43,6 +43,46 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /agent-catalogue:
+    get:
+      operationId: getAgentCatalogue
+      tags: [onboarding]
+      summary: Inspect versioned agent roles and permitted client setup metadata
+      responses:
+        "200":
+          description: Catalogue and current client setup; private identities omitted for non-administrators
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentCatalogue"
+  /agent-catalogue/registrations:
+    post:
+      operationId: registerCatalogueAgent
+      tags: [onboarding]
+      summary: Explicit setup only; creates no grants, memberships or execution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CatalogueAgentRegistrationInput"
+      responses:
+        "200":
+          description: Idempotent replay or explicit replacement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueRegistrationResult"
+        "201":
+          description: New role binding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueRegistrationResult"
+        "403":
+          description: Current client administration required
+        "409":
+          description: Setup conflict; reload and explicitly resolve
   /intent-catalog:
     get:
       operationId: getIntentCatalog
@@ -6884,6 +6924,112 @@ components:
         type: integer
         minimum: 1
   schemas:
+    CatalogueAgentRegistrationInput:
+      type: object
+      additionalProperties: false
+      required: [organizationId, catalogueKey, catalogueVersion, ownerUserId, requestId, expectedBindingVersion]
+      properties:
+        organizationId: { type: string, minLength: 1 }
+        catalogueKey: { type: string, minLength: 1 }
+        catalogueVersion: { type: string, minLength: 1 }
+        ownerUserId: { type: string, minLength: 1 }
+        requestId: { type: string, format: uuid }
+        expectedBindingVersion: { type: integer, minimum: 0 }
+        replaceExisting: { type: boolean }
+        agentId: { type: string, minLength: 1 }
+        expectedPrincipalVersion: { type: integer, minimum: 1 }
+        name: { type: string, minLength: 1, maxLength: 120 }
+    CatalogueBinding:
+      type: object
+      required: [catalogueKey, catalogueVersion, agentId, principalVersion, version]
+      properties:
+        catalogueKey: { type: string }
+        catalogueVersion: { type: string }
+        agentId: { type: string }
+        principalVersion: { type: integer }
+        version: { type: integer }
+        state: { type: string, enum: [registered, principal-unavailable, owner-unavailable, review-required] }
+    CatalogueRegistrationResult:
+      type: object
+      required: [created, createdPrincipal, binding]
+      properties:
+        created: { type: boolean, description: Whether this is the first binding for the catalogue role. }
+        createdPrincipal: { type: boolean, description: Whether this request created a new principal rather than binding an existing identity. }
+        binding: { $ref: "#/components/schemas/CatalogueBinding" }
+    AgentCatalogueEntry:
+      type: object
+      required: [key, name, version, kind, productFamilies, responsibility, prerequisites, mappings, operationalCapability]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        version: { type: string }
+        kind: { type: string }
+        productFamilies:
+          type: array
+          items: { type: string }
+        responsibility: { type: string }
+        prerequisites:
+          type: array
+          items: { type: string }
+        operationalCapability: { type: string }
+        mappings:
+          type: array
+          items:
+            type: object
+            required: [intentKey, intentName, intentVersion, sourceVersion, provenance, reviewStatus, rationale]
+            properties:
+              intentKey: { type: string }
+              intentName: { type: string }
+              intentVersion: { type: string }
+              sourceVersion: { type: string }
+              provenance:
+                type: array
+                items: { type: string }
+              reviewStatus: { type: string }
+              rationale: { type: string }
+    AgentCatalogue:
+      type: object
+      required: [organizationId, clientName, version, canManage, entries, registrations, principals, owners, customMappings, runtimeCapabilities, runtimeNotice]
+      properties:
+        organizationId: { type: string }
+        clientName: { type: string }
+        version: { type: string }
+        canManage: { type: boolean }
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/AgentCatalogueEntry" }
+        registrations:
+          type: array
+          items: { $ref: "#/components/schemas/CatalogueBinding" }
+        principals:
+          type: array
+          items:
+            type: object
+            required: [id, name, ownerUserId, status, version]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              ownerUserId: { type: string }
+              status: { type: string }
+              version: { type: integer }
+        owners:
+          type: array
+          items: { $ref: "#/components/schemas/AccessOrganizationMember" }
+        customMappings:
+          type: array
+          items:
+            type: object
+            required: [intentKey, name, sourceVersion, status, reviewStatus]
+            properties:
+              intentKey: { type: string }
+              name: { type: string }
+              sourceVersion: { type: string }
+              status: { type: string }
+              reviewStatus: { type: string }
+        runtimeCapabilities:
+          type: array
+          items: { type: string }
+        runtimeNotice: { type: string }
     CatalogMapping:
       type: object
       required: [source, sourceVersion, sourceKey, label, relation, definitionKeys, reviewStatus, rationale]

@@ -24,6 +24,10 @@ args = "intent-routing-smoke"
 task = "workflow.run"
 args = "onboarding-demo-browser"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "agent-catalogue-setup"
+
 [[workflows.workflow]]
 name = "intent-routing-smoke"
 author = "agent"
@@ -42,6 +46,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pnpm test:browser-regression"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "agent-catalogue-setup"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server run test:agent-catalogue && pnpm run typecheck"
 
 [workflows.workflow.metadata]
 isValidation = true

@@ -48,6 +48,7 @@ import type {
   ActualsOverlayInput,
   ActualsOverlayRecord,
   ActualsValidationResult,
+  AgentCatalogue,
   AgentInvocationAuditForbidden,
   AgentInvocationAuditList,
   AgentInvocationAuthenticationError,
@@ -56,6 +57,8 @@ import type {
   AgentInvocationFailure,
   AgentInvocationInput,
   AgentInvocationResponse,
+  CatalogueAgentRegistrationInput,
+  CatalogueRegistrationResult,
   ClientOperationsSettings,
   ClientOperationsUpdate,
   ConfigureHrPolicyDrift200,
@@ -427,6 +430,154 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetAgentCatalogueUrl = () => {
+
+
+
+
+  return `/api/agent-catalogue`
+}
+
+/**
+ * @summary Inspect versioned agent roles and permitted client setup metadata
+ */
+export const getAgentCatalogue = async ( options?: RequestInit): Promise<AgentCatalogue> => {
+
+  return customFetch<AgentCatalogue>(getGetAgentCatalogueUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentCatalogueQueryKey = () => {
+    return [
+    `/api/agent-catalogue`
+    ] as const;
+    }
+
+
+export const getGetAgentCatalogueQueryOptions = <TData = Awaited<ReturnType<typeof getAgentCatalogue>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentCatalogue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentCatalogueQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentCatalogue>>> = ({ signal }) => getAgentCatalogue({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentCatalogue>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAgentCatalogueQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentCatalogue>>>
+export type GetAgentCatalogueQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Inspect versioned agent roles and permitted client setup metadata
+ */
+
+export function useGetAgentCatalogue<TData = Awaited<ReturnType<typeof getAgentCatalogue>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentCatalogue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAgentCatalogueQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRegisterCatalogueAgentUrl = () => {
+
+
+
+
+  return `/api/agent-catalogue/registrations`
+}
+
+/**
+ * @summary Explicit setup only; creates no grants, memberships or execution
+ */
+export const registerCatalogueAgent = async (catalogueAgentRegistrationInput: CatalogueAgentRegistrationInput, options?: RequestInit): Promise<CatalogueRegistrationResult> => {
+
+  return customFetch<CatalogueRegistrationResult>(getRegisterCatalogueAgentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(catalogueAgentRegistrationInput)
+  }
+);}
+
+
+
+
+
+export const getRegisterCatalogueAgentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerCatalogueAgent>>, TError,{data: BodyType<CatalogueAgentRegistrationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerCatalogueAgent>>, TError,{data: BodyType<CatalogueAgentRegistrationInput>}, TContext> => {
+
+const mutationKey = ['registerCatalogueAgent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerCatalogueAgent>>, {data: BodyType<CatalogueAgentRegistrationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerCatalogueAgent(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterCatalogueAgentMutationResult = NonNullable<Awaited<ReturnType<typeof registerCatalogueAgent>>>
+    export type RegisterCatalogueAgentMutationBody = BodyType<CatalogueAgentRegistrationInput>
+    export type RegisterCatalogueAgentMutationError = ErrorType<void>
+
+    /**
+ * @summary Explicit setup only; creates no grants, memberships or execution
+ */
+export const useRegisterCatalogueAgent = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerCatalogueAgent>>, TError,{data: BodyType<CatalogueAgentRegistrationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerCatalogueAgent>>,
+        TError,
+        {data: BodyType<CatalogueAgentRegistrationInput>},
+        TContext
+      > => {
+      return useMutation(getRegisterCatalogueAgentMutationOptions(options));
+    }
 
 export const getGetIntentCatalogUrl = () => {
 

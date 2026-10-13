@@ -375,6 +375,33 @@ export const accessGovernanceHistory = pgTable("access_governance_history", {
 ]);
 
 export type AccessAgentRow = typeof accessAgents.$inferSelect;
+/** Setup metadata only; never consulted by access evaluation or dispatch. */
+export const agentCatalogueBindings = pgTable("agent_catalogue_bindings", {
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id, { onDelete: "cascade" }),
+  catalogueKey: text("catalogue_key").notNull(),
+  catalogueVersion: text("catalogue_version").notNull(),
+  agentId: text("agent_id").notNull(),
+  principalVersion: integer("principal_version").notNull(),
+  version: integer("version").notNull().default(1),
+  requestId: text("request_id").notNull(),
+  requestDigest: text("request_digest").notNull(),
+  actorUserId: text("actor_user_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  primaryKey({ columns: [t.organizationId, t.catalogueKey] }),
+  unique("agent_catalogue_bindings_principal_unique").on(t.organizationId, t.agentId),
+  unique("agent_catalogue_bindings_request_unique").on(t.organizationId, t.requestId),
+  foreignKey({ columns: [t.organizationId, t.agentId], foreignColumns: [accessAgents.organizationId, accessAgents.id] }),
+  check("agent_catalogue_bindings_versions_check", sql`${t.version} > 0 and ${t.principalVersion} > 0`),
+]);
+/** Retains request identities even after explicit rebindings. */
+export const agentCatalogueSetupReceipts = pgTable("agent_catalogue_setup_receipts", {
+  organizationId: text("organization_id").notNull().references(() => organizationsTable.id, { onDelete: "cascade" }),
+  requestId: text("request_id").notNull(),
+  requestDigest: text("request_digest").notNull(),
+  catalogueKey: text("catalogue_key").notNull(),
+  bindingVersion: integer("binding_version").notNull(),
+}, t => [primaryKey({ columns: [t.organizationId, t.requestId] })]);
 export type AccessUserGroupRow = typeof accessUserGroups.$inferSelect;
 export type AccessSecurityGroupPolicyRow = typeof accessSecurityGroupPolicies.$inferSelect;
 export type AccessNamedGrantRow = typeof accessNamedGrants.$inferSelect;

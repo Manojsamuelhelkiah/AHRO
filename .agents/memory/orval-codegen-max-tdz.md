@@ -23,6 +23,16 @@ The same ordering failure can affect referenced string `maxLength` constraints, 
 
 **How to apply:** Smoke-import the generated Zod source with the same source loader used by browser regression after code generation. Do not fix ordering by hand in generated files.
 
+Infer generated contracts with the same Zod import path that the generator uses,
+not automatically with the application's `zod/v4` import.
+
+**Why:** This workspace's generated validators use the root `zod` entrypoint;
+applying `zod/v4` inference to them can silently produce `unknown` types despite
+the schemas executing correctly. App-native validators can still use v4.
+
+**How to apply:** For tests or handlers that derive types from generated schemas,
+use the matching root Zod type helpers or the schemas' own parse return types.
+
 ## Validate the contract before generation
 
 Parse OpenAPI YAML before running Orval, especially after adding deprecation or

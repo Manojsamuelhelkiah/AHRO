@@ -146,6 +146,8 @@ export const tenantSafeguards = [
   // Access governance records are tenant-scoped; join tables inherit tenant
   // ownership through their composite parent FKs rather than direct org FKs.
   { table: "access_agents", phaseB: false },
+  { table: "agent_catalogue_bindings", phaseB: false },
+  { table: "agent_catalogue_setup_receipts", phaseB: false },
   { table: "access_user_groups", phaseB: false },
   { table: "access_user_group_members", phaseB: false, requiresOrganizationForeignKey: false },
   { table: "access_security_groups", phaseB: false },
@@ -181,6 +183,7 @@ export const phaseBTenantTables = tenantSafeguards
   .map(({ table }) => table);
 
 export const expectedForeignKeys = [
+  { table: "agent_catalogue_bindings", columns: ["organization_id", "agent_id"], referencedTable: "access_agents", referencedColumns: ["organization_id", "id"] },
   ...["employee_vault_documents", "employee_vault_checks", "employee_vault_audit", "employee_vault_requests"].map(table => ({
     table, columns: ["profile_id"], referencedTable: "employee_vault_profiles", referencedColumns: ["id"],
   })),

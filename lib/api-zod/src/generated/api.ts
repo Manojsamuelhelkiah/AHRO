@@ -9,6 +9,110 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Inspect versioned agent roles and permitted client setup metadata
+ */
+export const GetAgentCatalogueResponse = zod.object({
+  "organizationId": zod.string(),
+  "clientName": zod.string(),
+  "version": zod.string(),
+  "canManage": zod.boolean(),
+  "entries": zod.array(zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "version": zod.string(),
+  "kind": zod.string(),
+  "productFamilies": zod.array(zod.string()),
+  "responsibility": zod.string(),
+  "prerequisites": zod.array(zod.string()),
+  "operationalCapability": zod.string(),
+  "mappings": zod.array(zod.object({
+  "intentKey": zod.string(),
+  "intentName": zod.string(),
+  "intentVersion": zod.string(),
+  "sourceVersion": zod.string(),
+  "provenance": zod.array(zod.string()),
+  "reviewStatus": zod.string(),
+  "rationale": zod.string()
+}))
+})),
+  "registrations": zod.array(zod.object({
+  "catalogueKey": zod.string(),
+  "catalogueVersion": zod.string(),
+  "agentId": zod.string(),
+  "principalVersion": zod.number(),
+  "version": zod.number(),
+  "state": zod.enum(['registered', 'principal-unavailable', 'owner-unavailable', 'review-required']).optional()
+})),
+  "principals": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "ownerUserId": zod.string(),
+  "status": zod.string(),
+  "version": zod.number()
+})),
+  "owners": zod.array(zod.object({
+  "name": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "identityResolution": zod.enum(['resolved', 'missing', 'unavailable', 'internal']).optional().describe('Missing means no directory profile; unavailable means directory lookup failed. Metadata conveys no authority.'),
+  "accountKind": zod.enum(['human', 'internal']).optional().describe('Internal classification uses the exact trusted smoke identity, never ID prefixes or profile names.'),
+  "clerkUserId": zod.string(),
+  "role": zod.string()
+})),
+  "customMappings": zod.array(zod.object({
+  "intentKey": zod.string(),
+  "name": zod.string(),
+  "sourceVersion": zod.string(),
+  "status": zod.string(),
+  "reviewStatus": zod.string()
+})),
+  "runtimeCapabilities": zod.array(zod.string()),
+  "runtimeNotice": zod.string()
+})
+
+
+/**
+ * @summary Explicit setup only; creates no grants, memberships or execution
+ */
+
+
+
+
+export const registerCatalogueAgentBodyExpectedBindingVersionMin = 0;
+
+
+
+export const registerCatalogueAgentBodyNameMax = 120;
+
+
+
+export const RegisterCatalogueAgentBody = zod.object({
+  "organizationId": zod.string().min(1),
+  "catalogueKey": zod.string().min(1),
+  "catalogueVersion": zod.string().min(1),
+  "ownerUserId": zod.string().min(1),
+  "requestId": zod.string().uuid(),
+  "expectedBindingVersion": zod.number().min(registerCatalogueAgentBodyExpectedBindingVersionMin),
+  "replaceExisting": zod.boolean().optional(),
+  "agentId": zod.string().min(1).optional(),
+  "expectedPrincipalVersion": zod.number().min(1).optional(),
+  "name": zod.string().min(1).max(registerCatalogueAgentBodyNameMax).optional()
+})
+
+export const RegisterCatalogueAgentResponse = zod.object({
+  "created": zod.boolean().describe('Whether this is the first binding for the catalogue role.'),
+  "createdPrincipal": zod.boolean().describe('Whether this request created a new principal rather than binding an existing identity.'),
+  "binding": zod.object({
+  "catalogueKey": zod.string(),
+  "catalogueVersion": zod.string(),
+  "agentId": zod.string(),
+  "principalVersion": zod.number(),
+  "version": zod.number(),
+  "state": zod.enum(['registered', 'principal-unavailable', 'owner-unavailable', 'review-required']).optional()
+})
+})
+
+
+/**
  * @summary Read the scoped operational catalog; never authorizes execution
  */
 export const GetIntentCatalogResponse = zod.object({

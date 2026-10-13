@@ -8,6 +8,7 @@
 - [Orval numeric-constraint TDZ](orval-codegen-max-tdz.md) — referenced numeric constraints can break generated Zod initialization; validate generated output and prefer app-side ranges.
 - [Reasoning model token budget](reasoning-model-token-budget.md) — gpt-5 models return empty content when max_completion_tokens is too small; add ~+2500 buffer.
 - [DB schema reconciliation](db-schema-drift.md) — post-merge DB updates must be non-interactive, migration-ledger-backed, and verified against a schema rebuilt from migrations.
+- [Transaction query pool safety](transaction-query-pool-safety.md) — eligibility reads must reuse the tenant-locked connection; pooled helper queries can deadlock under competing requests.
 - [Monitor alert dedup must be durable](monitor-alert-dedup.md) — one-alert-per-outage state belongs in the DB, not process memory; failed sub-requests must fail the poll.
 - [Stale composite declarations](stale-composite-decls.md) — `tsc --noEmit` reads workspace libs' built dist d.ts; use `tsc -b` or phantom type errors contradict the source.
 - [Email as a status channel](email-status-channel.md) — inbound email must pass a sender allowlist before changing state; apply first then record the message id; guard on current status+mode.
