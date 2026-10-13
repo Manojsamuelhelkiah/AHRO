@@ -220,14 +220,18 @@ export function CasesPage() {
     request: { headers: organizationId ? { 'x-organization-id': organizationId } : {} },
     query: {
       queryKey: [...getListOnboardingCasesQueryKey(), organizationId],
+      staleTime: 0,
+      refetchOnMount: 'always',
+      retry: false,
       refetchInterval: (query: any) => {
         const active = query?.state?.data?.some((c: any) => !c.controllerRetired && !c.offlineSample && c.orchestrationStatus !== 'completed' && c.orchestrationStatus !== 'done');
-        return active ? 5000 : false;
+        // Offline-only lists still need fresh read permissions and revocations.
+        return active ? 5000 : 30_000;
       }
     }
   });
   const [showHistory, setShowHistory] = useState(false);
-  const cases = caseRows ? casesForList(caseRows, showHistory) : undefined;
+  const cases = !isError && caseRows ? casesForList(caseRows, showHistory) : undefined;
   const [showNew, setShowNew] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
   const [showStandardIntake, setShowStandardIntake] = useState(false);

@@ -555,6 +555,23 @@ test("evidence and BGV lists are tenant scoped", async () => {
   assert.equal((await call(`/onboarding/cases/${caseA}/bgv`, orgB)).status, 404);
 });
 
+test("batch list and case detail apply identical independent sensitive authority and redaction", async () => {
+  for (const actor of [user, allAccessUser, identityOnlyUser, medicalOnlyUser, groupOnlyUser]) {
+    const headers = { "x-test-user": actor };
+    const listResponse = await call("/onboarding/cases", orgA, { headers });
+    assert.equal(listResponse.status, 200);
+    const listed = await listResponse.json() as { id: number }[];
+    const detailResponse = await call(`/onboarding/cases/${caseA}`, orgA, { headers });
+    const listCase = listed.find(row => row.id === caseA);
+    if (detailResponse.status === 403) {
+      assert.equal(listCase, undefined);
+    } else {
+      assert.equal(detailResponse.status, 200);
+      assert.deepEqual(listCase, await detailResponse.json(), `list/detail mismatch for ${actor}`);
+    }
+  }
+});
+
 test("document-review and readiness keys supplement specialist, case, and lifecycle gates", async () => {
   const noDocumentRead = await call(`/onboarding/cases/${caseA}/evidence`, orgA, {
     headers: { "x-test-user": otherTenantUser },

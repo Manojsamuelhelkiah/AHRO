@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { onbCandidateUploads, onbDocuments } from "@workspace/db";
 import type { OnboardingDbTransaction } from "./settings";
 import { documentMalwareGateSql } from "./document-malware-gate";
@@ -18,8 +18,18 @@ export async function latestRequiredUploadMalwareBlockers(
   organizationId: string,
   caseId: number,
 ): Promise<number[]> {
+  return (await requiredUploadMalwareBlockersForCases(tx, organizationId, [caseId])).get(caseId) ?? [];
+}
+
+/** Display-only batch read. Mutations still require the caller's case lock. */
+export async function requiredUploadMalwareBlockersForCases(
+  tx: OnboardingDbTransaction,
+  organizationId: string,
+  caseIds: readonly number[],
+): Promise<Map<number, number[]>> {
+  if (!caseIds.length) return new Map();
   const blocked = await tx
-    .select({ uploadId: onbCandidateUploads.id })
+    .select({ uploadId: onbCandidateUploads.id, caseId: onbCandidateUploads.caseId })
     .from(onbCandidateUploads)
     .innerJoin(
       onbDocuments,
@@ -31,7 +41,7 @@ export async function latestRequiredUploadMalwareBlockers(
     )
     .where(and(
       eq(onbCandidateUploads.organizationId, organizationId),
-      eq(onbCandidateUploads.caseId, caseId),
+      inArray(onbCandidateUploads.caseId, [...caseIds]),
       eq(onbDocuments.required, true),
       // A document is represented by its newest upload only. The same
       // predicate is also part of documentMalwareGateSql; keeping it here
@@ -46,5 +56,11 @@ export async function latestRequiredUploadMalwareBlockers(
       sql`not (${documentMalwareGateSql()})`,
     ));
 
-  return blocked.map(({ uploadId }) => uploadId);
+  const result = new Map<number, number[]>();
+  for (const { uploadId, caseId } of blocked) {
+    const ids = result.get(caseId) ?? [];
+    ids.push(uploadId);
+    result.set(caseId, ids);
+  }
+  return result;
 }

@@ -116,6 +116,109 @@ export class AccessGovernanceDeniedError extends Error {
 type AccessGovernanceTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type PrincipalSubject = { principalType: "human" | "agent"; principalId: string };
 
+/** Request-local database inputs, never a permission cache. */
+type AccessReadBatch = {
+  now: Date;
+  cases: Set<number>;
+  members: Set<string>;
+  agents: (typeof accessAgents.$inferSelect)[];
+  memberships: (typeof accessUserGroupMembers.$inferSelect)[];
+  userGroups: (typeof accessUserGroups.$inferSelect)[];
+  groupLinks: (typeof accessSecurityGroupUserGroups.$inferSelect)[];
+  directLinks: (typeof accessPrincipalSecurityGroupAttachments.$inferSelect)[];
+  securityGroups: (typeof accessSecurityGroups.$inferSelect)[];
+  attachments: (typeof accessSecurityGroupAttachments.$inferSelect)[];
+  policies: (typeof accessSecurityGroupPolicies.$inferSelect)[];
+  grants: (typeof accessNamedGrants.$inferSelect)[];
+};
+
+function matchesCaseScope(row: { scope: string; caseId: number | null }, caseId?: number) {
+  return row.scope === "tenant" || (caseId !== undefined && row.scope === "case" && row.caseId === caseId);
+}
+
+/**
+ * Load current tenant-scoped inputs once, then use the ordinary evaluator for
+ * each case. A repeatable-read transaction prevents mixed policy generations.
+ * No caller-supplied ownership or precomputed permission is trusted.
+ */
+export async function resolveEffectiveAccessForCases(
+  input: Omit<ResolveEffectiveAccessInput, "caseId">,
+  caseIds: readonly number[],
+): Promise<Map<number, EffectiveAccess>> {
+  const ids = [...new Set(caseIds)];
+  if (!ids.length) return new Map();
+  return db.transaction(async (tx) => {
+    const now = new Date();
+    const live = (column: AnyColumn) => or(isNull(column), gt(column, now))!;
+    const scope = (table: { scope: AnyColumn; caseId: AnyColumn }) =>
+      or(eq(table.scope, "tenant"), and(eq(table.scope, "case"), inArray(table.caseId, ids)))!;
+    const principals = [...new Set([input.principalId, input.initiatorUserId].filter((id): id is string => Boolean(id)))];
+    const cases = await tx.select({ id: onbCases.id }).from(onbCases).where(and(
+      eq(onbCases.organizationId, input.organizationId), inArray(onbCases.id, ids),
+    ));
+    const agents = input.principalType === "agent" ? await tx.select().from(accessAgents).where(and(
+      eq(accessAgents.organizationId, input.organizationId), eq(accessAgents.id, input.principalId),
+      eq(accessAgents.status, "active"), isNull(accessAgents.revokedAt),
+    )) : [];
+    const memberships = await tx.select().from(accessUserGroupMembers).where(and(
+      eq(accessUserGroupMembers.organizationId, input.organizationId),
+      inArray(accessUserGroupMembers.principalId, principals), eq(accessUserGroupMembers.status, "active"),
+      isNull(accessUserGroupMembers.revokedAt), live(accessUserGroupMembers.expiresAt),
+    ));
+    const groupIds = [...new Set(memberships.map(row => row.groupId))];
+    const userGroups = groupIds.length ? await tx.select().from(accessUserGroups).where(and(
+      eq(accessUserGroups.organizationId, input.organizationId), inArray(accessUserGroups.id, groupIds),
+      eq(accessUserGroups.status, "active"),
+    )) : [];
+    const groupLinks = groupIds.length ? await tx.select().from(accessSecurityGroupUserGroups).where(and(
+      eq(accessSecurityGroupUserGroups.organizationId, input.organizationId),
+      inArray(accessSecurityGroupUserGroups.userGroupId, groupIds),
+      eq(accessSecurityGroupUserGroups.status, "active"), live(accessSecurityGroupUserGroups.expiresAt),
+    )) : [];
+    const directLinks = await tx.select().from(accessPrincipalSecurityGroupAttachments).where(and(
+      eq(accessPrincipalSecurityGroupAttachments.organizationId, input.organizationId),
+      inArray(accessPrincipalSecurityGroupAttachments.principalId, principals),
+      eq(accessPrincipalSecurityGroupAttachments.status, "active"),
+      isNull(accessPrincipalSecurityGroupAttachments.revokedAt), live(accessPrincipalSecurityGroupAttachments.expiresAt),
+      scope(accessPrincipalSecurityGroupAttachments),
+    ));
+    const securityGroupIds = [...new Set([...groupLinks, ...directLinks].map(row => row.securityGroupId))];
+    const securityGroups = securityGroupIds.length ? await tx.select().from(accessSecurityGroups).where(and(
+      eq(accessSecurityGroups.organizationId, input.organizationId), inArray(accessSecurityGroups.id, securityGroupIds),
+      eq(accessSecurityGroups.status, "active"),
+    )) : [];
+    const attachments = securityGroupIds.length ? await tx.select().from(accessSecurityGroupAttachments).where(and(
+      eq(accessSecurityGroupAttachments.organizationId, input.organizationId),
+      inArray(accessSecurityGroupAttachments.securityGroupId, securityGroupIds),
+      eq(accessSecurityGroupAttachments.status, "active"), live(accessSecurityGroupAttachments.expiresAt),
+      scope(accessSecurityGroupAttachments),
+    )) : [];
+    const policies = securityGroupIds.length ? await tx.select().from(accessSecurityGroupPolicies).where(and(
+      eq(accessSecurityGroupPolicies.organizationId, input.organizationId),
+      inArray(accessSecurityGroupPolicies.securityGroupId, securityGroupIds),
+    )).orderBy(desc(accessSecurityGroupPolicies.version)) : [];
+    const grants = await tx.select().from(accessNamedGrants).where(and(
+      eq(accessNamedGrants.organizationId, input.organizationId), inArray(accessNamedGrants.principalId, principals),
+      scope(accessNamedGrants), eq(accessNamedGrants.status, "active"),
+      isNull(accessNamedGrants.revokedAt), eq(accessNamedGrants.source, "named"),
+    ));
+    const memberIds = [...new Set([...principals, ...agents.map(row => row.ownerUserId),
+      ...userGroups.map(row => row.ownerUserId), ...securityGroups.map(row => row.ownerUserId)])];
+    const members = memberIds.length ? await tx.select({ userId: organizationMembershipsTable.clerkUserId })
+      .from(organizationMembershipsTable).where(and(
+        eq(organizationMembershipsTable.organizationId, input.organizationId),
+        inArray(organizationMembershipsTable.clerkUserId, memberIds), isNull(organizationMembershipsTable.revokedAt),
+      )) : [];
+    const batch: AccessReadBatch = {
+      now, cases: new Set(cases.map(row => row.id)), members: new Set(members.map(row => row.userId)),
+      agents, memberships, userGroups, groupLinks, directLinks, securityGroups, attachments, policies, grants,
+    };
+    const result = new Map<number, EffectiveAccess>();
+    for (const caseId of ids) result.set(caseId, await evaluateEffectiveAccess(tx, { ...input, caseId }, batch));
+    return result;
+  }, { isolationLevel: "repeatable read", accessMode: "read only" });
+}
+
 /** Expiry is exclusive; equality with the current instant is already expired. */
 export function grantIsLive(expiresAt: Date | null, now: Date): boolean {
   return expiresAt === null || expiresAt.getTime() > now.getTime();
@@ -210,7 +313,9 @@ async function isActiveHumanMember(
   tx: AccessGovernanceTransaction,
   organizationId: string,
   userId: string,
+  batch?: AccessReadBatch,
 ): Promise<boolean> {
+  if (batch) return batch.members.has(userId);
   const [membership] = await tx.select({ id: organizationMembershipsTable.id })
     .from(organizationMembershipsTable)
     .where(and(
@@ -226,7 +331,9 @@ async function caseBelongsToTenant(
   tx: AccessGovernanceTransaction,
   organizationId: string,
   caseId: number,
+  batch?: AccessReadBatch,
 ): Promise<boolean> {
+  if (batch) return batch.cases.has(caseId);
   const [record] = await tx.select({ id: onbCases.id })
     .from(onbCases)
     .where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, organizationId)))
@@ -254,14 +361,17 @@ async function resolveSubjectCapabilities(
   tx: AccessGovernanceTransaction,
   input: ResolveEffectiveAccessInput,
   subject: PrincipalSubject,
+  batch?: AccessReadBatch,
 ): Promise<SubjectCapabilities> {
   const allows = new Set<AccessGovernanceKey>();
   const denies = new Set<AccessGovernanceKey>();
   const reasons = new Map<AccessGovernanceKey, string[]>();
-  const now = new Date();
+  const now = batch?.now ?? new Date();
   const unexpired = (column: AnyColumn) =>
     or(isNull(column), gt(column, now))!;
-  const groupMemberships = await tx.select().from(accessUserGroupMembers)
+  const groupMemberships = batch ? batch.memberships.filter(row =>
+    row.principalType === subject.principalType && row.principalId === subject.principalId
+  ) : await tx.select().from(accessUserGroupMembers)
     .where(and(
       eq(accessUserGroupMembers.organizationId, input.organizationId),
       eq(accessUserGroupMembers.principalType, subject.principalType),
@@ -271,7 +381,7 @@ async function resolveSubjectCapabilities(
       unexpired(accessUserGroupMembers.expiresAt),
     ));
   const groupIds = [...new Set(groupMemberships.map((row) => row.groupId))];
-  const activeUserGroups = groupIds.length
+  const activeUserGroups = batch ? batch.userGroups.filter(row => groupIds.includes(row.id)) : groupIds.length
     ? await tx.select().from(accessUserGroups).where(and(
       eq(accessUserGroups.organizationId, input.organizationId),
       inArray(accessUserGroups.id, groupIds),
@@ -281,12 +391,12 @@ async function resolveSubjectCapabilities(
   const userGroupById = new Map(activeUserGroups.map((group) => [group.id, group]));
   const liveUserGroupIds: string[] = [];
   for (const group of activeUserGroups) {
-    if (await isActiveHumanMember(tx, input.organizationId, group.ownerUserId)) {
+    if (await isActiveHumanMember(tx, input.organizationId, group.ownerUserId, batch)) {
       liveUserGroupIds.push(group.id);
     }
   }
 
-  const groupLinks = liveUserGroupIds.length
+  const groupLinks = batch ? batch.groupLinks.filter(row => liveUserGroupIds.includes(row.userGroupId)) : liveUserGroupIds.length
     ? await tx.select().from(accessSecurityGroupUserGroups).where(and(
       eq(accessSecurityGroupUserGroups.organizationId, input.organizationId),
       inArray(accessSecurityGroupUserGroups.userGroupId, liveUserGroupIds),
@@ -294,7 +404,10 @@ async function resolveSubjectCapabilities(
       unexpired(accessSecurityGroupUserGroups.expiresAt),
     ))
     : [];
-  const directLinks = await tx.select().from(accessPrincipalSecurityGroupAttachments).where(and(
+  const directLinks = batch ? batch.directLinks.filter(row =>
+    row.principalType === subject.principalType && row.principalId === subject.principalId &&
+    matchesCaseScope(row, input.caseId)
+  ) : await tx.select().from(accessPrincipalSecurityGroupAttachments).where(and(
     eq(accessPrincipalSecurityGroupAttachments.organizationId, input.organizationId),
     eq(accessPrincipalSecurityGroupAttachments.principalType, subject.principalType),
     eq(accessPrincipalSecurityGroupAttachments.principalId, subject.principalId),
@@ -316,7 +429,7 @@ async function resolveSubjectCapabilities(
     ...groupLinks.map((link) => link.securityGroupId),
     ...directLinks.map((link) => link.securityGroupId),
   ])];
-  const activeSecurityGroups = securityGroupIds.length
+  const activeSecurityGroups = batch ? batch.securityGroups.filter(row => securityGroupIds.includes(row.id)) : securityGroupIds.length
     ? await tx.select().from(accessSecurityGroups).where(and(
       eq(accessSecurityGroups.organizationId, input.organizationId),
       inArray(accessSecurityGroups.id, securityGroupIds),
@@ -333,7 +446,9 @@ async function resolveSubjectCapabilities(
         eq(accessSecurityGroupAttachments.caseId, input.caseId),
       ),
     );
-  const scopedAttachments = securityGroupIds.length
+  const scopedAttachments = batch ? batch.attachments.filter(row =>
+    securityGroupIds.includes(row.securityGroupId) && matchesCaseScope(row, input.caseId)
+  ) : securityGroupIds.length
     ? await tx.select().from(accessSecurityGroupAttachments).where(and(
       eq(accessSecurityGroupAttachments.organizationId, input.organizationId),
       inArray(accessSecurityGroupAttachments.securityGroupId, securityGroupIds),
@@ -344,8 +459,8 @@ async function resolveSubjectCapabilities(
     : [];
 
   for (const securityGroup of activeSecurityGroups) {
-    if (!(await isActiveHumanMember(tx, input.organizationId, securityGroup.ownerUserId))) continue;
-    const [policy] = await tx.select().from(accessSecurityGroupPolicies).where(and(
+    if (!(await isActiveHumanMember(tx, input.organizationId, securityGroup.ownerUserId, batch))) continue;
+    const [policy] = batch ? batch.policies.filter(row => row.securityGroupId === securityGroup.id).slice(0, 1) : await tx.select().from(accessSecurityGroupPolicies).where(and(
       eq(accessSecurityGroupPolicies.organizationId, input.organizationId),
       eq(accessSecurityGroupPolicies.securityGroupId, securityGroup.id),
     )).orderBy(desc(accessSecurityGroupPolicies.version)).limit(1);
@@ -359,7 +474,7 @@ async function resolveSubjectCapabilities(
       policy.approvedByUserId === securityGroup.ownerUserId &&
       policy.approvedByUserId !== policy.createdByUserId &&
       Boolean(policy.approvedAt) &&
-      await isActiveHumanMember(tx, input.organizationId, policy.approvedByUserId)
+      await isActiveHumanMember(tx, input.organizationId, policy.approvedByUserId, batch)
     );
     if (!policyApprovalValid) {
       for (const key of ALL_KEYS) {
@@ -378,6 +493,7 @@ async function resolveSubjectCapabilities(
       tx,
       input.organizationId,
       securityGroup.ownerUserId,
+      batch,
     );
     const groupPathIsLive = groupPaths.some((link) => relevantScopedAttachments.some((scopeLink) => {
       if (scopeLink.securityGroupId !== securityGroup.id) return false;
@@ -469,7 +585,10 @@ async function resolveSubjectCapabilities(
         eq(accessNamedGrants.caseId, input.caseId),
       ),
     );
-  const grants = await tx.select().from(accessNamedGrants).where(and(
+  const grants = batch ? batch.grants.filter(row =>
+    row.principalType === subject.principalType && row.principalId === subject.principalId &&
+    matchesCaseScope(row, input.caseId)
+  ) : await tx.select().from(accessNamedGrants).where(and(
     eq(accessNamedGrants.organizationId, input.organizationId),
     eq(accessNamedGrants.principalType, subject.principalType),
     eq(accessNamedGrants.principalId, subject.principalId),
@@ -524,6 +643,14 @@ export async function resolveEffectiveAccessInTransaction(
   tx: AccessGovernanceTransaction,
   input: ResolveEffectiveAccessInput,
 ): Promise<EffectiveAccess> {
+  return evaluateEffectiveAccess(tx, input);
+}
+
+async function evaluateEffectiveAccess(
+  tx: AccessGovernanceTransaction,
+  input: ResolveEffectiveAccessInput,
+  batch?: AccessReadBatch,
+): Promise<EffectiveAccess> {
   const keys = ALL_KEYS as readonly AccessGovernanceKey[];
   const reasons = Object.fromEntries(keys.map((key) => [key, [] as string[]]));
   const allows = new Set<string>();
@@ -533,7 +660,7 @@ export async function resolveEffectiveAccessInTransaction(
   }
   if (input.caseId !== undefined) {
     if (!Number.isSafeInteger(input.caseId) || input.caseId < 1 ||
-      !(await caseBelongsToTenant(tx, input.organizationId, input.caseId))) {
+      !(await caseBelongsToTenant(tx, input.organizationId, input.caseId, batch))) {
       for (const key of keys) reasons[key].push("Case does not belong to the requested tenant.");
       return { allows: [], reasons };
     }
@@ -547,13 +674,13 @@ export async function resolveEffectiveAccessInTransaction(
   let primary: PrincipalSubject;
   let initiator: PrincipalSubject | undefined;
   if (input.principalType === "human") {
-    if (!(await isActiveHumanMember(tx, input.organizationId, input.principalId))) {
+    if (!(await isActiveHumanMember(tx, input.organizationId, input.principalId, batch))) {
       for (const key of keys) reasons[key].push("Human principal is not an active tenant member.");
       return { allows: [], reasons };
     }
     primary = { principalType: "human", principalId: input.principalId };
   } else {
-    const [agent] = await tx.select({
+    const [agent] = batch ? batch.agents : await tx.select({
       id: accessAgents.id,
       ownerUserId: accessAgents.ownerUserId,
     })
@@ -565,12 +692,12 @@ export async function resolveEffectiveAccessInTransaction(
         isNull(accessAgents.revokedAt),
       ))
       .limit(1);
-    if (!agent || !(await isActiveHumanMember(tx, input.organizationId, agent.ownerUserId))) {
+    if (!agent || !(await isActiveHumanMember(tx, input.organizationId, agent.ownerUserId, batch))) {
       for (const key of keys) reasons[key].push("Agent is unknown or revoked in this tenant.");
       return { allows: [], reasons };
     }
     if (!input.initiatorUserId ||
-      !(await isActiveHumanMember(tx, input.organizationId, input.initiatorUserId))) {
+      !(await isActiveHumanMember(tx, input.organizationId, input.initiatorUserId, batch))) {
       for (const key of keys) reasons[key].push("Agent requires an active initiating human tenant member.");
       return { allows: [], reasons };
     }
@@ -578,9 +705,9 @@ export async function resolveEffectiveAccessInTransaction(
     initiator = { principalType: "human", principalId: input.initiatorUserId };
   }
 
-  const principalCapabilities = await resolveSubjectCapabilities(tx, input, primary);
+  const principalCapabilities = await resolveSubjectCapabilities(tx, input, primary, batch);
   const initiatorCapabilities = initiator
-    ? await resolveSubjectCapabilities(tx, input, initiator)
+    ? await resolveSubjectCapabilities(tx, input, initiator, batch)
     : undefined;
   for (const key of keys) {
     const principalAllowed =

@@ -156,6 +156,29 @@ test("CasesPage renders program rows/cards without counting program go as case c
   assert.match(mounted.container.textContent ?? "", /Showing 0 individual cases · 1 programs/);
 });
 
+test("offline-only lists keep permission refreshes and discard cached case metadata on denial", async t => {
+  pinOrganizationIdForPage("cases-test");
+  let denied = false;
+  installFetch(({ url }) => url.includes("workforce-transfers")
+    ? jsonResponse([])
+    : jsonResponse(denied ? { message: "Denied" } : [{ ...caseFixture, offlineSample: true }], denied ? 403 : 200));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
+  const mounted = await mountCases(client);
+  t.after(mounted.cleanup);
+  await eventually(() => assert.match(mounted.container.textContent ?? "", /Individual Worker/), "initial offline case is visible");
+  const query = client.getQueryCache().getAll().find(row => row.queryKey[0] === "/api/onboarding/cases");
+  assert.ok(query);
+  assert.ok(query.getObserversCount() > 0);
+  const options = query.options as unknown as { refetchInterval: (query: unknown) => number };
+  assert.equal(options.refetchInterval(query), 30_000);
+  denied = true;
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: query.queryKey });
+  });
+  await eventually(() => assert.doesNotMatch(mounted.container.textContent ?? "", /Individual Worker/), "denied refresh clears cached case identity");
+  assert.doesNotMatch(mounted.container.textContent ?? "", /Completed1/);
+});
+
 test("program denial hides no individual cases, discloses no server error and can retry to a truly empty list", async (t) => {
   pinOrganizationIdForPage("cases-test");
   let denied = true;

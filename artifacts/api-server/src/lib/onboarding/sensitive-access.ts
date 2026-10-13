@@ -1,8 +1,8 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import type { OnbAuthorityScope } from "@workspace/db/schema";
-import { resolveEffectiveAccessInTransaction } from "../access-governance";
-import { hasCurrentAuthorityScope } from "./decision-authority";
+import { resolveEffectiveAccessInTransaction, type EffectiveAccess } from "../access-governance";
+import { hasCurrentAuthorityScope, currentAuthorityScopesForCases } from "./decision-authority";
 import { isPlatformSuperAdmin } from "../private-platform-admin";
 
 type SensitiveAuthorityTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -173,6 +173,17 @@ export async function resolveSensitiveAccessInTransaction(
     caseId: input.caseId,
     purpose: "onboarding-sensitive-record",
   });
+  return sensitiveAccessFromEffective(tx, input, effectiveAccess);
+}
+
+/** Reuse the current request's case-scoped evaluator result, not a cached grant. */
+async function sensitiveAccessFromEffective(
+  tx: SensitiveAuthorityTransaction,
+  input: { organizationId: string; caseId: number; actorUserId?: string | null },
+  effectiveAccess: EffectiveAccess,
+  authorityScopes?: ReadonlySet<OnbAuthorityScope>,
+): Promise<SensitiveAccess> {
+  if (!input.actorUserId) return NO_SENSITIVE_ACCESS;
   // The effective evaluator verifies case ownership before its admin branch.
   // ALS contains only a live, provider-verified request bound to this tenant.
   // This exception is for client-record reads, never professional authority.
@@ -191,7 +202,9 @@ export async function resolveSensitiveAccessInTransaction(
     },
   };
   for (const classification of Object.keys(SENSITIVE_SCOPE_BY_CLASS) as SensitiveRecordClass[]) {
-    const specialistAuthority = await hasCurrentAuthorityScope(tx, {
+    if (!effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].read) &&
+      !effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit)) continue;
+    const specialistAuthority = authorityScopes ? authorityScopes.has(SENSITIVE_SCOPE_BY_CLASS[classification]) : await hasCurrentAuthorityScope(tx, {
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
       scope: SENSITIVE_SCOPE_BY_CLASS[classification],
@@ -208,6 +221,31 @@ export async function resolveSensitiveAccessInTransaction(
     for (const classification of ALL_SENSITIVE_RECORD_CLASSES) result[classification] = false;
   }
   return result;
+}
+
+export async function sensitiveAccessForCaseList(
+  organizationId: string,
+  actorUserId: string | undefined,
+  effectiveByCase: ReadonlyMap<number, EffectiveAccess>,
+): Promise<Map<number, SensitiveAccess>> {
+  if (!actorUserId || !effectiveByCase.size) return new Map();
+  return db.transaction(async tx => {
+    const sensitiveIds = [...effectiveByCase].filter(([, access]) =>
+      ALL_SENSITIVE_RECORD_CLASSES.some(classification =>
+        access.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].read) ||
+        access.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit),
+      ),
+    ).map(([id]) => id);
+    const authorities = await currentAuthorityScopesForCases(tx, {
+      organizationId, actorUserId, caseIds: sensitiveIds, scopes: [...new Set(Object.values(SENSITIVE_SCOPE_BY_CLASS))],
+    });
+    const result = new Map<number, SensitiveAccess>();
+    for (const [caseId, effective] of effectiveByCase) {
+      result.set(caseId, await sensitiveAccessFromEffective(tx, { organizationId, actorUserId, caseId },
+        effective, authorities.get(caseId) ?? new Set()));
+    }
+    return result;
+  }, { isolationLevel: "repeatable read", accessMode: "read only" });
 }
 
 /**

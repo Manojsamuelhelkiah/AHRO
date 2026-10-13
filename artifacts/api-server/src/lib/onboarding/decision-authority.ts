@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { clerkClient } from "@clerk/express";
-import { and, eq, gt, isNull, lte, or } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
 import {
   onbApprovals,
   onbAuthorityAssignments,
@@ -522,7 +522,59 @@ export async function hasCurrentAuthorityScope(
   tx: OnboardingDbTransaction,
   input: { organizationId: string; actorUserId: string; scope: OnbAuthorityScope; caseId?: number },
 ): Promise<boolean> {
-  const [governance, membership] = await Promise.all([
+  return evaluateCurrentAuthorityScope(tx, input);
+}
+
+type AuthorityReadBatch = {
+  governance: (typeof onbAuthorityGovernance.$inferSelect)[];
+  membership: { id: number }[];
+  cases: (typeof onbCases.$inferSelect)[];
+  assignments: (typeof onbAuthorityAssignments.$inferSelect)[];
+  demoProfile: Awaited<ReturnType<typeof demoProfileInTransaction>>;
+};
+
+/** Batch only the read inputs; preserve the same live authority evaluator. */
+export async function currentAuthorityScopesForCases(
+  tx: OnboardingDbTransaction,
+  input: { organizationId: string; actorUserId: string; caseIds: number[]; scopes: OnbAuthorityScope[] },
+): Promise<Map<number, Set<OnbAuthorityScope>>> {
+  if (!input.caseIds.length) return new Map();
+  const now = new Date();
+  const [governance, membership, cases, assignments, demoProfile] = await Promise.all([
+    tx.select().from(onbAuthorityGovernance).where(eq(onbAuthorityGovernance.organizationId, input.organizationId)),
+    tx.select({ id: organizationMembershipsTable.id }).from(organizationMembershipsTable).where(and(
+      eq(organizationMembershipsTable.organizationId, input.organizationId),
+      eq(organizationMembershipsTable.clerkUserId, input.actorUserId), isNull(organizationMembershipsTable.revokedAt),
+    )),
+    tx.select().from(onbCases).where(and(
+      eq(onbCases.organizationId, input.organizationId), inArray(onbCases.id, input.caseIds),
+    )),
+    tx.select().from(onbAuthorityAssignments).where(and(
+      eq(onbAuthorityAssignments.organizationId, input.organizationId),
+      eq(onbAuthorityAssignments.personUserId, input.actorUserId), eq(onbAuthorityAssignments.status, "active"),
+      lte(onbAuthorityAssignments.validFrom, now),
+      or(isNull(onbAuthorityAssignments.validUntil), gt(onbAuthorityAssignments.validUntil, now)),
+    )),
+    demoProfileInTransaction(tx, input.actorUserId),
+  ]);
+  const batch = { governance, membership, cases, assignments, demoProfile };
+  const result = new Map<number, Set<OnbAuthorityScope>>();
+  for (const caseId of input.caseIds) {
+    const allowed = new Set<OnbAuthorityScope>();
+    for (const scope of input.scopes) {
+      if (await evaluateCurrentAuthorityScope(tx, { ...input, caseId, scope }, batch)) allowed.add(scope);
+    }
+    result.set(caseId, allowed);
+  }
+  return result;
+}
+
+async function evaluateCurrentAuthorityScope(
+  tx: OnboardingDbTransaction,
+  input: { organizationId: string; actorUserId: string; scope: OnbAuthorityScope; caseId?: number },
+  batch?: AuthorityReadBatch,
+): Promise<boolean> {
+  const [governance, membership] = batch ? [batch.governance, batch.membership] : await Promise.all([
     tx.select().from(onbAuthorityGovernance).where(eq(onbAuthorityGovernance.organizationId, input.organizationId)),
     tx.select({ id: organizationMembershipsTable.id }).from(organizationMembershipsTable).where(and(
       eq(organizationMembershipsTable.organizationId, input.organizationId),
@@ -531,7 +583,7 @@ export async function hasCurrentAuthorityScope(
     )),
   ]);
   if (!membership[0]) return false;
-  const c = input.caseId === undefined ? undefined : (await tx.select({
+  const c = input.caseId === undefined ? undefined : batch ? batch.cases.find(row => row.id === input.caseId) : (await tx.select({
     geography: onbCases.geography,
     legalEntity: onbCases.legalEntity,
     notes: onbCases.notes,
@@ -544,14 +596,14 @@ export async function hasCurrentAuthorityScope(
   if (input.caseId !== undefined && !c) return false;
   if (c && isRetiredControllerCase(c)) return false;
   const now = new Date();
-  const assignments = await tx.select().from(onbAuthorityAssignments).where(and(
+  const assignments = batch?.assignments ?? await tx.select().from(onbAuthorityAssignments).where(and(
     eq(onbAuthorityAssignments.organizationId, input.organizationId),
     eq(onbAuthorityAssignments.personUserId, input.actorUserId),
     eq(onbAuthorityAssignments.status, "active"),
     lte(onbAuthorityAssignments.validFrom, now),
     or(isNull(onbAuthorityAssignments.validUntil), gt(onbAuthorityAssignments.validUntil, now)),
   ));
-  const demoProfile = await demoProfileInTransaction(tx, input.actorUserId);
+  const demoProfile = batch ? batch.demoProfile : await demoProfileInTransaction(tx, input.actorUserId);
   if (demoProfile === "reviewer") return false;
   const syntheticDemoCase =
     input.organizationId === DEMO_ORGANIZATION_ID &&

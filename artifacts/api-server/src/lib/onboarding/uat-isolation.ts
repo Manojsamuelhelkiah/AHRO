@@ -152,3 +152,17 @@ export async function isAuthoritativelyUatRunOwnedCase(
   const isolation = await getUatCaseIsolation(input);
   return isolation.fencedByScenarioKey && isolation.linkedToRun;
 }
+
+/** One tenant-ledger read for list presentation; same validation as isolation. */
+export async function authoritativelyUatRunOwnedCaseIds(
+  organizationId: string,
+  cases: readonly UatIsolationCase[],
+): Promise<Set<number>> {
+  const eligible = cases.filter(row => row.organizationId === organizationId && hasUatScenarioKey(row));
+  if (!eligible.length) return new Set();
+  const rows = await db.select({ value: onbSettings.value }).from(onbSettings).where(and(
+    eq(onbSettings.organizationId, organizationId), like(onbSettings.key, `${UAT_RUN_SETTING_PREFIX}%`),
+  ));
+  const linked = new Set(rows.flatMap(row => linkedCaseIds(row.value) ?? []));
+  return new Set(eligible.filter(row => linked.has(row.id)).map(row => row.id));
+}

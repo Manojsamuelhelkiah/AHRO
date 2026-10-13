@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { retiredCaseCapabilityResponse, isRetiredCaseCapabilityRequest, denyRetiredCaseCapability } from "../lib/retired-case-capabilities";
 import { isHistoricalTestRecord } from "../lib/onboarding/historical-test-record";
-import { isAuthoritativelyUatRunOwnedCase } from "../lib/onboarding/uat-isolation";
+import { isAuthoritativelyUatRunOwnedCase, authoritativelyUatRunOwnedCaseIds } from "../lib/onboarding/uat-isolation";
 import { randomUUID } from "node:crypto";
 import { decideApproval, getApprovalHistory } from "../lib/onboarding/approval-decisions";
 import { runConnectedReadinessTick } from "../lib/onboarding/connected-readiness-automation";
@@ -172,10 +172,10 @@ import { normalizeBgvStatus } from "../lib/onboarding/document-validation";
 import { reconcileDocumentationReadiness } from "../lib/onboarding/document-validation";
 import { requeueDocumentMalwareScan } from "../lib/onboarding/document-malware";
 import { malwareScanRetryable, malwareUploadIsClean } from "../lib/onboarding/malware-policy";
-import { latestRequiredUploadMalwareBlockers } from "../lib/onboarding/document-readiness-guard";
+import { latestRequiredUploadMalwareBlockers, requiredUploadMalwareBlockersForCases } from "../lib/onboarding/document-readiness-guard";
 import { documentationGateConfigured } from "../lib/onboarding/engine";
 import { hasTrustedBgvClearanceEvidence } from "../lib/onboarding/connector-evidence-provenance";
-import { currentVaultBgvForCase } from "../lib/employee-vault/reuse";
+import { currentVaultBgvForCase, currentVaultBgvForCases } from "../lib/employee-vault/reuse";
 import {
   evaluateCaseDerivedLifecycleGateInTransaction,
   evaluateSensitiveLifecycleGate,
@@ -199,6 +199,7 @@ import {
 import { clerkClient } from "@clerk/express";
 import {
   resolveEffectiveAccess,
+  resolveEffectiveAccessForCases,
   resolveEffectiveAccessInTransaction,
   type EffectiveAccess,
 } from "../lib/access-governance";
@@ -312,6 +313,7 @@ import {
   redactSensitiveText,
   resolveSensitiveAccess,
   resolveSensitiveAccessInTransaction,
+  sensitiveAccessForCaseList,
   SensitiveAuthorityRequiredError,
   withSensitiveAuthorityFence,
   restrictedDocumentView,
@@ -690,15 +692,68 @@ router.post("/onboarding/demo-login/logout", (req, res) => {
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
-async function deriveGateways(row: typeof onbCases.$inferSelect) {
+type CasePresentationReads = {
+  offerDelivery?: typeof onbCommunications.$inferSelect;
+  bgvChecks: (typeof onbSystemChecks.$inferSelect)[];
+  vaultBgvClear: boolean;
+  finalApproval?: { status: string };
+  malwareBlockers: number[];
+  uatOwned: boolean;
+};
+
+/** Related display data is loaded only for authorized rows in this tenant. */
+async function casePresentationReads(
+  organizationId: string,
+  rows: (typeof onbCases.$inferSelect)[],
+): Promise<Map<number, CasePresentationReads>> {
+  if (!rows.length) return new Map();
+  const ids = rows.map(row => row.id);
+  const [communications, checks, approvals, vaultClear, blockers, uatOwned] = await Promise.all([
+    db.select().from(onbCommunications).where(and(
+      eq(onbCommunications.organizationId, organizationId), inArray(onbCommunications.caseId, ids),
+      inArray(onbCommunications.idempotencyKey, ids.map(id => `gateway-a:${id}:offer-package:email`)),
+    )),
+    db.select().from(onbSystemChecks).where(and(
+      eq(onbSystemChecks.organizationId, organizationId), inArray(onbSystemChecks.caseId, ids),
+      eq(onbSystemChecks.system, "bgv"),
+    )),
+    db.select({ caseId: onbApprovals.caseId, status: onbApprovals.status, idempotencyKey: onbApprovals.idempotencyKey }).from(onbApprovals).where(and(
+      eq(onbApprovals.organizationId, organizationId), inArray(onbApprovals.caseId, ids),
+      inArray(onbApprovals.idempotencyKey, ids.map(id => `gateway-c:${id}:human-queue`)),
+    )).orderBy(desc(onbApprovals.id)),
+    currentVaultBgvForCases(organizationId, ids),
+    db.transaction(tx => requiredUploadMalwareBlockersForCases(
+      tx, organizationId, rows.filter(row => documentationGateConfigured(row)).map(row => row.id),
+    )),
+    authoritativelyUatRunOwnedCaseIds(organizationId, rows),
+  ]);
+  const result = new Map(ids.map(id => [id, {
+    bgvChecks: [] as (typeof onbSystemChecks.$inferSelect)[],
+    vaultBgvClear: vaultClear.has(id), malwareBlockers: blockers.get(id) ?? [], uatOwned: uatOwned.has(id),
+  } as CasePresentationReads]));
+  for (const communication of communications) {
+    const entry = result.get(communication.caseId);
+    if (entry && communication.idempotencyKey === `gateway-a:${communication.caseId}:offer-package:email` &&
+      !entry.offerDelivery) entry.offerDelivery = communication;
+  }
+  for (const check of checks) result.get(check.caseId)?.bgvChecks.push(check);
+  for (const approval of approvals) {
+    const entry = result.get(approval.caseId);
+    if (entry && approval.idempotencyKey === `gateway-c:${approval.caseId}:human-queue` &&
+      !entry.finalApproval) entry.finalApproval = approval;
+  }
+  return result;
+}
+
+async function deriveGateways(row: typeof onbCases.$inferSelect, presentation?: CasePresentationReads) {
   const offerRequired = offerAcceptanceRequired(row);
   const offerAuthorization = candidateEmailAuthorization(row);
-  const [offerDelivery] = await db.select().from(onbCommunications).where(and(
+  const [offerDelivery] = presentation ? [presentation.offerDelivery] : await db.select().from(onbCommunications).where(and(
     eq(onbCommunications.organizationId, row.organizationId),
     eq(onbCommunications.caseId, row.id),
     eq(onbCommunications.idempotencyKey, `gateway-a:${row.id}:offer-package:email`),
   )).limit(1);
-  const bgvChecks = await db.select().from(onbSystemChecks).where(and(
+  const bgvChecks = presentation?.bgvChecks ?? await db.select().from(onbSystemChecks).where(and(
     eq(onbSystemChecks.organizationId, row.organizationId),
     eq(onbSystemChecks.caseId, row.id),
     eq(onbSystemChecks.system, "bgv"),
@@ -707,16 +762,17 @@ async function deriveGateways(row: typeof onbCases.$inferSelect) {
   // A simulated watcher completion is display/planning data, never proof at a
   // live gate. The provenance predicate also requires an actual external
   // reference, completion timestamp, and supported inbound mechanism.
-  const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks) || await currentVaultBgvForCase(row.organizationId, row.id);
+  const bgvClear = hasTrustedBgvClearanceEvidence(bgvChecks) ||
+    (presentation ? presentation.vaultBgvClear : await currentVaultBgvForCase(row.organizationId, row.id));
   const bgvRequiredForDay1 = applicableSystems(row).some((system) => system.key === "bgv");
-  const [finalApproval] = await db.select({
+  const [finalApproval] = presentation ? [presentation.finalApproval] : await db.select({
     status: onbApprovals.status,
   }).from(onbApprovals).where(and(
     eq(onbApprovals.organizationId, row.organizationId),
     eq(onbApprovals.caseId, row.id),
     eq(onbApprovals.idempotencyKey, `gateway-c:${row.id}:human-queue`),
   )).orderBy(desc(onbApprovals.id)).limit(1);
-  const malwareBlockers = documentationGateConfigured(row)
+  const malwareBlockers = presentation ? presentation.malwareBlockers : documentationGateConfigured(row)
     ? await db.transaction((tx) => latestRequiredUploadMalwareBlockers(tx, row.organizationId, row.id))
     : [];
   const mandatoryReady = mandatoryChecklistReady(row);
@@ -783,8 +839,9 @@ async function serializeCase(
   row: typeof onbCases.$inferSelect,
   sensitiveAccess: SensitiveAccess = NO_SENSITIVE_ACCESS,
   caseAccess: CaseGovernanceAccess = NO_CASE_GOVERNANCE_ACCESS,
+  presentation?: CasePresentationReads,
 ) {
-  const gateways = await deriveGateways(row);
+  const gateways = caseAccess.readinessRead && caseAccess.flowRead ? await deriveGateways(row, presentation) : undefined;
   const canReadProfile = caseAccess.profileRead && caseAccess.flowRead;
   const canReadNotes = caseAccess.notesRead && caseAccess.flowRead;
   const intakeRequest = readHroBatchRequest(row.processPolicySnapshot);
@@ -803,7 +860,8 @@ async function serializeCase(
   const profileSensitiveAccess = canReadProfile ? sensitiveAccess : NO_SENSITIVE_ACCESS;
   return {
     id: row.id,
-    controllerRetired: isHistoricalTestRecord(row) || await isAuthoritativelyUatRunOwnedCase(row),
+    controllerRetired: isHistoricalTestRecord(row) ||
+      (presentation ? presentation.uatOwned : await isAuthoritativelyUatRunOwnedCase(row)),
     caseFamily: canReadProfile ? intakeRequest?.family ?? null : null,
     requestType: canReadProfile ? intakeRequest?.requestType ?? null : null,
     intakeSource: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) && emailIntake?.requestId ? "Email" : null,
@@ -1234,13 +1292,22 @@ router.get("/onboarding/cases", async (req, res, next) => {
       .from(onbCases)
       .where(organizationWhere(onbCases, getOrganizationId(req)))
       .orderBy(desc(onbCases.id)));
-    const serialized = await Promise.all(rows.map(async (row) => {
-      const caseAccess = await caseGovernanceAccessForRequest(req, row);
-      if (!caseAccess.flowRead) return null;
-      const sensitiveAccess = await sensitiveAccessForCase(req, row);
-      return serializeCase(row, sensitiveAccess, caseAccess);
-    }));
-    res.json(serialized.filter((row) => row !== null));
+    const organizationId = getOrganizationId(req);
+    const accessByCase = await resolveEffectiveAccessForCases({
+      organizationId, principalType: "human", principalId: req.authUserId ?? "",
+      purpose: "onboarding-case-list",
+    }, rows.map(row => row.id));
+    const visible = rows.filter(row => accessByCase.get(row.id)?.allows.includes(CASE_FLOW_READ_KEY));
+    const [presentation, sensitiveByCase] = await Promise.all([
+      casePresentationReads(organizationId, visible),
+      sensitiveAccessForCaseList(organizationId, req.authUserId,
+        new Map(visible.map(row => [row.id, accessByCase.get(row.id)!]))),
+    ]);
+    const serialized = await Promise.all(visible.map(row => serializeCase(
+      row, sensitiveByCase.get(row.id) ?? NO_SENSITIVE_ACCESS,
+      caseGovernanceAccessFromEffective(accessByCase.get(row.id)!), presentation.get(row.id),
+    )));
+    res.json(serialized);
   } catch (err) {
     next(err);
   }

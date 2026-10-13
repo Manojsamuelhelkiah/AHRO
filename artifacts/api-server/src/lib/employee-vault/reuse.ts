@@ -108,6 +108,22 @@ export async function hasCurrentVaultBgvReceipt(tx: Pick<VaultTx, "select">, org
 export async function currentVaultBgvForCase(organizationId: string, caseId: number): Promise<boolean> {
   return hasCurrentVaultBgvReceipt(db, organizationId, caseId);
 }
+
+/**
+ * Most list rows have no Vault receipt. Batch that absence check, but never
+ * replace live consent/policy/check verification for rows with a receipt.
+ */
+export async function currentVaultBgvForCases(organizationId: string, caseIds: readonly number[]) {
+  const result = new Set<number>();
+  if (!caseIds.length) return result;
+  const candidates = await db.select({ caseId: receipts.caseId }).from(receipts).where(and(
+    eq(receipts.organizationId, organizationId), inArray(receipts.caseId, [...caseIds]), isNull(receipts.invalidatedAt),
+  ));
+  for (const caseId of new Set(candidates.map(row => row.caseId))) {
+    if (await currentVaultBgvForCase(organizationId, caseId)) result.add(caseId);
+  }
+  return result;
+}
 export async function currentVaultConsumedScope(c: typeof onbCases.$inferSelect) {
   const candidates = await db.select().from(receipts).where(and(eq(receipts.organizationId, c.organizationId), eq(receipts.caseId, c.id), isNull(receipts.invalidatedAt)));
   let best: { reused: string[]; outstanding: string[] } = { reused: [], outstanding: [] };
