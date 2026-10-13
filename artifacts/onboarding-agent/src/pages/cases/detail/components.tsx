@@ -7,9 +7,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ContactDialog } from './ContactDialog';
 import { casePresentationOf, caseTitleOf, caseTypeOf, originalIntentOf, isDemoCoverageCase, isFictionalOfflineExample, sampleCaseReference, caseWorkerName } from '../case-presentation';
 import { useCaseAccess } from './case-access';
+import { caseOwnerOf } from '../case-presentation';
 
 export function isOfflineDemoSample(c: { scenarioKey?: string | null; offlineSample?: boolean; controllerRetired?: boolean }) {
-  return c.controllerRetired === true || c.offlineSample === true || c.scenarioKey != null || isDemoCoverageCase(c);
+  return c.controllerRetired === true || c.offlineSample === true;
 }
 
 function casePresentation(c: any) {
@@ -74,13 +75,15 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
 
   const statusText = c.orchestrationStatus === 'waiting-approval' ? 'HUMAN REVIEW' : c.orchestrationStatus.replace(/-/g, ' ');
   const offlineSample = isOfflineDemoSample(c);
+  const ownership = caseOwnerOf(c);
    const presentation = { ...casePresentation(c), type: caseTypeOf(c), title: caseTitleOf(c) };
   const canViewIdentity = access?.access.profileRead === true &&
     (access?.sensitive.identity.read === true || c.fictionalOfflineIdentity === true);
-  const canUseContactActions = canViewIdentity
+  const contactPermissions = canViewIdentity
     && access?.sensitive.identity.edit === true
     && access?.access.flowEdit === true
     && access?.access.notesEdit === true;
+  const canUseContactActions = contactPermissions && !offlineSample;
   const canAskAboutCase = access?.access.profileRead === true
     && access?.access.notesRead === true
     && !!access
@@ -99,14 +102,15 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
               </div>
            </div>
               <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{canViewIdentity ? `${isFictionalOfflineExample(c) ? caseWorkerName(c) : `For ${c.workerName}`} • ` : <><span>Restricted candidate</span> • </>}{access?.access.profileRead ? `${c.role} • ${c.geography}` : 'Profile details restricted'}{canViewIdentity && Number.isFinite(Date.parse(c.joiningDate)) ? ` • Effective ${format(new Date(c.joiningDate), 'MMM d, yyyy')}` : ''}</p>
-            {offlineSample && (
+            {offlineSample && !isFictionalOfflineExample(c) && (
               <p className="mt-2 text-[var(--text-xs)] font-semibold text-[var(--status-amber-fg)]">
                 {isFictionalOfflineExample(c) ? 'Offline — read-only; no outreach or business completion.' : 'Historical test record — read-only; no provider work or business completion is authorized.'}
               </p>
             )}
            
            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[11px] uppercase tracking-wider font-semibold text-[var(--text-muted)]">
-              <span className="flex items-center gap-1">Owner: <span className="text-[var(--text-primary)]">{presentation.owner}</span></span>
+              <span className="break-words">Current owner: <span className="text-[var(--text-primary)]">{ownership.name}</span></span>
+              {ownership.kind === 'Human Reviewer' && <span className="break-words">Coordinating agent: {ownership.coordinatingAgent}</span>}
              <span className="flex items-center gap-1">Priority: <span className={c.urgency === 'elevated' ? 'text-[var(--status-red)]' : 'text-[var(--text-primary)]'}>{c.urgency}</span></span>
              <span className="flex items-center gap-1">Stage: <span className="text-[var(--text-primary)]">{c.lifecycleStage.replace(/-/g, ' ')}</span></span>
              <span className="flex items-center gap-1">Status: <span className="text-[var(--text-primary)]">{statusText}</span></span>
@@ -127,6 +131,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
            )}
         </div>
          <div className="flex shrink-0 items-center gap-2 self-start lg:self-auto relative">
+           {contactPermissions && offlineSample && <p className="max-w-xs text-xs text-[var(--text-muted)]">Contact requires an active operational case; no delivery is authorized here.</p>}
            {setTab && canAskAboutCase && (
             <Button variant="outline" className="gap-2 text-[var(--primary)] border-[var(--primary)] hover:bg-[var(--primary-light-bg)]" onClick={() => setTab('Ask AI')}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-sparkles"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
@@ -169,8 +174,8 @@ export function CaseHealthStrip({ c, pendingApprovals, offlineSample = false }: 
   // active execution for idle/done cases.
   const orch = c.orchestrationStatus as string;
   const state = offlineSample ? 'offline' : pendingApprovals.length > 0 ? 'attention' : (orch === 'blocked' || orch === 'checklist-blocked') ? 'blocked' : orch === 'done' ? 'done' : orch === 'idle' ? 'idle' : 'healthy';
-  const healthTitle = state === 'offline' ? 'Offline sample' : state === 'attention' ? 'Attention required' : state === 'blocked' ? 'Blocked' : state === 'done' ? 'Complete' : state === 'idle' ? 'Idle' : 'Healthy';
-  const healthSub = state === 'offline' ? 'Manual Demo data; execution is intentionally disabled.'
+  const healthTitle = state === 'offline' ? 'Awaiting prerequisites' : state === 'attention' ? 'Attention required' : state === 'blocked' ? 'Blocked' : state === 'done' ? 'Complete' : state === 'idle' ? 'Idle' : 'Healthy';
+  const healthSub = state === 'offline' ? 'Activation, verified evidence and current human decisions are required.'
     : state === 'attention' ? `${pendingApprovals.length} decision${pendingApprovals.length > 1 ? 's' : ''} require${pendingApprovals.length === 1 ? 's' : ''} review`
     : state === 'blocked' ? (orch === 'checklist-blocked' ? 'Waiting for mandatory checklist items' : 'Waiting for manual unblock')
     : state === 'done' ? 'Case processing complete'

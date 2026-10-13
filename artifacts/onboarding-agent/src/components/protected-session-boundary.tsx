@@ -6,6 +6,8 @@ import {
   setApiResponseObserver,
 } from "@workspace/api-client-react";
 import { SessionAccessNotice } from "./session-access-notice";
+import { useLocation } from "wouter";
+import { accountSessionLabel, isCaseDetailPath } from "./case-account-presentation";
 
 /**
  * Protected data mounts only after a fresh server session check. Privilege
@@ -13,6 +15,7 @@ import { SessionAccessNotice } from "./session-access-notice";
  * A local expiry timer closes the view without waiting for the next poll.
  */
 export function ProtectedSessionBoundary({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
   const { userId, sessionId } = useAuth();
   const client = useQueryClient();
   const [state, setState] = useState<{ owner: string; stamp: string; revision: number } | null>(null);
@@ -110,8 +113,8 @@ export function ProtectedSessionBoundary({ children }: { children: ReactNode }) 
   </p>;
   return <div key={`${owner}:${state.stamp}:${state.revision}`}>
     <p role="status" data-testid="current-session-access" className="px-4 py-2 text-xs text-[var(--text-muted)]">
-      {state.stamp.startsWith("admin:") ? "Administrator access verified for this session." : "Ordinary account session; no active Super Admin verification."}
-      {" "}Account initials identify the account only.
+      {accountSessionLabel(location, state.stamp.startsWith("admin:"))}
+      {!isCaseDetailPath(location) && " Account initials identify the account only."}
     </p>
     {children}
   </div>;

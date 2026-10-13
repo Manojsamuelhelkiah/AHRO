@@ -21,7 +21,8 @@ import { RestrictedActionNotice, useCaseAccess } from './case-access';
 
 export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) => void }) {
   const access = useCaseAccess();
-  const canEditProfile = access?.access.flowEdit === true && access?.access.profileEdit === true;
+  const inactive = c.offlineSample === true || c.controllerRetired === true;
+  const canEditProfile = !inactive && access?.access.flowEdit === true && access?.access.profileEdit === true;
   const canEditNotes = access?.access.flowEdit === true && access?.access.notesEdit === true;
   const canEditSensitiveEvidence = canEditNotes && !!access
     && Object.values(access.sensitive).every((permission) => permission.edit);
@@ -206,6 +207,8 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
           <RestrictedActionNotice>
             {!canEditProfile && !canEditNotes
               ? 'Checklist and profile edits, and evidence notes, are restricted by your current permissions.'
+              : inactive
+                ? 'Checklist decisions require an active operational case; pending evidence remains pending.'
               : !canEditProfile
                 ? 'Checklist and profile edits are restricted by your current permissions.'
                 : !canEditNotes
@@ -290,7 +293,12 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
         </div>
       ) : null}
       <div className="space-y-3">
-        {readinessItems.map((w, index) => {
+        {readinessItems.some(w => w.key === 'restricted') && <div role="status" className="rounded border p-3 text-sm">
+          Checklist wording is restricted by your current field permissions.
+          <ul>{readinessItems.filter(w => w.key === 'restricted').map((w, index) =>
+            <li key={index}>Item {index + 1}: {w.status}{w.mandatory ? ' · Required' : ''}{w.enforcementStage ? ` · ${w.enforcementStage.replace(/-/g, ' ')}` : ''}</li>)}</ul>
+        </div>}
+        {readinessItems.filter(w => w.key !== 'restricted').map((w, index) => {
           const isCustom = !!w.id && !systemManagedIds.has(w.id);
           const isBlocker = Boolean(
             blockedStage &&

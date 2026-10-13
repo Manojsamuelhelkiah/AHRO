@@ -6257,6 +6257,8 @@ export type OnbCaseGateways = {
 };
 
 export interface OnbCase {
+  /** Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions. */
+  currentActionOwner?: string | null;
   /** @nullable */
   intakeSource?: string | null;
   /** @nullable */

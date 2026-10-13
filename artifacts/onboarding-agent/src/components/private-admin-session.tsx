@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { useAuth, useClerk, useReverification } from "@clerk/react";
 import type { PrivateAdminEligibility } from "@workspace/api-client-react";
+import { useLocation } from "wouter";
+import { compactAccountControls } from "./case-account-presentation";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export function PrivateAdminSession() {
+  const [location] = useLocation();
   const clerk = useClerk();
   const { userId, sessionId } = useAuth();
   const [eligible, setEligible] = useState(false);
@@ -60,8 +63,7 @@ export function PrivateAdminSession() {
     }
   }
   // Accessible before tenant setup, and after a privilege expires/revokes.
-  return (
-    <aside id="private-admin-session" className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs" aria-label="Private administrator session">
+  const controls = <>
       <div className="flex flex-wrap items-center gap-3">
         <span>{eligible ? "Eligible for private administrator access · verify to activate a 15-minute session · independent safeguards apply" : "Platform access requires private approval of your verified MFA account."}</span>
         {eligible && <button type="button" onClick={() => void start()} disabled={busy}
@@ -82,6 +84,11 @@ export function PrivateAdminSession() {
         <p>Primary email {identity.primaryEmailVerified ? "verified" : "not verified"} · MFA {identity.mfaEnrolled ? "enrolled" : "not enrolled"}.
           These checks do not grant platform administration.</p>
       </details>}
-    </aside>
-  );
+  </>;
+  const compact = compactAccountControls(location, eligible, error);
+  return <aside id="private-admin-session" className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs" aria-label="Private administrator session">
+    {compact ? <details><summary className="cursor-pointer">Account security and administrator access</summary>
+      <div className="mt-2">{controls}</div>
+    </details> : controls}
+  </aside>;
 }

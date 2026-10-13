@@ -24,12 +24,12 @@ function header(c = sample, access = permissions) {
   client.clear();
   return html;
 }
-test('sample header has exact reference, clean subtitle and concise offline warning with no live controls', () => {
+test('sample header has exact reference and clean subtitle without redundant banners or live controls', () => {
   const html = header();
   assert.ok(html.includes('S3644'));
   assert.ok(html.includes('Kiran Pine • Support Engineer • Singapore'));
   assert.ok(html.includes(' • Effective Nov 24, 2030'));
-  assert.ok(html.includes('Offline — read-only; no outreach or business completion.'));
+  assert.ok(!html.includes('Offline — read-only; no outreach or business completion.'));
   assert.ok(!/Case #3644|For Example|Example — Kiran|Example · Offline/.test(html));
   assert.ok(!/Take Action|>Contact<|Voice:/.test(html));
 });
@@ -39,6 +39,12 @@ test('profile denial keeps sample worker and role details hidden', () => {
   assert.ok(html.includes('<span>Restricted candidate</span>'));
   assert.ok(html.includes('Profile details restricted'));
   assert.ok(!/Kiran Pine|Support Engineer|Worker Details/.test(html));
+});
+test('verified administrative field access does not turn an inactive example into a contact control', () => {
+  const html = header(sample, { ...permissions, access: { ...permissions.access, flowEdit: true, notesEdit: true },
+    sensitive: { ...permissions.sensitive, identity: { read: true, edit: true } } });
+  assert.ok(!/Take Action|>Contact<|Voice:/.test(html));
+  assert.match(html, /Contact requires an active operational case/);
 });
 test('historical records preserve numeric identifiers, identity permission checks and existing warning', () => {
   const historical = { ...sample, fictionalOfflineIdentity: false };

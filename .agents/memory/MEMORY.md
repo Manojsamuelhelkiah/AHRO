@@ -92,3 +92,4 @@
 - [Requirements Register retirement](requirements-retirement-boundaries.md) — permanent retirement, not relocation; historical manual coverage never substitutes for objective operational safeguards.
 - [Member identity boundaries](member-identity-boundaries.md) — readable directory labels are not authority or recipient bindings; internal-account presentation is not account cleanup.
 - [Original intent boundaries](original-intent-boundaries.md) — originating requests outlive review questions; keep annotations outside fingerprinted fictional source definitions.
+- [Fictional case display](fictional-case-display-boundaries.md) — S-reference replaces repeated banners; exact trusted wording and actual unresolved assignments never grant authority.

@@ -22,7 +22,8 @@ test("read-only health cards and tabs retain accessible narrow-screen layouts", 
     lifecycleStage: "service-intake", orchestrationStatus: "blocked",
     workstreams: [{ status: "pending" }],
   }} pendingApprovals={[]} offlineSample />);
-  assert.match(health, /execution is intentionally disabled/);
+  assert.match(health, /Activation, verified evidence and current human decisions are required/);
+  assert.doesNotMatch(health, /Offline sample|Manual Demo data/);
   assert.match(health, /grid-cols-2 xl:grid-cols-4/);
   assert.doesNotMatch(health, /Automated execution active/);
   const tabs = renderToStaticMarkup(<CaseTabs activeTab="Overview" setTab={() => {}} offlineSample />);

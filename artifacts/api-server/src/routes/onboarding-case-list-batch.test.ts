@@ -5,9 +5,10 @@ import { after, before, test } from "node:test";
 import { performance } from "node:perf_hooks";
 import pg from "pg";
 import express, { type Request } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   db, pool, onbCases, onbSettings, onbCommunications, onbSystemChecks,
+  onbActionCenterActions,
   organizationMembershipsTable, organizationsTable, accessNamedGrants,
   accessUserGroups, accessUserGroupMembers, accessSecurityGroups, accessSecurityGroupPolicies,
   accessSecurityGroupUserGroups, accessSecurityGroupAttachments,
@@ -17,6 +18,7 @@ import onboardingRouter, { serializeCaseForRequest } from "./onboarding";
 import { resolveEffectiveAccess, resolveEffectiveAccessForCases } from "../lib/access-governance";
 import { CURATED_OFFLINE_EXAMPLES } from "../lib/onboarding/offline-example-extension";
 import { demoPrincipalSettingKey } from "../lib/demo-principal";
+import { SYNTHETIC_OFFLINE_MARKER } from "../lib/onboarding/synthetic-offline";
 
 // Fixtures live outside public tables: neither background workers nor real
 // Demo inventory can see them. No provisioning helper or execution is used.
@@ -68,7 +70,7 @@ before(async () => {
     "access_security_groups", "access_security_group_policies", "access_security_group_user_groups",
     "access_security_group_attachments", "access_principal_security_group_attachments", "access_named_grants",
     "onb_communications", "onb_system_checks", "onb_approvals", "onb_candidate_uploads", "onb_documents",
-    "onb_authority_governance", "onb_authority_assignments", "employee_vault_receipts",
+    "onb_authority_governance", "onb_authority_assignments", "employee_vault_receipts", "onb_action_center_actions",
   ];
   for (const table of tables) {
     await adminPool.query(`CREATE TABLE "${namespace}"."${table}" (LIKE public."${table}" INCLUDING ALL)`);
@@ -264,4 +266,80 @@ test("batched presentation keeps latest approval, delivery status and trusted BG
   });
   const projection = await serializeCaseForRequest(request, row);
   assert.deepEqual((await list()).find(c => c.id === row.id), JSON.parse(JSON.stringify(projection)));
+});
+
+test("legacy voluntary offboarding detail uses fixed labels while preserving state, permissions and current ownership", async () => {
+  const [row] = await db.insert(onbCases).values({
+    ...CURATED_OFFLINE_EXAMPLES[0]!.values, organizationId: "demo",
+    scenarioKey: "UAT-DEMO-COVERAGE:offboarding-voluntary", hireType: "offboarding",
+    workerName: "Demo sample — Voluntary offboarding", workerEmail: "demo-offboarding-voluntary@hro.invalid",
+    syntheticProvenance: null, role: "Finance Manager", geography: "USA",
+    notes: SYNTHETIC_OFFLINE_MARKER, planSummary: "PRIVATE summary",
+    checklistMatchExplanation: "PRIVATE policy explanation",
+    readiness: [
+      { key: "payroll", label: "Payroll, bank, tax, benefits & HRIS activation", status: "pending" },
+      { key: "custom", label: "PRIVATE added task", status: "blocked" },
+    ],
+    workstreams: [{ key: "access", label: "Access & System Readiness", agent: "access",
+      owner: "PRIVATE owner", status: "pending", blockers: ["PRIVATE finding"] }],
+  }).returning();
+  assert.ok(row);
+  await db.insert(accessNamedGrants).values(readKeys.map(key => grant(key, row.id)));
+  const detail = async () => {
+    const response = await fetch(`${baseUrl}/onboarding/cases/${row.id}`);
+    assert.equal(response.status, 200);
+    return response.json() as Promise<Awaited<ReturnType<typeof serializeCaseForRequest>>>;
+  };
+  const safe = await detail();
+  assert.match(safe.planSummary!, /resignation/);
+  assert.equal(safe.role, "Finance Manager");
+  assert.equal(safe.readiness[0]!.label, row.readiness[0]!.label);
+  assert.equal(safe.readiness[1]!.key, "restricted");
+  assert.equal(safe.readiness[1]!.status, "blocked");
+  assert.equal(safe.workstreams[0]!.owner, "IT / Security");
+  assert.equal(safe.workstreams[0]!.status, "pending");
+  assert.equal(safe.offlineSample, true);
+  assert.equal(safe.candidateEmailAuthorized, false);
+  assert.equal(safe.currentActionOwner, null);
+  assert.doesNotMatch(JSON.stringify(safe), /PRIVATE/);
+  await db.insert(accessNamedGrants).values(grant("data.case.readiness.read", row.id, "deny"));
+  assert.deepEqual((await detail()).readiness, []);
+  await db.insert(accessNamedGrants).values(grant("data.case.notes.read", row.id, "deny"));
+  assert.equal((await detail()).planSummary, null);
+
+  // A named reader with exact current grants can read real operational wording.
+  // Neither an offline status nor a shared Demo identity creates a handoff.
+  await db.delete(onbSettings).where(eq(onbSettings.key, demoPrincipalSettingKey(user)));
+  await db.delete(accessNamedGrants).where(and(eq(accessNamedGrants.caseId, row.id), eq(accessNamedGrants.effect, "deny")));
+  await db.insert(accessNamedGrants).values(["data.identity.read", "data.medical.read", "data.payroll.read", "data.bgv.read"].map(key => ({
+    ...grant(key, row.id), approvedByUserId: owner, approvedAt: new Date(),
+  })));
+  const [assignment] = await db.insert(onbActionCenterActions).values({
+    organizationId: "demo", caseId: row.id, kind: "assign", status: "open",
+    owner: "Payroll Operations", assignee: null, actorUserId: user, actorName: "Reader",
+    requestId: randomUUID(),
+  }).returning();
+  assert.equal((await detail()).currentActionOwner, "Payroll Operations");
+  assert.equal((await list()).find(item => item.id === row.id)!.currentActionOwner, "Payroll Operations");
+  const [reassignment] = await db.insert(onbActionCenterActions).values({
+    organizationId: "demo", caseId: row.id, kind: "reassign", status: "open",
+    owner: "HR Operations", assignee: "Assigned reviewer", actorUserId: user, actorName: "Reader",
+    requestId: randomUUID(), payload: { body: { workItemId: assignment!.id } },
+  }).returning();
+  assert.equal((await detail()).currentActionOwner, "Assigned reviewer");
+  assert.equal((await list()).find(item => item.id === row.id)!.currentActionOwner, "Assigned reviewer");
+  const [resolution] = await db.insert(onbActionCenterActions).values({
+    organizationId: "demo", caseId: row.id, kind: "resolve", status: "completed",
+    actorUserId: user, actorName: "Reader", requestId: randomUUID(),
+    payload: { body: { workItemId: assignment!.id } },
+  }).returning();
+  assert.equal((await detail()).currentActionOwner, null);
+  await db.delete(onbActionCenterActions).where(inArray(onbActionCenterActions.id, [resolution!.id, reassignment!.id]));
+  await db.update(onbActionCenterActions).set({ status: "open", owner: null }).where(eq(onbActionCenterActions.id, assignment!.id));
+  assert.equal((await detail()).currentActionOwner, "Unassigned human team");
+  await db.update(onbCases).set({ operationalPreparation: {} as never, planSummary: "Current operational request" }).where(eq(onbCases.id, row.id));
+  assert.equal((await detail()).planSummary, "Current operational request");
+  await db.insert(accessNamedGrants).values(grant("data.case.notes.read", row.id, "deny"));
+  assert.equal((await detail()).currentActionOwner, null);
+  await db.insert(onbSettings).values({ organizationId: "demo", key: demoPrincipalSettingKey(user), value: "reviewer" });
 });

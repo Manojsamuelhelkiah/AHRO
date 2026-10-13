@@ -44,21 +44,27 @@ export function preparationSource(row: CaseRow) {
 
 /** Even a reserved example key cannot override actual run-ledger ownership. */
 export async function actualRunOwnsCase(tx: Pick<OnboardingDbTransaction, "select">, row: CaseRow) {
+  return (await actualRunOwnedCaseIds(tx, row.organizationId, [row.id])).has(row.id);
+}
+
+/** Same fail-closed ledger check for list presentation without per-row reads. */
+export async function actualRunOwnedCaseIds(tx: Pick<OnboardingDbTransaction, "select">, organizationId: string, ids: number[]) {
   const settings = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
-    eq(onbSettings.organizationId, row.organizationId),
+    eq(onbSettings.organizationId, organizationId),
     like(onbSettings.key, "onboarding-uat.run.v1:%"),
   ));
+  const owned = new Set<number>();
   for (const setting of settings) {
     try {
       const run = JSON.parse(setting.value);
       // Uncertain ownership is never permission to operate.
       if (!run || typeof run !== "object" || Array.isArray(run) ||
         typeof run.runId !== "string" || !Array.isArray(run.linkedCaseIds) ||
-        !run.linkedCaseIds.every((id: unknown) => Number.isSafeInteger(id) && Number(id) > 0)) return true;
-      if (run.linkedCaseIds.includes(row.id)) return true;
-    } catch { return true; }
+        !run.linkedCaseIds.every((id: unknown) => Number.isSafeInteger(id) && Number(id) > 0)) return new Set(ids);
+      for (const id of ids) if (run.linkedCaseIds.includes(id)) owned.add(id);
+    } catch { return new Set(ids); }
   }
-  return false;
+  return owned;
 }
 
 export function validStoredPreparation(row: CaseRow): OfflineCasePreparation | null {

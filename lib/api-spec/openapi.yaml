@@ -12454,6 +12454,10 @@ components:
     OnbCase:
       type: object
       properties:
+        currentActionOwner:
+          type: string
+          nullable: true
+          description: Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.
         intakeSource: { type: [string, "null"] }
         intakeSourceUrl: { type: [string, "null"] }
         controllerRetired:

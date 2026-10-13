@@ -12244,6 +12244,7 @@ export const runOnboardingScenarioResponseWorkforceContextLanguagePreferenceMax 
 
 
 export const RunOnboardingScenarioResponse = zod.object({
+  "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
@@ -12487,6 +12488,7 @@ export const listOnboardingCasesResponseWorkforceContextLanguagePreferenceMax = 
 
 
 export const ListOnboardingCasesResponseItem = zod.object({
+  "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
@@ -12823,6 +12825,7 @@ export const createOnboardingCaseResponseWorkforceContextLanguagePreferenceMax =
 
 
 export const CreateOnboardingCaseResponse = zod.object({
+  "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
@@ -13070,6 +13073,7 @@ export const getOnboardingCaseResponseWorkforceContextLanguagePreferenceMax = 12
 
 
 export const GetOnboardingCaseResponse = zod.object({
+  "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
@@ -13409,6 +13413,7 @@ export const confirmOnboardingOfferAcceptanceResponseWorkforceContextLanguagePre
 
 
 export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
+  "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
@@ -13673,6 +13678,7 @@ export const recalculateOnboardingChecklistProfileResponseWorkforceContextLangua
 
 
 export const RecalculateOnboardingChecklistProfileResponse = zod.object({
+  "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
@@ -16620,6 +16626,7 @@ export const updateOnboardingChecklistItemResponseWorkforceContextLanguagePrefer
 
 
 export const UpdateOnboardingChecklistItemResponse = zod.object({
+  "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
@@ -16903,6 +16910,7 @@ export const verifyOnboardingChecklistEvidenceResponseWorkforceContextLanguagePr
 
 
 export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
+  "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
@@ -17228,6 +17236,7 @@ export const correctOnboardingWorkforceContextResponseWorkforceContextLanguagePr
 
 
 export const CorrectOnboardingWorkforceContextResponse = zod.object({
+  "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),

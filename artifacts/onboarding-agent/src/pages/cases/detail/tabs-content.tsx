@@ -45,10 +45,15 @@ export function TasksTab({ c }: { c: any }) {
           <CardTitle className="text-[var(--text-base)]">Workstreams</CardTitle>
         </CardHeader>
         <CardContent className="pt-4 space-y-4">
-          {c.workstreams?.map((w: any) => (
+          {c.workstreams?.some((w: any) => w.key === 'restricted') && <div role="status" className="rounded border p-3 text-sm">
+            Operational wording is restricted by your current field permissions.
+            <ul>{c.workstreams.filter((w: any) => w.key === 'restricted').map((w: any, i: number) =>
+              <li key={i}>Item {i + 1}: {w.status}</li>)}</ul>
+          </div>}
+          {c.workstreams?.filter((w: any) => w.key !== 'restricted').map((w: any) => (
             <div key={w.key} className="p-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-alt)]">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[var(--text-base)] font-bold">{w.label}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <span className="min-w-0 break-words text-[var(--text-base)] font-bold">{w.label}</span>
                 <StatusBadgeText status={w.status} />
               </div>
               <div className="text-[var(--text-sm)] text-[var(--text-secondary)] space-y-2">
@@ -58,7 +63,7 @@ export function TasksTab({ c }: { c: any }) {
                 </div>
                 <div className="flex gap-2">
                   <span className="w-16 font-semibold text-[var(--text-muted)] text-[11px] uppercase tracking-wider">Owner:</span> 
-                  <span>{w.owner}</span>
+                  <span className="min-w-0 break-words">{w.owner || 'Owner not recorded'}</span>
                 </div>
                 {w.blockers && w.blockers.length > 0 && (
                   <div className="mt-3 p-3 rounded-[var(--radius-md)] bg-[var(--status-red-bg)] border border-[var(--status-red)] text-[var(--status-red-fg)]">

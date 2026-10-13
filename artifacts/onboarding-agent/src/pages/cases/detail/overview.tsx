@@ -14,6 +14,7 @@ import {
 } from '../../../lib/approval-actions';
 import { CasePrivacyControls } from './case-privacy-controls';
 import { RestrictedActionNotice, useCaseAccess } from './case-access';
+import { caseOwnerOf, isFictionalOfflineExample } from '../case-presentation';
 
 export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId }: any) {
   const access = useCaseAccess();
@@ -35,8 +36,8 @@ export function OverviewTab({ c, events, docs, comms, approvals, pendingApproval
              ? <AttentionPanel approval={pendingApprovals[0]} caseId={caseId} offlineSample={isOfflineDemoSample(c)} />
              : <RestrictedActionNotice>Approval notes and decision details are restricted by your current permissions.</RestrictedActionNotice>}
            {access?.access.profileRead && <WorkforceContextCard c={c} />}
-          {isOfflineDemoSample(c) ? <OfflinePrivacyRestricted /> : <CasePrivacyControls caseId={caseId} />}
-           {access?.access.notesRead && <CaseOwnerCard events={events} approvals={approvals} />}
+          {!isFictionalOfflineExample(c) && (isOfflineDemoSample(c) ? <OfflinePrivacyRestricted /> : <CasePrivacyControls caseId={caseId} />)}
+           {access?.access.notesRead && <CaseOwnerCard c={c} events={events} approvals={approvals} />}
            {access?.access.notesRead && access && Object.values(access.sensitive).every((permission) => permission.read)
              ? <LatestCommunicationCard comms={comms} setTab={setTab} />
              : <RestrictedActionNotice>Communication details are restricted by your current permissions.</RestrictedActionNotice>}
@@ -106,7 +107,7 @@ export function AttentionPanel({ approval, caseId, offlineSample = false }: any)
           <CheckCircle2 className={cn("w-5 h-5", offlineSample ? "text-[var(--text-muted)]" : "text-[var(--status-green)]")} />
         </div>
         <h3 className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">{offlineSample ? 'No live decisions' : 'No decisions pending'}</h3>
-        <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">{offlineSample ? 'Offline — no execution or approval authority.' : 'Automated execution is proceeding.'}</p>
+        <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">{offlineSample ? 'Offline — no execution or approval authority.' : 'Execution remains subject to the current lifecycle and prerequisites.'}</p>
       </div>
     );
   }
@@ -213,7 +214,8 @@ export function AttentionPanel({ approval, caseId, offlineSample = false }: any)
   );
 }
 
-function CaseOwnerCard({ events, approvals }: any) {
+function CaseOwnerCard({ c, events, approvals }: any) {
+  const owner = caseOwnerOf(c);
   const actionsCount = events?.filter((e: any) => e.engine !== 'human').length || 0;
   const humanCount = approvals?.length || 0;
   // Events arrive ascending by createdAt — the latest is the last element.
@@ -223,16 +225,17 @@ function CaseOwnerCard({ events, approvals }: any) {
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] p-5 shadow-[var(--shadow-sm)]">
       <h3 className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Case Owner</h3>
       <div className="flex items-center justify-between mb-4">
-        <span className="font-bold text-[var(--text-base)] text-[var(--text-primary)]">Onboarding Agent</span>
-        <span className="bg-[var(--status-green-bg)] text-[var(--status-green-fg)] text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Operational</span>
+        <span className="min-w-0 break-words font-bold text-[var(--text-base)] text-[var(--text-primary)]">{owner.name}</span>
+        <span className="shrink-0 bg-[var(--surface-alt)] text-[var(--text-muted)] text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">{owner.kind}</span>
       </div>
+      {owner.kind === 'Human Reviewer' && <p className="mb-3 break-words text-xs">Coordinating agent: {owner.coordinatingAgent}</p>}
       <div className="space-y-2 text-[var(--text-sm)]">
         <div className="flex justify-between border-b border-[var(--border)] pb-2">
-          <span className="text-[var(--text-muted)]">Actions completed</span>
+          <span className="text-[var(--text-muted)]">{isOfflineDemoSample(c) ? 'Recorded events' : 'Actions completed'}</span>
           <span className="font-semibold text-[var(--text-primary)]">{actionsCount}</span>
         </div>
         <div className="flex justify-between border-b border-[var(--border)] pb-2">
-          <span className="text-[var(--text-muted)]">Human interventions</span>
+          <span className="text-[var(--text-muted)]">{isOfflineDemoSample(c) ? 'Recorded approvals' : 'Human interventions'}</span>
           <span className="font-semibold text-[var(--text-primary)]">{humanCount}</span>
         </div>
         <div className="flex justify-between pt-1">
@@ -305,24 +308,28 @@ function DocumentsSummaryCard({ docs, setTab }: any) {
 }
 
 
-function NextActions({ c, pendingApprovals, setTab }: any) {
-  const actions = [];
+export function NextActions({ c, pendingApprovals, setTab }: any) {
+  const actions: { title: string; desc: string; owner: string; priority: boolean; status?: string }[] = [];
   
   if (pendingApprovals?.length > 0) {
     actions.push({
       title: pendingApprovals[0].recommendation,
-      desc: 'Required before accelerated handling begins',
-      owner: 'HR Reviewer',
+      desc: isOfflineDemoSample(c) ? 'Decision pending; operational activation and current authority are required.' : 'Current human decision is required before release.',
+      owner: c.currentActionOwner || 'Unassigned human team',
       priority: true
     });
   }
 
-  const waitingWorkstreams = (c.workstreams || []).filter((w: any) => w.status !== 'ready' && w.status !== 'exception');
+  const restricted = (c.workstreams || []).filter((w: any) => w.key === 'restricted');
+  const waitingWorkstreams = (c.workstreams || []).filter((w: any) => w.key !== 'restricted' && w.status !== 'ready');
   waitingWorkstreams.forEach((w: any) => {
     actions.push({
       title: w.label,
-      desc: w.status === 'blocked' ? 'Blocked by external dependency' : 'Begins automatically after dependencies met',
-      owner: w.owner || w.agent || 'Onboarding Agent',
+      desc: (w.blockers?.length ? w.blockers.join(' ') : '') ||
+        (isOfflineDemoSample(c) ? 'Activation, verified evidence and applicable human decisions are required; no work is executing.'
+          : w.status === 'blocked' ? 'External dependency remains unresolved.' : 'Pending current evidence, decisions and executable dependencies.'),
+      owner: w.owner || caseOwnerOf(c).coordinatingAgent,
+      status: w.status,
       priority: w.status === 'blocked'
     });
   });
@@ -330,14 +337,19 @@ function NextActions({ c, pendingApprovals, setTab }: any) {
   return (
     <div className="mb-10">
       <h2 className="text-[var(--text-lg)] font-bold text-[var(--text-primary)] mb-4">Next Actions</h2>
+      {restricted.length > 0 && <div role="status" className="mb-3 rounded border p-3 text-sm">
+        Operational wording is restricted by your current field permissions.
+        <ul>{restricted.map((w: any, i: number) => <li key={i}>Item {i + 1}: {w.status}</li>)}</ul>
+      </div>}
       <div className="space-y-3">
         {actions.length === 0 && <p className="text-[var(--text-sm)] text-[var(--text-muted)] bg-[var(--surface-alt)] p-4 rounded-[var(--radius-lg)] border border-[var(--border)]">No immediate actions required.</p>}
         {actions.map((a, i) => (
           <div key={i} className="flex gap-4 p-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
             <div className="flex-shrink-0 mt-0.5 text-[var(--text-muted)] font-mono text-[var(--text-base)] font-bold">{i + 1}</div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0 break-words">
               <h4 className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">{a.title}</h4>
               <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mt-0.5">{a.desc}</p>
+              {a.status && <StatusBadgeText status={a.status} />}
               <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mt-3 bg-[var(--surface-alt)] inline-block px-2 py-1 rounded-[var(--radius-sm)] border border-[var(--border)]">
                 Owner: {a.owner}
               </div>

@@ -28,6 +28,7 @@ import {
   caseWorkerName,
   caseSummary,
   originalIntentOf,
+  caseOwnerOf,
   type CaseTypeFilter,
 } from './case-presentation';
 
@@ -60,22 +61,7 @@ export function statusOf(c: Pick<OnbCase, 'lifecycleStage' | 'orchestrationStatu
 }
 
 function ownerOf(c: OnbCase): { name: string; kind: 'AI Agent' | 'Human Reviewer' } {
-  if (statusOf(c) === 'Human Review') return { name: 'HR Reviewer', kind: 'Human Reviewer' };
-  const specialistByType: Record<Exclude<CaseTypeFilter, 'All Cases'>, string> = {
-    Onboarding: 'Onboarding Coordinator',
-    'Employee Changes': 'Worker Records Specialist',
-    Payroll: 'Payroll Specialist',
-    Benefits: 'Benefits Specialist',
-    Leave: 'Leave Specialist',
-    Compliance: 'Compliance Specialist',
-    Offboarding: 'Offboarding Coordinator',
-    'HR Helpdesk': 'HR Service Agent',
-    'IT Access': 'Identity & Access Specialist',
-    Learning: 'Learning Specialist',
-    Mobility: 'Mobility Specialist',
-    Documents: 'Worker Records Specialist',
-  };
-  return { name: specialistByType[caseTypeOf(c)], kind: 'AI Agent' };
+  return caseOwnerOf(c);
 }
 
 const PAGE_CONTEXT: Record<CaseTypeFilter, { title: string; subtitle: string }> = {

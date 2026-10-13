@@ -237,16 +237,12 @@ export async function sensitiveAccessForCaseList(
 ): Promise<Map<number, SensitiveAccess>> {
   if (!actorUserId || !effectiveByCase.size) return new Map();
   return db.transaction(async tx => {
-    const sensitiveIds = [...effectiveByCase].filter(([, access]) =>
-      ALL_SENSITIVE_RECORD_CLASSES.some(classification =>
-        access.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].read) ||
-        access.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit),
-      ),
-    ).map(([id]) => id);
+    const sharedDemo = await isSharedDemoPrincipalInTransaction(tx, actorUserId);
     const result = new Map<number, SensitiveAccess>();
     for (const [caseId, effective] of effectiveByCase) {
-      result.set(caseId, await sensitiveAccessFromEffective(tx, { organizationId, actorUserId, caseId },
-        effective));
+      const administrativeAccess = isPlatformSuperAdmin(actorUserId, organizationId) &&
+        effective.allows.includes("flow.case.read");
+      result.set(caseId, projectSensitiveCaseAccess(effective, sharedDemo, administrativeAccess));
     }
     return result;
   }, { isolationLevel: "repeatable read", accessMode: "read only" });

@@ -4,7 +4,7 @@ import { isRestrictedHistoricalCase as isHistoricalTestRecord, activationRecord,
   isRestrictedControllerCase as isRetiredControllerCase, isRestrictedOfflineCase as isSyntheticOfflineCase,
   operationalEligibilityInTransaction, evidenceBelongsToOperationalGeneration } from "../lib/onboarding/operational-eligibility";
 import { isAuthoritativelyUatRunOwnedCase, authoritativelyUatRunOwnedCaseIds } from "../lib/onboarding/uat-isolation";
-import { preparationSource, actualRunOwnsCase } from "../lib/onboarding/offline-preparation";
+import { preparationSource, actualRunOwnsCase, actualRunOwnedCaseIds } from "../lib/onboarding/offline-preparation";
 import { randomUUID } from "node:crypto";
 import { decideApproval, getApprovalHistory } from "../lib/onboarding/approval-decisions";
 import { runConnectedReadinessTick } from "../lib/onboarding/connected-readiness-automation";
@@ -330,6 +330,8 @@ import { readHroBatchRequest, policyWithoutBatchIntake } from "../lib/onboarding
 import { isFictionalOfflineExampleCase, isReportableFictionalOfflineExampleCase } from "../lib/onboarding/offline-example-display";
 import { CURATED_OFFLINE_EXAMPLES } from "../lib/onboarding/offline-example-extension";
 import { originalIntentLabel, onboardingOriginalIntent } from "../lib/onboarding/original-intent";
+import { fixedFictionalPresentation, readableFictionalItems } from "../lib/onboarding/fictional-case-presentation";
+import { currentActionOwners } from "../lib/onboarding/current-action-owner";
 
 const router: IRouter = Router();
 router.use((req, res, next) => {
@@ -702,6 +704,8 @@ router.post("/onboarding/demo-login/logout", (req, res) => {
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
 type CasePresentationReads = {
+  actualRunOwned: boolean;
+  currentActionOwner?: string | null;
   offerDelivery?: typeof onbCommunications.$inferSelect;
   bgvChecks: (typeof onbSystemChecks.$inferSelect)[];
   vaultBgvClear: boolean;
@@ -717,7 +721,7 @@ async function casePresentationReads(
 ): Promise<Map<number, CasePresentationReads>> {
   if (!rows.length) return new Map();
   const ids = rows.map(row => row.id);
-  const [communications, checks, approvals, vaultClear, blockers, uatOwned] = await Promise.all([
+  const [communications, checks, approvals, vaultClear, blockers, uatOwned, actionOwners, actualRunOwned] = await Promise.all([
     db.select().from(onbCommunications).where(and(
       eq(onbCommunications.organizationId, organizationId), inArray(onbCommunications.caseId, ids),
       inArray(onbCommunications.idempotencyKey, ids.map(id => `gateway-a:${id}:offer-package:email`)),
@@ -735,10 +739,12 @@ async function casePresentationReads(
       tx, organizationId, rows.filter(row => documentationGateConfigured(row)).map(row => row.id),
     )),
     authoritativelyUatRunOwnedCaseIds(organizationId, rows),
+    currentActionOwners(organizationId, ids),
+    actualRunOwnedCaseIds(db, organizationId, ids),
   ]);
   const result = new Map(ids.map(id => [id, {
     bgvChecks: [] as (typeof onbSystemChecks.$inferSelect)[],
-    vaultBgvClear: vaultClear.has(id), malwareBlockers: blockers.get(id) ?? [], uatOwned: uatOwned.has(id),
+    vaultBgvClear: vaultClear.has(id), malwareBlockers: blockers.get(id) ?? [], uatOwned: uatOwned.has(id), actualRunOwned: actualRunOwned.has(id),
   } as CasePresentationReads]));
   for (const communication of communications) {
     const entry = result.get(communication.caseId);
@@ -750,6 +756,10 @@ async function casePresentationReads(
     const entry = result.get(approval.caseId);
     if (entry && approval.idempotencyKey === `gateway-c:${approval.caseId}:human-queue` &&
       !entry.finalApproval) entry.finalApproval = approval;
+  }
+  for (const [caseId, owner] of actionOwners) {
+    const entry = result.get(caseId);
+    if (entry) entry.currentActionOwner = owner;
   }
   return result;
 }
@@ -866,26 +876,30 @@ async function serializeCase(
   // sensitive-record authority. Volunteered/hybrid cases remain protected.
   const fictionalOfflineIdentity = isFictionalOfflineExampleCase(row);
   // Generic fixed-inventory description only, never a bypass for mutable notes.
-  const offlineExample = fictionalOfflineIdentity
-    ? CURATED_OFFLINE_EXAMPLES.find(example => example.key === row.scenarioKey)
-    : undefined;
+  const offlineExample = fixedFictionalPresentation(row);
   const canReadIdentity = canReadProfile &&
     (sensitiveAccess.identity || fictionalOfflineIdentity);
   const profileSensitiveAccess = canReadProfile ? sensitiveAccess : NO_SENSITIVE_ACCESS;
+  const ownerReadable = canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess);
+  const pendingOwners = ownerReadable && !presentation ? await currentActionOwners(row.organizationId, [row.id]) : null;
   return {
+    currentActionOwner: ownerReadable
+      ? presentation?.currentActionOwner ?? pendingOwners?.get(row.id) ?? null
+      : null,
     id: row.id,
     controllerRetired: (!activationRecord(row, false) && isHistoricalTestRecord(row)) ||
       (presentation ? presentation.uatOwned : await isAuthoritativelyUatRunOwnedCase(row)),
     reportingCaseEligible: (isReportableFictionalOfflineExampleCase(row) || Boolean(preparationSource(row)))
-      ? !await actualRunOwnsCase(db, row)
+      ? !(presentation ? presentation.actualRunOwned : await actualRunOwnsCase(db, row))
       : !isHistoricalTestRecord(row) && !(presentation ? presentation.uatOwned : await isAuthoritativelyUatRunOwnedCase(row)),
     caseFamily: canReadProfile ? intakeRequest?.family ?? null : null,
-    requestType: canReadProfile ? intakeRequest?.requestType ?? null : null,
+    requestType: canReadProfile ? offlineExample?.batchIntake?.requestType ??
+      (hasOpaqueNarrativeAccess(sensitiveAccess) ? intakeRequest?.requestType ?? null : null) : null,
     originalIntent: originalIntentLabel(row, canReadProfile),
     intakeSource: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) && emailIntake?.requestId ? "Email" : null,
     intakeSourceUrl: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) && emailIntake?.requestId ? `/email-intake/${encodeURIComponent(emailIntake.requestId)}` : null,
     batchIntake: canReadProfile && canReadNotes
-      ? offlineExample?.values.processPolicySnapshot.batchIntake ??
+      ? offlineExample?.batchIntake ??
         (hasOpaqueNarrativeAccess(sensitiveAccess) ? intakeRequest : null)
       : null,
     workerName: canReadIdentity ? row.workerName : "Restricted candidate",
@@ -906,9 +920,9 @@ async function serializeCase(
     lifecycleStage: row.lifecycleStage,
     orchestrationStatus: row.orchestrationStatus,
     readiness: canReadReadiness
-      ? redactOperationalItems(row.readiness, profileSensitiveAccess)
+      ? readableFictionalItems(row.readiness, profileSensitiveAccess, canReadProfile ? offlineExample?.readiness : undefined)
       : [],
-    workstreams: redactOperationalItems(row.workstreams, profileSensitiveAccess),
+    workstreams: caseAccess.flowRead ? readableFictionalItems(row.workstreams, profileSensitiveAccess, canReadProfile ? offlineExample?.workstreams : undefined) : [],
     primarySkill: canReadProfile ? row.primarySkill : null,
     skillCriticality: canReadProfile ? row.skillCriticality : null,
     scenarioKey: canReadProfile ? row.scenarioKey : null,
@@ -922,11 +936,11 @@ async function serializeCase(
     /** Only server-marked, fictional Demo fixtures may bypass identity authority. */
     fictionalOfflineIdentity: canReadProfile && fictionalOfflineIdentity,
     planSummary: canReadNotes
-      ? offlineExample?.values.planSummary ?? redactSensitiveText(row.planSummary, sensitiveAccess) ?? null
+      ? (canReadProfile ? offlineExample?.summary : null) ?? redactSensitiveText(row.planSummary, sensitiveAccess) ?? null
       : null,
     checklistTemplateVersion: row.checklistTemplateVersion,
     checklistSnapshot: canReadReadiness
-      ? redactOperationalItems(row.checklistSnapshot, profileSensitiveAccess)
+      ? readableFictionalItems(row.checklistSnapshot, profileSensitiveAccess, canReadProfile ? offlineExample?.checklist : undefined)
       : [],
     checklistProfileId: canReadProfile ? row.checklistProfileId : "restricted",
     checklistProfileName: canReadProfile ? row.checklistProfileName : "Restricted case profile",
@@ -935,7 +949,7 @@ async function serializeCase(
       ? row.checklistMatchedCriteria
       : {},
     checklistMatchExplanation: canReadProfile && canReadNotes
-      ? redactSensitiveText(row.checklistMatchExplanation, sensitiveAccess) ?? null
+      ? offlineExample?.review ?? redactSensitiveText(row.checklistMatchExplanation, sensitiveAccess) ?? null
       : "Restricted case profile.",
     workforceContext: canReadProfile
       ? redactCaseWorkforceContext(row.workforceContext, sensitiveAccess)

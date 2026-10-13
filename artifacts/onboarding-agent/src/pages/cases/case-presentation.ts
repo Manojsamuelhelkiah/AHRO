@@ -47,7 +47,7 @@ export function caseListReference(c: SamplePresentationContext & { createdAt?: s
 }
 
 export function caseWorkerName(c: SamplePresentationContext & { workerName: string }): string {
-  return isFictionalOfflineExample(c) ? c.workerName.replace(/^Example — /, '') : c.workerName;
+  return isFictionalOfflineExample(c) ? c.workerName.replace(/^(?:Example|Demo sample) — /, '') : c.workerName;
 }
 
 export function caseSummary(c: { fictionalOfflineIdentity?: boolean; offlineSample?: boolean; planSummary?: string | null }): string {
@@ -113,7 +113,22 @@ export function casePresentationOf(c: CaseLike) {
 export function caseTypeOf(c: CaseLike): CaseFamily {
   if (c.caseFamily && CASE_TYPES.includes(c.caseFamily as CaseTypeFilter) && c.caseFamily !== "All Cases") return c.caseFamily as CaseFamily;
   return casePresentationOf(c)?.type ??
-    (c.hireType === 'internal-transfer' ? 'Employee Changes' : 'Onboarding');
+    (c.hireType === 'offboarding' ? 'Offboarding' : c.hireType === 'internal-transfer' ? 'Employee Changes' : 'Onboarding');
+}
+
+const AGENT_BY_FAMILY: Record<CaseFamily, string> = {
+  Onboarding: 'Onboarding Agent', Offboarding: 'Offboarding Agent',
+  'Employee Changes': 'Worker Records Agent', Payroll: 'Payroll Agent',
+  Benefits: 'Benefits Agent', Leave: 'Leave Agent', Compliance: 'Compliance Agent',
+  'HR Helpdesk': 'HR Service Agent', 'IT Access': 'Identity & Access Agent',
+  Learning: 'Learning Agent', Mobility: 'Mobility Agent', Documents: 'Worker Records Agent',
+};
+
+/** Status alone never establishes a human handoff. */
+export function caseOwnerOf(c: CaseLike & { currentActionOwner?: string | null }) {
+  const coordinatingAgent = AGENT_BY_FAMILY[caseTypeOf(c)];
+  return { name: c.currentActionOwner || coordinatingAgent,
+    kind: c.currentActionOwner ? 'Human Reviewer' as const : 'AI Agent' as const, coordinatingAgent };
 }
 
 export function caseTitleOf(c: CaseLike): string {
