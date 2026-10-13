@@ -1,4 +1,5 @@
-import { and, eq, lte, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { hroEmailRequests, onbAuditEntries, onbCases } from "@workspace/db";
 import type { GetHroEmailIntakeResponse } from "@workspace/api-zod";
 import type { z } from "zod";
@@ -8,17 +9,39 @@ import { protectedAuditObjectReference } from "./onboarding/protected-audit";
 /** Opaque identifiers stay server-side; only aggregate measurements are returned.
  * Mutable timestamps and case completion events are not measurement sources. */
 export async function emailReviewTurnaround(tx: Tx, org: string, asOf = new Date()): Promise<z.infer<typeof GetHroEmailIntakeResponse>["turnaround"]> {
-  // Protected audit object IDs are pseudonymized (and may be keyed). Reuse
-  // the writer's exact server-only helper rather than guessing a SQL hash.
-  const ids = (await tx.select({ id: hroEmailRequests.id }).from(hroEmailRequests)
-    .where(and(eq(hroEmailRequests.organizationId, org), lte(hroEmailRequests.createdAt, asOf)))).map(r => r.id);
-  const references = ids.map(protectedAuditObjectReference);
+  // Keep the retained cohort in PostgreSQL, not an unbounded JS array or
+  // query parameter. A private transaction-local table avoids persistent
+  // correlation state/key-rotation invalidation. It contains identifiers only.
+  // Unique names allow repeated/concurrent calls in the same transaction.
+  const suffix = randomUUID().replaceAll("-", "");
+  const refs = sql.identifier(`email_review_refs_${suffix}`);
+  const cursor = sql.identifier(`email_review_cursor_${suffix}`);
+  await tx.execute(sql`create temporary table ${refs}
+    (request_id text not null, audit_id text not null) on commit drop`);
+  // A forward-only cursor holds one cohort snapshot without OFFSET scans or
+  // repeatedly updating/indexing the entire temporary mapping.
+  await tx.execute(sql`declare ${cursor} no scroll cursor for
+    select r.id as request_id from ${hroEmailRequests} r
+    where r.organization_id = ${org} and r.created_at <= ${asOf}
+      and not exists (select 1 from ${onbCases} c where c.organization_id = ${org}
+        and c.id = r.case_id and c.synthetic_provenance is not null)`);
+  for (;;) {
+    const page = await tx.execute<{ request_id: string }>(sql`fetch forward 1000 from ${cursor}`);
+    if (page.rows.length === 0) break;
+    const ids = page.rows.map(r => r.request_id);
+    // Reuse the writer's compaction, already-opaque and keyed HMAC rules.
+    // Neither the key nor any employee/private fields enter SQL or responses.
+    const references = ids.map(protectedAuditObjectReference);
+    await tx.execute(sql`insert into ${refs} (request_id, audit_id)
+      select * from unnest(${sql.param(ids)}::text[], ${sql.param(references)}::text[])`);
+    if (ids.length < 1000) break;
+  }
+  await tx.execute(sql`close ${cursor}`);
+  await tx.execute(sql`analyze ${refs}`);
   const result = await tx.execute(sql`
-    with audit_references as (
-      select * from unnest(${sql.param(ids)}::text[], ${sql.param(references)}::text[]) as refs(request_id, audit_id)
-    ), requests as (
+    with requests as (
       select r.id, refs.audit_id, r.status, r.created_at, r.reviewed_by is not null as review_recorded
-      from ${hroEmailRequests} r join audit_references refs on refs.request_id = r.id
+      from ${hroEmailRequests} r join ${refs} refs on refs.request_id = r.id
       where r.organization_id = ${org} and r.created_at <= ${asOf}
         and not exists (
           select 1 from ${onbCases} c where c.organization_id = ${org}
@@ -60,6 +83,10 @@ export async function emailReviewTurnaround(tx: Tx, org: string, asOf = new Date
       percentile_cont(0.9) within group (order by conversion_hours) as conversion_p90
     from measured
   `);
+  // Successful reads release disk space immediately even inside a long
+  // transaction. On errors PostgreSQL's rollback/ON COMMIT DROP owns cleanup;
+  // do not mask the original error with a query in an aborted transaction.
+  await tx.execute(sql`drop table ${refs}`);
   const row = result.rows[0];
   const duration = (prefix: string) => ({
     sampleCount: Number(row[`${prefix}_count`]),

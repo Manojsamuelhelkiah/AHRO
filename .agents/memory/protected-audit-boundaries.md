@@ -12,4 +12,10 @@ Historical aggregate measurement must resolve audit subjects using the writer's 
 
 **How to apply:** Keep subject resolution server-only and tenant-fenced. Report unavailable dated evidence explicitly rather than guessing dates or claiming an unmeasured historical outcome.
 
+Do not introduce a permanently retained audit-subject crosswalk merely to optimize historical summaries without separately defining its retention and key-generation rules.
+
+**Why:** Ephemeral, bounded correlation was deliberately chosen to avoid new retained private linkage and invalidation obligations. That tradeoff accepts extra database round trips; it does not solve historical pseudonymization-key rotation.
+
+**How to apply:** Measure workload size before changing this tradeoff. A future persistent correlation design must address retention, tenant isolation, key generations, and missing historical evidence explicitly.
+
 **How to apply:** Preserve explicit limits in review screens and exports. Mark protection configured only after fresh provider-side receipt verification, exact local/provider checkpoint comparison, successful local-chain verification, and provider-verified restore/legal-hold receipts. Bind provider context, receipts, drills, and delivery completion to one tenant configuration generation; recheck the generation and chain head after remote calls before unblocking launch. Serialize configuration replacement and drill recording so stale in-flight work cannot restore retired evidence. Accept credential reference identifiers only, never token-shaped values. Bound provider calls, fence delivery claims, and serialize each tenant's checkpoint and legal-hold operations; select the oldest undelivered row before applying global batch limits, and require provider-side idempotent monotonic/CAS writes for timeout ambiguity. Keep outages launch-blocking while retrying durably. Existing approval evidence must retain its historical coverage label; adding protection now does not certify earlier immutability or recover unknown actors. Never invent a statutory retention deadline.
