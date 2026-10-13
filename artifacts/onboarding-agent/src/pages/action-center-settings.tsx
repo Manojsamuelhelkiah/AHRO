@@ -112,10 +112,10 @@ export function ActionCenterIdentitiesSettings() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-[var(--primary)]" /> Action Center Stakeholders
+            <Building2 className="h-5 w-5 text-[var(--primary)]" /> Stakeholder display names
           </h3>
           <p className="text-sm text-[var(--text-secondary)] max-w-2xl mt-1">
-            Display names for work queues and assignments. These are presentation metadata only and do not grant permissions or change candidate routing.
+            Optional names for stakeholder roles shown in the Action Center. These labels do not grant access, connect mailboxes, or change candidate message routing.
           </p>
         </div>
         {!canEdit && !roleLoading && (
