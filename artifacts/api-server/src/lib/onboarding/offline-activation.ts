@@ -1,3 +1,4 @@
+import { resolveOriginalIntent } from "./original-intent";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { onbCases, onbEvents, onbSensitiveLifecyclePolicies, onbApprovals, onbCommunications,
@@ -284,6 +285,7 @@ export async function activateOfflineCaseInTransaction(tx: OnboardingDbTransacti
     offerAcceptanceComplete: false, offerAcceptanceCompletedAt: null, offerAcceptanceCompletedBy: null,
     candidateEmailAuthorizedAt: null, candidateEmailAuthorizedBy: null,
     notes: "Operational identity recorded. Original fictional source is retained separately and is not employee evidence.",
+    originalIntent: resolveOriginalIntent(row),
     createdAt: now, updatedAt: now,
   };
   const activation = {

@@ -185,6 +185,8 @@ export type OnbSyntheticProvenance =
   | "demo-controller-fictional";
 export const onbCases = pgTable("onb_cases", {
   id: serial("id").primaryKey(),
+  /** Original creation context, never replaced by workflow or activation context. */
+  originalIntent: jsonb("original_intent").$type<{ label: string; source: string; templateId?: string }>(),
   organizationId: text("organization_id")
     .notNull()
     .references(() => organizationsTable.id),

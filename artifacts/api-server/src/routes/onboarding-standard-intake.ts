@@ -1,3 +1,4 @@
+import { onboardingOriginalIntent } from "../lib/onboarding/original-intent";
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -267,6 +268,7 @@ async function commitOne(
       }, governanceSnapshot);
       const [created] = await tx.insert(onbCases).values({
         organizationId,
+        originalIntent: onboardingOriginalIntent("trusted-offer-intake"),
         workerName: event.person.workerName, workerEmail: event.person.workerEmail,
         workerPhone: event.person.workerPhone ?? null, channelPreference: event.person.channelPreference ?? "email",
         hireType: event.person.hireType, workerCategory: event.person.workerCategory,

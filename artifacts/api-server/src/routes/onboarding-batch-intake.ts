@@ -41,6 +41,7 @@ import {
 import { assertGovernanceMutationAllowed } from "../lib/onboarding/governance-dispatch";
 import { acquireCaseDispatchMutationLock } from "../lib/onboarding/dispatch-guard";
 import { readHroBatchRequest, type HroBatchRequest } from "../lib/onboarding/hro-batch-templates";
+import { templateOriginalIntent, onboardingOriginalIntent } from "../lib/onboarding/original-intent";
 
 const router: IRouter = Router();
 
@@ -323,6 +324,11 @@ export async function createHeldBatch(req: Request, res: Response, next: NextFun
           }
           const [created] = await tx.insert(onbCases).values({
             organizationId,
+            originalIntent: person.batchRequest
+              ? templateOriginalIntent(person.batchRequest.templateId)
+              : person.hireType === "internal-transfer"
+                ? { label: "Internal transfer request", source: "batch-transfer-intake" }
+                : onboardingOriginalIntent("batch-onboarding-intake"),
             workerName: person.workerName, workerEmail: person.workerEmail, workerPhone: person.workerPhone ?? null,
             channelPreference: person.channelPreference ?? "email", hireType: person.hireType,
             workerCategory: person.workerCategory, workerBand: person.workerBand ?? null, role: person.role,

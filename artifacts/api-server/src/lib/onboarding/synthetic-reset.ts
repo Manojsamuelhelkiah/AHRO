@@ -1,3 +1,4 @@
+import { scenarioOriginalIntent } from "./original-intent";
 import { createHash } from "node:crypto";
 import { denyRetiredCaseCapability } from "../retired-case-capabilities";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -934,6 +935,7 @@ async function createFreshCases(
     const [row] = await tx
       .insert(onbCases)
       .values({
+        originalIntent: scenarioOriginalIntent(scenario.key),
         organizationId,
         workerName: syntheticName(scenario),
         workerEmail: syntheticEmail(scenario),

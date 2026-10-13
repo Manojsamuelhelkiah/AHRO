@@ -1147,6 +1147,7 @@ export const ResolveHroEmailTriageResponse = zod.object({
 
 
 export const ListSeparationCasesResponseItem = zod.object({
+  "originalIntent": zod.string().optional().describe('Fixed originating request label, or Not recorded when creation history is unavailable. No source narrative or exit reason.'),
   "id": zod.number(),
   "version": zod.number(),
   "generation": zod.number(),
@@ -1231,6 +1232,7 @@ export const GetSeparationCaseParams = zod.object({
 })
 
 export const GetSeparationCaseResponse = zod.object({
+  "originalIntent": zod.string().optional().describe('Fixed originating request label, or Not recorded when creation history is unavailable. No source narrative or exit reason.'),
   "id": zod.number(),
   "version": zod.number(),
   "generation": zod.number(),
@@ -12247,6 +12249,7 @@ export const RunOnboardingScenarioResponse = zod.object({
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
   "caseFamily": zod.string().nullish(),
   "requestType": zod.string().nullish(),
+  "originalIntent": zod.string().nullish().describe('Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.'),
   "batchIntake": zod.object({
   "templateId": zod.string(),
   "templateVersion": zod.number(),
@@ -12489,6 +12492,7 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
   "caseFamily": zod.string().nullish(),
   "requestType": zod.string().nullish(),
+  "originalIntent": zod.string().nullish().describe('Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.'),
   "batchIntake": zod.object({
   "templateId": zod.string(),
   "templateVersion": zod.number(),
@@ -12824,6 +12828,7 @@ export const CreateOnboardingCaseResponse = zod.object({
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
   "caseFamily": zod.string().nullish(),
   "requestType": zod.string().nullish(),
+  "originalIntent": zod.string().nullish().describe('Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.'),
   "batchIntake": zod.object({
   "templateId": zod.string(),
   "templateVersion": zod.number(),
@@ -13070,6 +13075,7 @@ export const GetOnboardingCaseResponse = zod.object({
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
   "caseFamily": zod.string().nullish(),
   "requestType": zod.string().nullish(),
+  "originalIntent": zod.string().nullish().describe('Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.'),
   "batchIntake": zod.object({
   "templateId": zod.string(),
   "templateVersion": zod.number(),
@@ -13408,6 +13414,7 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
   "caseFamily": zod.string().nullish(),
   "requestType": zod.string().nullish(),
+  "originalIntent": zod.string().nullish().describe('Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.'),
   "batchIntake": zod.object({
   "templateId": zod.string(),
   "templateVersion": zod.number(),
@@ -13671,6 +13678,7 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
   "caseFamily": zod.string().nullish(),
   "requestType": zod.string().nullish(),
+  "originalIntent": zod.string().nullish().describe('Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.'),
   "batchIntake": zod.object({
   "templateId": zod.string(),
   "templateVersion": zod.number(),
@@ -16617,6 +16625,7 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
   "caseFamily": zod.string().nullish(),
   "requestType": zod.string().nullish(),
+  "originalIntent": zod.string().nullish().describe('Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.'),
   "batchIntake": zod.object({
   "templateId": zod.string(),
   "templateVersion": zod.number(),
@@ -16899,6 +16908,7 @@ export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
   "caseFamily": zod.string().nullish(),
   "requestType": zod.string().nullish(),
+  "originalIntent": zod.string().nullish().describe('Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.'),
   "batchIntake": zod.object({
   "templateId": zod.string(),
   "templateVersion": zod.number(),
@@ -17223,6 +17233,7 @@ export const CorrectOnboardingWorkforceContextResponse = zod.object({
   "controllerRetired": zod.boolean().optional().describe('Retained historical case; cannot dispatch, simulate, or resume operations.'),
   "caseFamily": zod.string().nullish(),
   "requestType": zod.string().nullish(),
+  "originalIntent": zod.string().nullish().describe('Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.'),
   "batchIntake": zod.object({
   "templateId": zod.string(),
   "templateVersion": zod.number(),

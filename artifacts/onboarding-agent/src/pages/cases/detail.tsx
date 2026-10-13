@@ -26,7 +26,7 @@ import { Link, Redirect } from 'wouter';
 import { Presentation, AlertTriangle } from 'lucide-react';
 
 import { useUser } from '@clerk/react';
-import { CaseHeader, CaseHealthStrip, CaseTabs, isOfflineDemoSample } from './detail/components';
+import { CaseHeader, OriginalIntent, CaseHealthStrip, CaseTabs, isOfflineDemoSample } from './detail/components';
 import { OperationalPreparationPanel } from './detail/operational-preparation-panel';
 import { GatewaysStrip } from './detail/gateways-strip';
 import { EmployeeVaultPanel } from './detail/employee-vault-panel';
@@ -39,7 +39,7 @@ import { PortalControls } from './detail/portal-controls';
 import { EarlyTenurePanel } from './detail/early-tenure-panel';
 import { getApprovalRefetchInterval } from '../../lib/approval-actions';
 import { SimulationPanel } from './detail/simulation-panel';
-import { isDemoCoverageCase, isFictionalOfflineExample, sampleCaseReference, caseSummary } from './case-presentation';
+import { caseTitleOf, caseTypeOf, isDemoCoverageCase, isFictionalOfflineExample, sampleCaseReference, caseSummary } from './case-presentation';
 import { HroIntakeRequestPanel } from '../../components/hro-intake-request-panel';
 import { CaseAccessProvider, RestrictedActionNotice, type CaseAccessPermissions } from './detail/case-access';
 
@@ -249,8 +249,10 @@ export function CaseDetailPage() {
     return <CaseAccessProvider value={permissions}>
       <div className="mx-auto max-w-5xl space-y-5 px-4 md:px-8">
         <Link href="/cases" className="inline-flex min-h-10 items-center text-sm text-[var(--primary)]">Back to cases</Link>
-        <div><h1 className="text-2xl font-semibold text-[var(--text-primary)]">{c.requestType || 'Service request'}</h1>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">{sampleCaseReference(c) ?? `Case #${caseId}`} · Held for specialist review · No external action authorized</p>
+        <div><p className="text-sm font-semibold">{sampleCaseReference(c) ?? `Case #${caseId}`}</p>
+          <OriginalIntent c={c} />
+          <h1 className="break-words text-2xl font-semibold text-[var(--text-primary)]">{permissions.access.profileRead ? caseTitleOf(c) : 'Case details restricted'}</h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">{permissions.access.profileRead ? caseTypeOf(c) : 'Case details restricted'} · Held for specialist review · No external action authorized</p>
           {isFictionalOfflineExample(c) && <p className="mt-2 text-xs">Offline — read-only; no outreach or business completion.</p>}</div>
         {c.batchIntake ? <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} /> :
           <RestrictedActionNotice>Submitted fields require current profile, notes and sensitive-record read authority. They have not been removed from the case.</RestrictedActionNotice>}

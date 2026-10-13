@@ -19,6 +19,11 @@ export const CASE_TYPES = [
 export type CaseTypeFilter = (typeof CASE_TYPES)[number];
 export type CaseFamily = Exclude<CaseTypeFilter, 'All Cases'>;
 
+/** Consume only the authorized server projection; never infer missing history. */
+export function originalIntentOf(c: { originalIntent?: string | null }): string {
+  return c.originalIntent === null ? 'Restricted' : c.originalIntent || 'Not recorded';
+}
+
 type CaseLike = {
   caseFamily?: string | null;
   requestType?: string | null;

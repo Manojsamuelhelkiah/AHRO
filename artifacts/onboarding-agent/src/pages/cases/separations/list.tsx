@@ -5,6 +5,7 @@ import { useListSeparationCases } from '@workspace/api-client-react';
 import { Card, Input, PageHeader, Button } from '@/components/ui-shared';
 import { Plus } from 'lucide-react';
 import { ClosureWarning, ErrorBox, Pill, SkeletonRows, SubNav, statusTone } from './shared';
+import { originalIntentOf } from '../case-presentation';
 
 export function SeparationsListPage() {
   const q = useListSeparationCases({ query: { queryKey: ['/api/offboarding/cases', useSeparationQueryScope()], staleTime: 15_000, refetchInterval: 30_000, retry: false } as never });
@@ -29,7 +30,7 @@ export function SeparationsListPage() {
               <Link key={c.id} href={`/cases/separations/${c.id}`} data-testid={`row-separation-${c.id}`} className="flex flex-wrap items-center justify-between gap-2 py-3 hover:bg-[var(--surface-alt)] sm:px-2">
                 <div className="min-w-0">
                   <div className="font-semibold text-[var(--text-primary)]">{c.facts.workerName}</div>
-                  <div className="text-xs text-[var(--text-muted)]">{c.facts.employeeId} · {c.facts.role} · {c.facts.country} · LWD {c.facts.lastWorkingDay}</div>
+                  <div className="break-words text-xs text-[var(--text-muted)]">Original intent: {originalIntentOf(c)} · {c.facts.employeeId} · {c.facts.role} · {c.facts.country} · LWD {c.facts.lastWorkingDay}</div>
                 </div>
                 <div className="flex items-center gap-2"><span className="text-xs text-[var(--text-muted)]">Case {c.id} · v{c.version}</span><Pill tone={statusTone(c.status)}>{c.status}</Pill></div>
               </Link>

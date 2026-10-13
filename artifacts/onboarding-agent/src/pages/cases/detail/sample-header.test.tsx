@@ -36,6 +36,7 @@ test('sample header has exact reference, clean subtitle and concise offline warn
 test('profile denial keeps sample worker and role details hidden', () => {
   const html = header(sample, { ...permissions, access: { ...permissions.access, profileRead: false } });
   assert.ok(html.includes('Restricted candidate'));
+  assert.ok(html.includes('<span>Restricted candidate</span>'));
   assert.ok(html.includes('Profile details restricted'));
   assert.ok(!/Kiran Pine|Support Engineer|Worker Details/.test(html));
 });

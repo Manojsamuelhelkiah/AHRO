@@ -163,7 +163,7 @@ function OperationalPreparationPanelContent({ caseId, canRead, org, userId }: {
         {data && <span className="text-xs text-[var(--text-muted)]">Revision {data.revision} · Evidence {data.evidenceStatus}</span>}
       </div>
       <p className="mt-1 text-xs text-[var(--text-secondary)]">
-        The original fictional source{data?.sourceLabel ? ` (${data.sourceLabel})` : ''} is preserved unchanged. Entries here are unverified.
+        The original fictional source{data?.sourceLabel ? ` (${data.sourceLabel})` : ''} and original intent are preserved unchanged. Entries here describe a separate current operational request and are unverified.
         Saving and confirming send no messages or links and never approve or close a case.
         After activation, start supported work separately using the normal case controls. Live operations require a named account, current permissions and configured supported providers.
       </p>

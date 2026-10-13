@@ -27,6 +27,7 @@ import {
   caseListReference as caseIdOf,
   caseWorkerName,
   caseSummary,
+  originalIntentOf,
   type CaseTypeFilter,
 } from './case-presentation';
 
@@ -280,7 +281,7 @@ export function CasesPage() {
     const q = query.trim().toLowerCase();
     if (q) {
       rows = rows.filter((c) =>
-        [caseWorkerName(c), c.workerEmail, caseTitleOf(c), caseIdOf(c), String(c.id), c.role, c.geography, isFictionalOfflineExample(c) ? caseSummary(c) : null]
+        [caseWorkerName(c), c.workerEmail, originalIntentOf(c), caseTitleOf(c), caseIdOf(c), String(c.id), c.role, c.geography, isFictionalOfflineExample(c) ? caseSummary(c) : null]
           .some((v) => (v || '').toLowerCase().includes(q)),
       );
     }
@@ -548,7 +549,7 @@ export function CasesPage() {
             </colgroup>
             <thead>
               <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
-                {['Case / Program', 'Worker / Population', 'Work Item Type', 'Effective Date', 'Business Stages', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
+                {['Case / Original intent', 'Worker / Population', 'Work Item Type', 'Effective Date', 'Business Stages', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
                   <th
                     key={h}
                     className={cn((h === 'Effective Date' || h === 'Owner / Agent' || h === 'Business Stages') && 'hidden lg:table-cell')}
@@ -610,7 +611,7 @@ export function CasesPage() {
                       className="group transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]"
                       style={{ borderBottom: '1px solid var(--border)' }}
                       tabIndex={0}
-                      aria-label={`Open case ${caseIdOf(c)} — ${caseTitleOf(c)} for ${caseWorkerName(c)}`}
+                      aria-label={`Open case ${caseIdOf(c)} — Original intent: ${originalIntentOf(c)} — ${caseTitleOf(c)} for ${caseWorkerName(c)}`}
                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--primary-light)')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                       onKeyDown={(e) => {
@@ -628,7 +629,7 @@ export function CasesPage() {
                       <td style={{ padding: '10px 8px' }}>
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="shrink-0 whitespace-nowrap" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</span>
-                          <span className="min-w-0 truncate" title={[caseTitleOf(c), isFictionalOfflineExample(c) ? caseSummary(c) : null].filter(Boolean).join(' — ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
+                          <span className="min-w-0 truncate" title={[`Original intent: ${originalIntentOf(c)}`, caseTitleOf(c), isFictionalOfflineExample(c) ? caseSummary(c) : null].filter(Boolean).join(' — ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{originalIntentOf(c)}</span>
                           {isFictionalOfflineExample(c) && <span title="Offline and read-only" className="shrink-0 text-[10px] font-semibold text-[var(--text-muted)]">Offline</span>}
                           {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} title="Email source history" aria-label={`Email source history for ${caseIdOf(c)}`} className="shrink-0 text-xs underline">Email</Link>}
                         </div>
@@ -694,6 +695,7 @@ export function CasesPage() {
                     <HroStatusBadge status={status} />
                   </div>
                   {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Offline</span>}
+                  <p className="mt-1 break-words text-sm text-[var(--text-secondary)]"><span className="font-semibold">Original intent:</span> {originalIntentOf(c)}</p>
                   {isFictionalOfflineExample(c) && c.planSummary && <p title={caseSummary(c)} className="mt-1 line-clamp-1 text-xs text-[var(--text-muted)]">{caseSummary(c)}</p>}
                   <div className="flex items-center justify-between gap-2 mt-1">
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{caseWorkerName(c)}</span>

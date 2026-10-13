@@ -1,4 +1,5 @@
 import { useSeparationQueryScope } from './shared';
+import { OriginalIntent } from '../detail/components';
 import { useUser } from '@clerk/react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'wouter';
@@ -234,8 +235,10 @@ export function SeparationDetailPage() {
       {q.isLoading ? <SkeletonRows n={5} /> : q.isError ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : d && (
         <>
           <header className="flex flex-wrap items-start justify-between gap-3">
-            <div><h1 className="text-2xl font-semibold" data-testid="text-worker-name">{d.facts.workerName}</h1>
-              <p className="text-sm text-[var(--text-muted)]">Case {d.id} · {d.facts.employeeId} · {d.facts.role} · {d.facts.country} · LWD {d.facts.lastWorkingDay} ({d.facts.timeZone}) · v{d.version} gen {d.generation}</p></div>
+            <div><p className="text-sm font-semibold">Case {d.id}</p>
+              <OriginalIntent c={d} />
+              <h1 className="break-words text-2xl font-semibold" data-testid="text-worker-name">{d.facts.workerName}</h1>
+              <p className="text-sm text-[var(--text-muted)]">Offboarding · {d.facts.employeeId} · {d.facts.role} · {d.facts.country} · LWD {d.facts.lastWorkingDay} ({d.facts.timeZone}) · v{d.version} gen {d.generation}</p></div>
             <div className="flex flex-wrap gap-2"><Pill tone={statusTone(d.status)}>{d.status}</Pill><Pill tone={statusTone(d.state.gatewayA)}>Separation Screening {d.state.gatewayA}</Pill>{d.state.conflict && <Pill tone="red">source conflict</Pill>}</div>
           </header>
           <ClosureWarning />

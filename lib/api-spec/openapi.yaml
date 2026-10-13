@@ -7562,6 +7562,10 @@ components:
       type: object
       required: [id, version, generation, status, facts, closureBlocker, lifecycle]
       properties:
+        originalIntent:
+          type: string
+          readOnly: true
+          description: Fixed originating request label, or Not recorded when creation history is unavailable. No source narrative or exit reason.
         id: { type: integer }
         version: { type: integer }
         generation: { type: integer }
@@ -12452,6 +12456,10 @@ components:
           description: Retained historical case; cannot dispatch, simulate, or resume operations.
         caseFamily: { type: ["string", "null"] }
         requestType: { type: ["string", "null"] }
+        originalIntent:
+          type: ["string", "null"]
+          readOnly: true
+          description: Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.
         batchIntake: { $ref: "#/components/schemas/HroBatchRequest" }
         id:
           type: integer

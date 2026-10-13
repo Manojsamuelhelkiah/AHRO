@@ -1,3 +1,4 @@
+import { templateOriginalIntent } from "./original-intent";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { isDeepStrictEqual } from "node:util";
 import { db, onbCases, organizationsTable, organizationMembershipsTable, onbSettings, accessNamedGrants } from "@workspace/db";
@@ -91,7 +92,10 @@ export async function provisionOfflineExamplesInTransaction(tx: Transaction, org
     seen.add(example.key);
   }
   const missing = OFFLINE_CASE_EXAMPLES.filter(item => !seen.has(item.key));
-  if (missing.length) await tx.insert(onbCases).values(missing.map(item => ({ organizationId, ...item.values })));
+  if (missing.length) await tx.insert(onbCases).values(missing.map(item => ({
+    organizationId, ...item.values,
+    originalIntent: templateOriginalIntent(item.values.processPolicySnapshot.batchIntake.templateId, "curated-fictional-intake"),
+  })));
   const readGrantsCreated = await provisionOfflineExampleReadAccess(tx, organizationId, confirmation);
   return {
     created: missing.length,
@@ -135,7 +139,10 @@ export async function provisionOfflineExtensionInTransaction(tx: Transaction, or
     throw new Error("The original sixty curated Demo slots must exist before the extension; no records were changed.");
   }
   const missing = OFFLINE_EXTENSION_EXAMPLES.filter(item => !seen.has(item.key));
-  if (missing.length) await tx.insert(onbCases).values(missing.map(item => ({ organizationId, ...item.values })));
+  if (missing.length) await tx.insert(onbCases).values(missing.map(item => ({
+    organizationId, ...item.values,
+    originalIntent: templateOriginalIntent(item.values.processPolicySnapshot.batchIntake.templateId, "curated-fictional-intake"),
+  })));
   const readGrantsCreated = await provisionOfflineExampleReadAccess(tx, organizationId, OFFLINE_EXAMPLE_CONFIRMATION);
   return {
     created: missing.length,

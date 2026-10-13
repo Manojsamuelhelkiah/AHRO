@@ -824,6 +824,8 @@ export const SeparationSummaryLifecycle = {
 } as const;
 
 export interface SeparationSummary {
+  /** Fixed originating request label, or Not recorded when creation history is unavailable. No source narrative or exit reason. */
+  readonly originalIntent?: string;
   id: number;
   version: number;
   generation: number;
@@ -6265,6 +6267,11 @@ export interface OnbCase {
   caseFamily?: string | null;
   /** @nullable */
   requestType?: string | null;
+  /**
+     * Original creation intent from recorded intake, Not recorded when unknown, or null when profile access is denied. Not a requester, justification, parent case, approval or execution claim.
+     * @nullable
+     */
+  readonly originalIntent?: string | null;
   batchIntake?: HroBatchRequest | null;
   id: number;
   workerName: string;

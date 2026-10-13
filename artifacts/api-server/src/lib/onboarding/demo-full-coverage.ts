@@ -1,3 +1,4 @@
+import { scenarioOriginalIntent } from "./original-intent";
 import { and, eq, sql } from "drizzle-orm";
 import {
   db,
@@ -163,6 +164,7 @@ export async function seedDemoFullCoverage(
           now.getTime() + scenario.intake.joiningDateOffsetDays * 86_400_000,
         ).toISOString().slice(0, 10);
         const [created] = await tx.insert(onbCases).values({
+          originalIntent: scenarioOriginalIntent(scenario.key),
           organizationId,
           workerName: syntheticName(scenario.title),
           workerEmail: syntheticEmail(key),

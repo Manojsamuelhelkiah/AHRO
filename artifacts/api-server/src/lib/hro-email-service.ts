@@ -1,3 +1,4 @@
+import { templateOriginalIntent } from "./onboarding/original-intent";
 import { randomBytes, randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, hroEmailRequests, hroEmailScan, hroMailboxIngress, onbCases, onbEvents, onbJobProfiles } from "@workspace/db";
@@ -303,6 +304,7 @@ export async function convertEmailRequest(org: string, actor: string, id: string
       } : await resolveEffectiveWorkforcePolicyInTransaction(tx, org, context, person);
       const governance = await governanceSnapshotForNewCase(org, new Date(), tx);
       const [created] = await tx.insert(onbCases).values({
+        originalIntent: templateOriginalIntent(definition.id, "reviewed-email-intake"),
         organizationId: org, workerName: fields.worker_name, workerEmail: fields.worker_email, ...person,
         managerName: fields.manager_name || "", recruiterName: fields.recruiter_name || "",
         // No fabricated onboarding date for service requests; effective_date stays in its typed request.

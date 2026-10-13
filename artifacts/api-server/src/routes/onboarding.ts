@@ -329,6 +329,7 @@ import {
 import { readHroBatchRequest, policyWithoutBatchIntake } from "../lib/onboarding/hro-batch-templates";
 import { isFictionalOfflineExampleCase, isReportableFictionalOfflineExampleCase } from "../lib/onboarding/offline-example-display";
 import { CURATED_OFFLINE_EXAMPLES } from "../lib/onboarding/offline-example-extension";
+import { originalIntentLabel, onboardingOriginalIntent } from "../lib/onboarding/original-intent";
 
 const router: IRouter = Router();
 router.use((req, res, next) => {
@@ -880,6 +881,7 @@ async function serializeCase(
       : !isHistoricalTestRecord(row) && !(presentation ? presentation.uatOwned : await isAuthoritativelyUatRunOwnedCase(row)),
     caseFamily: canReadProfile ? intakeRequest?.family ?? null : null,
     requestType: canReadProfile ? intakeRequest?.requestType ?? null : null,
+    originalIntent: originalIntentLabel(row, canReadProfile),
     intakeSource: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) && emailIntake?.requestId ? "Email" : null,
     intakeSourceUrl: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) && emailIntake?.requestId ? `/email-intake/${encodeURIComponent(emailIntake.requestId)}` : null,
     batchIntake: canReadProfile && canReadNotes
@@ -1070,6 +1072,9 @@ async function insertCaseAndStart(
         ...values,
         ...organizationValues(organizationId),
         syntheticProvenance: options?.syntheticProvenance ?? null,
+        originalIntent: values.hireType === "internal-transfer"
+          ? { label: "Internal transfer request", source: "direct-transfer-intake" }
+          : onboardingOriginalIntent("direct-onboarding-intake"),
         checklistTemplateVersion: profile.templateVersion,
         checklistSnapshot: workforcePolicy.effectiveItems,
         checklistProfileId: profile.profileId,

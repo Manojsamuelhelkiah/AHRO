@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, offbCases, offbSources, offbPolicies, offbCheckpoints, onbCases, type SeparationCase, type SeparationPolicy, type SeparationState } from "@workspace/db";
 import { withSensitiveLifecycleFence, evaluateCaseDerivedLifecycleGateInTransaction } from "../onboarding/sensitive-lifecycle";
 import { acquireCaseDispatchMutationLock } from "../onboarding/dispatch-guard";
@@ -42,7 +42,7 @@ export async function createSeparationInTransaction(tx: Tx, org: string, actor: 
     }
   } else {
     // Empty email, no onboarding defaults, no candidate contact or derived release readiness.
-    const [envelope] = await tx.insert(onbCases).values({ organizationId: org, hireType: "separation", workerName: f.workerName, workerEmail: "", workerCategory: f.workerCategory, role: f.role, department: f.department, geography: f.country, legalEntity: f.legalEntity, managerName: f.manager, recruiterName: "", joiningDate: f.lastWorkingDay, lifecycleStage: "separation-held", orchestrationStatus: "separation-only", workforceContext: { workCountry: f.country }, readiness: [], workstreams: [], checklistSnapshot: [], processPolicySnapshot: { lifecycle: "separation", closureSpecification: "pending" }, createdByUserId: actor }).returning();
+    const [envelope] = await tx.insert(onbCases).values({ originalIntent: { label: "Controlled separation request", source: "separation-intake" }, organizationId: org, hireType: "separation", workerName: f.workerName, workerEmail: "", workerCategory: f.workerCategory, role: f.role, department: f.department, geography: f.country, legalEntity: f.legalEntity, managerName: f.manager, recruiterName: "", joiningDate: f.lastWorkingDay, lifecycleStage: "separation-held", orchestrationStatus: "separation-only", workforceContext: { workCountry: f.country }, readiness: [], workstreams: [], checklistSnapshot: [], processPolicySnapshot: { lifecycle: "separation", closureSpecification: "pending" }, createdByUserId: actor }).returning();
     [row] = await tx.insert(offbCases).values({ id: envelope.id, organizationId: org, employeeId: f.employeeId, activeKey: f.employeeId, facts: f, state: initialState() }).returning();
     await access(tx, org, actor, true, envelope.id);
   }
@@ -76,9 +76,9 @@ export async function load(tx: Tx, org: string, actor: string, id: number, write
   await access(tx, org, actor, write, id);
   return row;
 }
-export function summary(row: SeparationCase) {
+export function summary(row: SeparationCase, originalIntent?: string | null) {
   const { exitReason: _reason, exitType: _type, ...f } = row.facts;
-  return { id: row.id, version: row.version, generation: row.generation, status: row.status, facts: f, closureBlocker: CLOSURE_BLOCKED, lifecycle: "separation" as const };
+  return { id: row.id, originalIntent: originalIntent ?? "Not recorded", version: row.version, generation: row.generation, status: row.status, facts: f, closureBlocker: CLOSURE_BLOCKED, lifecycle: "separation" as const };
 }
 async function privateRead(tx: Tx, org: string, actor: string, row: SeparationCase) {
   await confidentialRead(tx, org, actor, row.facts.country, row.id);
@@ -87,14 +87,19 @@ export async function listSeparations(org: string, actor: string) {
   return db.transaction(async tx => {
     await lockTenant(tx, org);
     const rows = await tx.select().from(offbCases).where(eq(offbCases.organizationId, org)).orderBy(desc(offbCases.createdAt)).limit(200);
+    const origins = rows.length ? await tx.select({ id: onbCases.id, origin: onbCases.originalIntent }).from(onbCases)
+      .where(and(eq(onbCases.organizationId, org), inArray(onbCases.id, rows.map(r => r.id)))) : [];
+    const labels = new Map(origins.map(r => [r.id, r.origin?.label]));
     const visible = [];
-    for (const r of rows) { try { await access(tx, org, actor, false, r.id); visible.push(summary(r)); } catch (e) { if (!(e instanceof SeparationError) || e.status !== 403) throw e; } }
+    for (const r of rows) { try { await access(tx, org, actor, false, r.id); visible.push(summary(r, labels.get(r.id))); } catch (e) { if (!(e instanceof SeparationError) || e.status !== 403) throw e; } }
     return visible;
   });
 }
 export async function separationDetail(org: string, actor: string, id: number) {
   return withSensitiveLifecycleFence(org, () => db.transaction(async tx => {
     const row = await load(tx, org, actor, id);
+    const [origin] = await tx.select({ intent: onbCases.originalIntent }).from(onbCases)
+      .where(and(eq(onbCases.organizationId, org), eq(onbCases.id, id)));
     let privateVisible = false;
     try { await privateRead(tx, org, actor, row); privateVisible = true; } catch (e) { if (!(e instanceof SeparationError)) throw e; }
     let settlementVisible = false;
@@ -119,7 +124,7 @@ export async function separationDetail(org: string, actor: string, id: number) {
     await access(tx, org, actor, false, id);
     const settlementReview = [];
     if (settlementVisible) for (const v of row.state.settlementVersions) settlementReview.push({ revision: v.revision, currency: v.currency, items: v.items, recordedAt: v.receipt.recordedAt, authorityCurrent: await currentReceipt(tx, org, v.receipt, row.facts.country, id) });
-    return { ...summary(row), privateVisible, privateFacts: privateVisible ? row.facts : null, sources, settlementReview, state: {
+    return { ...summary(row, origin?.intent?.label), privateVisible, privateFacts: privateVisible ? row.facts : null, sources, settlementReview, state: {
       gatewayA: row.state.gatewayA, classification: privateVisible ? row.state.classification : null,
       urgency: row.state.urgency, flags: row.state.flags, sensitiveTriggers: privateVisible ? row.state.sensitiveTriggers : [],
       conflict: row.state.conflict, holds: privateVisible ? row.state.holds : row.state.holds.length ? ["Restricted hold"] : [],

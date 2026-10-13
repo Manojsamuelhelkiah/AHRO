@@ -5,7 +5,7 @@ import { Badge, Button, cn } from '@/components/ui-shared';
 import { useStartOnboardingVoiceCall, getListOnboardingCaseCommunicationsQueryKey, getListOnboardingCaseEventsQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ContactDialog } from './ContactDialog';
-import { casePresentationOf, isDemoCoverageCase, isFictionalOfflineExample, sampleCaseReference, caseWorkerName } from '../case-presentation';
+import { casePresentationOf, caseTitleOf, caseTypeOf, originalIntentOf, isDemoCoverageCase, isFictionalOfflineExample, sampleCaseReference, caseWorkerName } from '../case-presentation';
 import { useCaseAccess } from './case-access';
 
 export function isOfflineDemoSample(c: { scenarioKey?: string | null; offlineSample?: boolean; controllerRetired?: boolean }) {
@@ -46,6 +46,12 @@ export function StatusDot({ status }: { status: string }) {
   return <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: bg }} />;
 }
 
+export function OriginalIntent({ c }: { c: { originalIntent?: string | null } }) {
+  return <p data-testid="text-original-intent" className="my-2 break-words text-sm text-[var(--text-secondary)]">
+    <span className="font-semibold">Original intent:</span> {originalIntentOf(c)}
+  </p>;
+}
+
 export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setTab?: (t: string) => void }) {
   const access = useCaseAccess();
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -68,11 +74,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
 
   const statusText = c.orchestrationStatus === 'waiting-approval' ? 'HUMAN REVIEW' : c.orchestrationStatus.replace(/-/g, ' ');
   const offlineSample = isOfflineDemoSample(c);
-  const presentation = offlineSample ? casePresentation(c) : {
-    type: c.hireType?.replace(/-/g, ' ') || 'Onboarding',
-    title: c.workerName,
-    owner: 'Onboarding Agent',
-  };
+   const presentation = { ...casePresentation(c), type: caseTypeOf(c), title: caseTitleOf(c) };
   const canViewIdentity = access?.access.profileRead === true &&
     (access?.sensitive.identity.read === true || c.fictionalOfflineIdentity === true);
   const canUseContactActions = canViewIdentity
@@ -88,12 +90,15 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
     <div className="sticky top-0 z-30 bg-[var(--surface)] pb-4 pt-4 px-6 md:px-8 -mx-6 md:-mx-8 border-b border-[var(--border)] shadow-[var(--shadow-sm)] mb-6">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div className="min-w-0">
-           <div className="flex flex-wrap items-center gap-3 mb-1">
+           <div className="mb-1">
              <span className="shrink-0 text-[var(--text-xs)] font-bold text-[var(--primary)] bg-[var(--primary-light-bg)] px-2 py-0.5 rounded-full">{sampleCaseReference(c) ?? `Case #${c.id}`}</span>
-               <h1 className="text-[var(--text-2xl)] font-bold text-[var(--text-primary)] leading-none m-0">{canViewIdentity ? presentation.title : 'Restricted candidate'}</h1>
+              <OriginalIntent c={c} />
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="break-words text-[var(--text-2xl)] font-bold text-[var(--text-primary)] leading-tight m-0">{access?.access.profileRead ? presentation.title : 'Case details restricted'}</h1>
                <Badge variant="outline" className="uppercase text-[10px] tracking-wider">{access?.access.profileRead ? presentation.type : 'Case details'}</Badge>
+              </div>
            </div>
-              <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{offlineSample && canViewIdentity ? `${isFictionalOfflineExample(c) ? caseWorkerName(c) : `For ${c.workerName}`} • ` : ''}{access?.access.profileRead ? `${c.role} • ${c.geography}` : 'Profile details restricted'}{canViewIdentity ? ` • Effective ${format(new Date(c.joiningDate), 'MMM d, yyyy')}` : ''}</p>
+              <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{canViewIdentity ? `${isFictionalOfflineExample(c) ? caseWorkerName(c) : `For ${c.workerName}`} • ` : <><span>Restricted candidate</span> • </>}{access?.access.profileRead ? `${c.role} • ${c.geography}` : 'Profile details restricted'}{canViewIdentity && Number.isFinite(Date.parse(c.joiningDate)) ? ` • Effective ${format(new Date(c.joiningDate), 'MMM d, yyyy')}` : ''}</p>
             {offlineSample && (
               <p className="mt-2 text-[var(--text-xs)] font-semibold text-[var(--status-amber-fg)]">
                 {isFictionalOfflineExample(c) ? 'Offline — read-only; no outreach or business completion.' : 'Historical test record — read-only; no provider work or business completion is authorized.'}
