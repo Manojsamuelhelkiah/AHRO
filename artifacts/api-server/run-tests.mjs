@@ -14,6 +14,7 @@ const requestedTestFile = process.env.TEST_FILE?.trim();
 // Only suites proven to create workspace leftovers, plus workspace bootstrap/
 // membership regressions. Broad API-suite isolation is a separate deliverable.
 const ownedWorkspaceSuites = new Set([
+  "src/routes/user-group-super-admin.test.ts",
   "src/routes/candidate-portal-security.test.ts",
   "src/lib/onboarding/operational-requests.test.ts",
   "src/routes/organization-isolation.test.ts",

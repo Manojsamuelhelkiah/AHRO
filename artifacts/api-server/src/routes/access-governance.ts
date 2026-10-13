@@ -17,6 +17,7 @@ import {
 } from "@workspace/db";
 import type { OnboardingDbTransaction } from "../lib/onboarding/settings";
 import { getOrganizationId } from "../lib/organization-scope";
+import { isPlatformSuperAdmin } from "../lib/private-platform-admin";
 import {
   ACCESS_GOVERNANCE_CATALOG,
   USER_GROUP_STARTERS,
@@ -954,7 +955,11 @@ router.post("/user-groups", async (req, res, next) => {
     const id = randomUUID();
     const result = await db.transaction(async (tx) => {
       await lockTenant(tx, organizationId);
-      if (starter && !await isActiveOrganizationOwner(tx, organizationId, actor)) {
+      // Tenant middleware recognizes an active, tenant-bound Super Admin as an
+      // administrative owner without permanently elevating the shared account.
+      // Keep stored group-steward activity and independent review checks separate.
+      if (starter && !isPlatformSuperAdmin(actor, organizationId) &&
+          !await isActiveOrganizationOwner(tx, organizationId, actor)) {
         throw Object.assign(new Error("Only an active organization owner may create groups."), { status: 403, code: "ORGANIZATION_OWNER_REQUIRED" });
       }
       if (starter) {
