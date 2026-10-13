@@ -25,6 +25,7 @@ import { errorHandler } from "../middlewares/error-handler";
 import { lookupMembership } from "../middlewares/tenant-context";
 import { verifiedAuditAuthority } from "../lib/onboarding/protected-audit";
 import { resolveCurrentCaseExecutionAuthorityEvidence } from "../lib/onboarding/decision-authority";
+import { listOrganizationMembers, listRemovedOrganizationMembers } from "../lib/organization-memberships";
 
 const suffix = `${process.pid}-${Date.now()}`;
 const organizationId = `membership-lifecycle-${suffix}`;
@@ -295,6 +296,27 @@ test("member administration enforces owner-only CAS mutations and active listing
   assert.equal(selfChange.status, 409);
 });
 
+test("identity enrichment is authorized before directory access and restricted to this tenant's member IDs", { concurrency: false }, async () => {
+  const queried: string[][] = [];
+  const loadLabels = async (ids: string[]) => {
+    queried.push(ids);
+    return ids.map((id) => ({ id, name: "Same readable name", email: `${id}@example.test` }));
+  };
+  const denied = await listOrganizationMembers(organizationId, otherOwnerUserId, loadLabels);
+  assert.equal(denied.kind, "error");
+  const deniedRemoved = await listRemovedOrganizationMembers(organizationId, adminUserId, loadLabels);
+  assert.equal(deniedRemoved.kind, "error");
+  assert.deepEqual(queried, []);
+  const allowed = await listOrganizationMembers(organizationId, ownerUserId, loadLabels);
+  assert.equal(allowed.kind, "ok");
+  if (allowed.kind !== "ok") return;
+  assert.deepEqual(queried.flat().sort(), [ownerUserId, adminUserId, targetUserId].sort());
+  assert.ok(allowed.members.every((member) => member.name === "Same readable name" && member.identityResolution === "resolved"));
+  const outage = await listOrganizationMembers(organizationId, ownerUserId, async () => { throw new Error("Directory outage"); });
+  assert.equal(outage.kind, "ok");
+  if (outage.kind === "ok") assert.ok(outage.members.every((member) => member.identityResolution === "unavailable"));
+});
+
 test("removal tombstones membership, revokes access, and blocks join-code resurrection", { concurrency: false }, async () => {
   const [marker] = await db.insert(onbGovernanceDispatchMarkers).values({
     organizationId,
@@ -320,7 +342,10 @@ test("removal tombstones membership, revokes access, and blocks join-code resurr
       actualActorUserIds: [ownerUserId],
     }),
   );
-  assert.equal(authorityBeforeRemoval.allowed, true);
+  assert.deepEqual(authorityBeforeRemoval, {
+    allowed: false,
+    reason: "legacy_decision_requires_fresh_review",
+  }, "retained specialist receipts cannot authorize execution after retirement");
   await db.delete(onbGovernanceDispatchMarkers)
     .where(eq(onbGovernanceDispatchMarkers.id, marker.id));
 
@@ -400,7 +425,7 @@ test("removal tombstones membership, revokes access, and blocks join-code resurr
   );
   assert.deepEqual(authorityAfterRemoval, {
     allowed: false,
-    reason: "no_current_verified_scoped_assignment",
+    reason: "legacy_decision_requires_fresh_review",
   });
   const [historicalReceipt] = await db.select({
     reason: onbApprovalHistory.reason,
@@ -418,6 +443,17 @@ test("removal tombstones membership, revokes access, and blocks join-code resurr
 });
 
 test("owners can review and reinstate a removed member with an audited reason and CAS version", { concurrency: false }, async () => {
+  const directoryQueries: string[][] = [];
+  const enrichedRemoved = await listRemovedOrganizationMembers(organizationId, ownerUserId, async (ids) => {
+    directoryQueries.push(ids);
+    return ids.map((id) => ({ id, name: "Removed human", email: "removed@example.test" }));
+  });
+  assert.deepEqual(directoryQueries, [[targetUserId]]);
+  assert.equal(enrichedRemoved.kind, "ok");
+  if (enrichedRemoved.kind === "ok") {
+    assert.equal(enrichedRemoved.members[0].name, "Removed human");
+    assert.equal(enrichedRemoved.members[0].revision, 1);
+  }
   const removedList = await request("/organizations/current/removed-members", ownerUserId);
   assert.equal(removedList.status, 200);
   const removed = (await removedList.json() as Array<{
@@ -571,7 +607,7 @@ test("owners can review and reinstate a removed member with an audited reason an
   );
   assert.deepEqual(authorityAfterReinstatement, {
     allowed: false,
-    reason: "no_current_verified_scoped_assignment",
+    reason: "legacy_decision_requires_fresh_review",
   });
 
   const removedAgain = await request(`/organizations/members/${targetUserId}`, ownerUserId, {

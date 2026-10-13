@@ -2238,7 +2238,20 @@ export const OrganizationMemberRole = {
   member: 'member',
 } as const;
 
+/**
+ * Missing means no directory profile; unavailable means directory lookup failed. Metadata conveys no authority.
+ */
+export type MemberIdentityResolution = typeof MemberIdentityResolution[keyof typeof MemberIdentityResolution];
 export interface OrganizationMember {
+  /** @nullable */
+  name?: string | null;
+  /**
+     * Display only; not a verified recipient binding.
+     * @nullable
+     */
+  email?: string | null;
+  identityResolution?: MemberIdentityResolution;
+  accountKind?: MemberAccountKind;
   clerkUserId: string;
   role: OrganizationMemberRole;
   createdAt: string;
@@ -2255,6 +2268,12 @@ export const RemovedOrganizationMemberRole = {
 } as const;
 
 export interface RemovedOrganizationMember {
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  email?: string | null;
+  identityResolution?: MemberIdentityResolution;
+  accountKind?: MemberAccountKind;
   clerkUserId: string;
   role: RemovedOrganizationMemberRole;
   createdAt: string;
@@ -3285,6 +3304,12 @@ export interface AccessCatalogEntry {
 }
 
 export interface AccessOrganizationMember {
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  email?: string | null;
+  identityResolution?: MemberIdentityResolution;
+  accountKind?: MemberAccountKind;
   clerkUserId: string;
   role: string;
 }
@@ -11352,3 +11377,20 @@ export type ListSensitiveLifecycleDeletionJobs200 = {
 };
 
 export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
+
+export const MemberAccountKind = {
+  human: 'human',
+  internal: 'internal',
+} as const;
+
+export const MemberIdentityResolution = {
+  resolved: 'resolved',
+  missing: 'missing',
+  unavailable: 'unavailable',
+  internal: 'internal',
+} as const;
+
+/**
+ * Internal classification uses the exact trusted smoke identity, never ID prefixes or profile names.
+ */
+export type MemberAccountKind = typeof MemberAccountKind[keyof typeof MemberAccountKind];

@@ -18,6 +18,7 @@ import {
 import type { OnboardingDbTransaction } from "../lib/onboarding/settings";
 import { getOrganizationId } from "../lib/organization-scope";
 import { isPlatformSuperAdmin } from "../lib/private-platform-admin";
+import { enrichMemberIdentities, isInternalAccount } from "../lib/member-identities";
 import {
   ACCESS_GOVERNANCE_CATALOG,
   USER_GROUP_STARTERS,
@@ -437,6 +438,9 @@ async function resolveRouteAccess(
   principalId: string,
   options: { caseId?: number; initiatorUserId?: string } = {},
 ) {
+  if (options.initiatorUserId && isInternalAccount(options.initiatorUserId.trim())) {
+    throw Object.assign(new Error("An internal/test account cannot be a human initiator."), { status: 400, code: "ACCESS_HUMAN_INITIATOR_REQUIRED" });
+  }
   return resolveEffectiveAccess({
     organizationId,
     principalType: principalType === "user" ? "human" : "agent",
@@ -674,7 +678,7 @@ async function snapshot(organizationId: string) {
 
   return {
     catalog: ACCESS_CATALOG,
-    members,
+    members: await enrichMemberIdentities(members),
     agents: agents.map((agent) => ({
       id: agent.id,
       name: agent.name,
@@ -766,6 +770,10 @@ router.get("/preview", async (req, res, next) => {
       return;
     }
     const initiatorUserId = req.query.initiatorUserId;
+    if (typeof initiatorUserId === "string" && isInternalAccount(initiatorUserId.trim())) {
+      fail(res, 400, "An internal/test account cannot be a human initiator.", "ACCESS_HUMAN_INITIATOR_REQUIRED");
+      return;
+    }
     if (initiatorUserId !== undefined && !nonEmptyString(initiatorUserId)) {
       fail(res, 400, "initiatorUserId must be a non-empty user ID.", "ACCESS_INVALID_INITIATOR");
       return;
@@ -808,6 +816,10 @@ router.get("/field-access", async (req, res, next) => {
       return;
     }
     const initiatorUserId = req.query.initiatorUserId;
+    if (typeof initiatorUserId === "string" && isInternalAccount(initiatorUserId.trim())) {
+      fail(res, 400, "An internal/test account cannot be a human initiator.", "ACCESS_HUMAN_INITIATOR_REQUIRED");
+      return;
+    }
     if (initiatorUserId !== undefined && !nonEmptyString(initiatorUserId)) {
       fail(res, 400, "initiatorUserId must be a non-empty user ID.", "ACCESS_INVALID_INITIATOR");
       return;
@@ -864,6 +876,10 @@ router.post("/agents", async (req, res, next) => {
     const organizationId = getOrganizationId(req);
     const actor = req.authUserId!;
     let agentId = "";
+    if (isInternalAccount((body.ownerUserId as string).trim())) {
+      fail(res, 400, "Choose an accountable human owner, not an internal/test account.", "ACCESS_HUMAN_OWNER_REQUIRED");
+      return;
+    }
     await db.transaction(async (tx) => {
       await lockTenant(tx, organizationId);
       if (!await hasActivePrincipal(tx, organizationId, "user", body.ownerUserId as string)) {
@@ -986,6 +1002,9 @@ router.post("/user-groups", async (req, res, next) => {
         }
       }
       const name = starter?.name ?? (body.name as string).trim();
+      if (isInternalAccount(actor)) {
+        throw Object.assign(new Error("An internal/test account cannot become an accountable human owner."), { status: 400, code: "ACCESS_HUMAN_OWNER_REQUIRED" });
+      }
       const [userGroup] = await tx.insert(accessUserGroups).values({
         id, organizationId, name, starterId: starter?.id ?? null, ownerUserId: actor,
         status: "active", version: 1, createdByUserId: actor,
@@ -1123,6 +1142,10 @@ router.post("/user-groups/:id/owner", async (req, res, next): Promise<void> => {
     const organizationId = getOrganizationId(req);
     const actor = req.authUserId!;
     const ownerUserId = parsed.data.ownerUserId.trim();
+    if (isInternalAccount(ownerUserId)) {
+      fail(res, 400, "Choose an accountable human owner, not an internal/test account.", "ACCESS_HUMAN_OWNER_REQUIRED");
+      return;
+    }
     await db.transaction(async (tx) => {
       // Membership removal and role changes share this fence. Recheck both
       // owners inside it, not just the request's earlier tenant middleware.
@@ -1854,6 +1877,10 @@ router.post("/security-groups", async (req, res, next) => {
     const organizationId = getOrganizationId(req);
     const actor = req.authUserId!;
     const ownerUserId = nonEmptyString(body.ownerUserId) ? body.ownerUserId : actor;
+    if (isInternalAccount(ownerUserId.trim())) {
+      fail(res, 400, "Choose an accountable human owner, not an internal/test account.", "ACCESS_HUMAN_OWNER_REQUIRED");
+      return;
+    }
     if (!await isActiveOrganizationOwner(db as unknown as OnboardingDbTransaction, organizationId, ownerUserId)) {
       fail(res, 400, "Security group owner must be an active organization owner.", "ACCESS_INVALID_GROUP_OWNER");
       return;
@@ -1933,6 +1960,9 @@ router.patch("/security-groups/:id", async (req, res, next) => {
       }
       const nextAllows = allows ?? existingAllows;
       const ownerUserId = (body.ownerUserId as string | undefined) ?? group.ownerUserId;
+      if (body.ownerUserId !== undefined && isInternalAccount(ownerUserId.trim())) {
+        throw Object.assign(new Error("Choose an accountable human owner, not an internal/test account."), { status: 400, code: "ACCESS_HUMAN_OWNER_REQUIRED" });
+      }
       if (body.ownerUserId !== undefined &&
         !await isActiveOrganizationOwner(tx, organizationId, ownerUserId)) {
         throw Object.assign(new Error("Security group owner must be an active organization owner."), { status: 400, code: "ACCESS_INVALID_GROUP_OWNER" });

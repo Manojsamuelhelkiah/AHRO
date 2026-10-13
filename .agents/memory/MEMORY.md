@@ -86,3 +86,4 @@
 - [Case pipeline density](case-pipeline-density.md) — desktop cases stay compact and single-line; long narratives belong in detail views or hover text.
 - [Client operating defaults](client-operating-default-boundaries.md) — calendar proposals never reschedule approved obligations; responsibility routing grants neither access nor delivery authority.
 - [Requirements Register retirement](requirements-retirement-boundaries.md) — permanent retirement, not relocation; historical manual coverage never substitutes for objective operational safeguards.
+- [Member identity boundaries](member-identity-boundaries.md) — readable directory labels are not authority or recipient bindings; internal-account presentation is not account cleanup.

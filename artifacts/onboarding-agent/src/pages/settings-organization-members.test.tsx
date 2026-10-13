@@ -5,6 +5,10 @@ import { act } from "react";
 import { disposeOrganizationMembersDom, testWindow } from "./test-support/organization-members-dom";
 
 type RemovedMember = {
+  name?: string;
+  email?: string;
+  identityResolution?: "resolved" | "missing" | "unavailable" | "internal";
+  accountKind?: "human" | "internal";
   clerkUserId: string;
   revokedAt: string;
   revision: number;
@@ -15,10 +19,13 @@ type MutationOutcome =
   | { kind: "error"; error: unknown };
 
 type TestState = {
-  activeMembers: Array<{ clerkUserId: string; role: string; createdAt: string }>;
+  activeMembers: Array<{ clerkUserId: string; role: string; createdAt: string; name?: string; email?: string; identityResolution?: "resolved" | "missing" | "unavailable" | "internal"; accountKind?: "human" | "internal" }>;
   removedMembers: RemovedMember[];
   removedHookOptions: Array<{ query?: { enabled?: boolean; staleTime?: number } }>;
   removedRefetches: number;
+  activeRefetches?: number;
+  roleCalls?: unknown[];
+  removeCalls?: unknown[];
   reinstateCalls: unknown[];
   reinstateOutcome: MutationOutcome;
 };
@@ -250,4 +257,35 @@ test("admins can review active membership but cannot see the removed-members rei
   assert.equal(mounted.container.querySelector('[aria-label="Removed members"]'), null);
   assert.doesNotMatch(mounted.container.textContent ?? "", /Review reinstatement/);
   assert.equal(state.removedHookOptions.at(-1)?.query?.enabled, false);
+});
+
+test("readable human and internal labels retain immutable mutation IDs and directory retry", async (t) => {
+  const state = resetState("owner", {
+    activeMembers: [
+      { clerkUserId: "user-active", role: "member", createdAt: "2026-01-01", name: "Alex", email: "alex@example.test", identityResolution: "resolved", accountKind: "human" },
+      { clerkUserId: "internal_intent_routing_smoke", role: "member", createdAt: "2026-01-01", identityResolution: "internal", accountKind: "internal" },
+    ],
+    removedMembers: [{ clerkUserId: "user-removed", revokedAt: "2026-02-03T04:05:06.000Z", revision: 2, identityResolution: "unavailable" }],
+    roleCalls: [], removeCalls: [],
+  });
+  const mounted = await mount(state);
+  t.after(mounted.cleanup);
+  assert.match(mounted.container.textContent!, /Alex · alex@example.test/);
+  assert.match(mounted.container.querySelector('[aria-label="Internal/test account"]')!.textContent!, /Development smoke test/);
+  const select = mounted.container.querySelector('select[aria-label="Role for Alex · alex@example.test"]') as HTMLSelectElement;
+  await act(async () => {
+    select.value = "admin";
+    select.dispatchEvent(new testWindow.Event("change", { bubbles: true }) as unknown as Event);
+  });
+  assert.deepEqual(state.roleCalls, [{ userId: "user-active", data: { expectedRole: "member", role: "admin" } }]);
+  const originalConfirm = window.confirm;
+  let confirmation = "";
+  window.confirm = (message) => { confirmation = String(message); return true; };
+  t.after(() => { window.confirm = originalConfirm; });
+  await act(async () => button(mounted.container, "Remove").click());
+  assert.match(confirmation, /Remove Alex · alex@example.test/);
+  assert.deepEqual(state.removeCalls, [{ userId: "user-active", data: { expectedRole: "member" } }]);
+  await act(async () => button(mounted.container, "Retry directory lookup").click());
+  assert.equal(state.activeRefetches, 1);
+  assert.equal(state.removedRefetches, 1);
 });

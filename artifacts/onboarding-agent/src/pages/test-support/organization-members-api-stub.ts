@@ -9,6 +9,9 @@ type TestState = {
   removedMembers: unknown[];
   removedHookOptions: Array<{ query?: { enabled?: boolean; staleTime?: number } }>;
   removedRefetches: number;
+  activeRefetches?: number;
+  roleCalls?: unknown[];
+  removeCalls?: unknown[];
   reinstateCalls: unknown[];
   reinstateOutcome: MutationOutcome;
 };
@@ -17,6 +20,10 @@ function getState(): TestState {
   return (globalThis as typeof globalThis & {
     __organizationMembersTestState: TestState;
   }).__organizationMembersTestState;
+}
+
+export function getPinnedOrganizationIdForPage() {
+  return "members-test-org";
 }
 
 export function getListOrganizationMembersQueryKey() {
@@ -34,6 +41,7 @@ export function useListOrganizationMembers() {
     isLoading: false,
     isError: false,
     error: null,
+    refetch: async () => { state.activeRefetches = (state.activeRefetches ?? 0) + 1; },
   };
 }
 
@@ -86,13 +94,13 @@ export function useReinstateOrganizationMember(options: {
 export function useChangeOrganizationMemberRole() {
   return {
     isPending: false,
-    mutate: () => undefined,
+    mutate: (payload: unknown) => { getState().roleCalls?.push(payload); },
   };
 }
 
 export function useRemoveOrganizationMember() {
   return {
     isPending: false,
-    mutate: () => undefined,
+    mutate: (payload: unknown) => { getState().removeCalls?.push(payload); },
   };
 }

@@ -25,6 +25,7 @@ import {
 import { errorHandler } from "../middlewares/error-handler";
 import { createTenantContextMiddleware, lookupMembership } from "../middlewares/tenant-context";
 import accessGovernanceRouter from "./access-governance";
+import { INTERNAL_SMOKE_USER_ID } from "../middlewares/require-auth";
 
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -37,6 +38,34 @@ const humanMemberUserId = `${suffix}-human-member`;
 let server: Server | undefined;
 let baseUrl = "";
 let caseId: number;
+
+test("internal test accounts cannot be assigned human ownership or initiation and rejected writes preserve records", { skip: !hasDb }, async () => {
+  const before = await db.select().from(accessAgents).where(eq(accessAgents.organizationId, organizationId));
+  const rejectedAgent = await mutate("/agents", "POST", managerUserId, {
+    name: "Internal must not own", ownerUserId: INTERNAL_SMOKE_USER_ID,
+  });
+  assert.equal(rejectedAgent.response.status, 400);
+  assert.equal(rejectedAgent.body.code, "ACCESS_HUMAN_OWNER_REQUIRED");
+  const rejectedSecurity = await mutate("/security-groups", "POST", managerUserId, {
+    name: "Internal must not steward", allows: [], ownerUserId: INTERNAL_SMOKE_USER_ID,
+  });
+  assert.equal(rejectedSecurity.response.status, 400);
+  assert.equal(rejectedSecurity.body.code, "ACCESS_HUMAN_OWNER_REQUIRED");
+  const group = await mutate("/user-groups", "POST", managerUserId, { name: `Human stewardship ${suffix}` });
+  assert.equal(group.response.status, 201);
+  const rejectedTransfer = await mutate(`/user-groups/${group.body.userGroup.id}/owner`, "POST", managerUserId, {
+    ownerUserId: INTERNAL_SMOKE_USER_ID, expectedVersion: 1, acknowledgeAccessImpact: true,
+  });
+  assert.equal(rejectedTransfer.response.status, 400);
+  assert.equal(rejectedTransfer.body.code, "ACCESS_HUMAN_OWNER_REQUIRED");
+  const rejectedPreview = await api(`/preview?principalType=agent&principalId=any-agent&initiatorUserId=${INTERNAL_SMOKE_USER_ID}`, managerUserId);
+  assert.equal(rejectedPreview.response.status, 400);
+  assert.equal(rejectedPreview.body.code, "ACCESS_HUMAN_INITIATOR_REQUIRED");
+  const rejectedField = await api(`/field-access?field=data.case.notes.read&initiatorUserId=${INTERNAL_SMOKE_USER_ID}`, managerUserId);
+  assert.equal(rejectedField.response.status, 400);
+  assert.equal(rejectedField.body.code, "ACCESS_HUMAN_INITIATOR_REQUIRED");
+  assert.deepEqual(await db.select().from(accessAgents).where(eq(accessAgents.organizationId, organizationId)), before);
+});
 
 type JsonRecord = Record<string, any>;
 type ApiResult = { response: Response; body: JsonRecord };

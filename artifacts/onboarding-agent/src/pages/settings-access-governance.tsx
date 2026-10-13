@@ -4,6 +4,8 @@ import { getPinnedOrganizationIdForPage } from "@workspace/api-client-react";
 import { AlertTriangle, Check, History, LockKeyhole, Plus, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { Badge, Button, Card, CardContent, IconTile, LoadingBlock, cn } from "@/components/ui-shared";
 import { useOrganizationRole } from "@/hooks/use-organization-role";
+import { DirectoryWarning, IdentityDetails, identityLabel } from "@/components/member-identity";
+import type { AccessOrganizationMember } from "@workspace/api-client-react";
 
 type PrincipalType = "user" | "agent";
 type CatalogItem = { key: string; label: string; sensitivity: string; kind: string };
@@ -37,10 +39,7 @@ function failureNotice(error: unknown): Notice {
     ...(error instanceof GroupNameConflict ? { existingGroup: error.existingGroup } : {}),
     ...(error instanceof AgentNameConflict ? { existingAgent: error.existingAgent } : {}) };
 }
-type Member = {
-  clerkUserId: string; role: string;
-  name?: string | null; fullName?: string | null; email?: string | null;
-};
+type Member = AccessOrganizationMember;
 type GovernanceEvent = {
   id?: string; eventType: string; entityType: string; entityId: string;
   actorUserId?: string | null; detail?: Record<string, unknown> | null; createdAt?: string;
@@ -108,17 +107,15 @@ function errorText(error: unknown): string {
   return "The access-governance request failed.";
 }
 
-function memberLabel(member: Member): string {
-  const displayName = member.name?.trim() || member.fullName?.trim() || member.email?.trim();
-  return displayName
-    ? `${displayName} · ${member.role} · ${member.clerkUserId}`
-    : `${member.role} · ${member.clerkUserId}`;
+function memberLabel(member: Member, peers: Member[] = []): string {
+  return `${identityLabel(member, peers)} · ${member.role}`;
 }
 
 function principalLabel(type: string, id: string, members: Member[], agents: Agent[]): string {
+  if (!id) return type === "user" ? "Unresolved account · ID unavailable" : "Unresolved registered agent · ID unavailable";
   if (type === "user") {
     const member = members.find((item) => item.clerkUserId === id);
-    return member ? memberLabel(member) : `Human · ${id}`;
+    return member ? memberLabel(member, members) : `Unresolved account · ${id.length > 8 ? `…${id.slice(-8)}` : id}`;
   }
   const agent = agents.find((item) => item.id === id);
   return agent ? `${agent.name} · registered agent` : `Registered agent · ${id}`;
@@ -255,13 +252,21 @@ export function AccessGovernanceSettings() {
   const [fieldEnabled, setFieldEnabled] = useState(false);
 
   const principals = useMemo(() => ({
-    user: (snapshot?.members ?? []).map((member) => ({ id: member.clerkUserId, label: memberLabel(member) })),
+    user: (snapshot?.members ?? []).map((member) => ({ id: member.clerkUserId, label: `${identityLabel(member, snapshot?.members ?? [])} · ${member.role}` })),
     agent: (snapshot?.agents ?? []).filter((agent) => agent.status === "active").map((agent) => ({ id: agent.id, label: `${agent.name} · ${agent.id}` })),
   }), [snapshot]);
+  const humanMembers = (snapshot?.members ?? []).filter((member) => member.accountKind !== "internal" && member.role !== "removed");
 
   useEffect(() => {
-    if (!agentOwner && snapshot?.members.length) setAgentOwner(snapshot.members.find((member) => member.role === "owner")?.clerkUserId ?? snapshot.members[0].clerkUserId);
-  }, [snapshot, agentOwner]);
+    if (!agentOwner || !humanMembers.some((member) => member.clerkUserId === agentOwner)) {
+      setAgentOwner(humanMembers.find((member) => member.role === "owner")?.clerkUserId ?? humanMembers[0]?.clerkUserId ?? "");
+    }
+    if (snapshot && initiatorUserId && !humanMembers.some((member) => member.clerkUserId === initiatorUserId)) {
+      setInitiatorUserId("");
+      setPreviewEnabled(false);
+      setFieldEnabled(false);
+    }
+  }, [snapshot, agentOwner, initiatorUserId]);
   useEffect(() => {
     if (!memberId && principals[memberType].length) setMemberId(principals[memberType][0].id);
   }, [memberId, memberType, principals]);
@@ -565,6 +570,24 @@ export function AccessGovernanceSettings() {
               </div>
             ) : (
               <>
+                <DirectoryWarning members={data.members} retry={() => void snapshotQuery.refetch()} busy={snapshotQuery.isFetching} />
+                <details className="rounded-md border border-[var(--border)] p-3 text-xs">
+                  <summary className="cursor-pointer font-medium">Member identity details</summary>
+                  <p className="mt-2 text-[var(--text-muted)]">Directory names and emails are display information only, not authority, credentials or verified recipient bindings.</p>
+                  <div className="mt-3 space-y-3">
+                    {humanMembers.map((member) => <div key={member.clerkUserId}>
+                      <IdentityDetails member={member} peers={data.members} />
+                      <p className="text-[var(--text-muted)]">{member.role} · Active</p>
+                    </div>)}
+                  </div>
+                  {data.members.some((member) => member.accountKind === "internal") && <section aria-label="Internal/test accounts" className="mt-3 border-t border-[var(--border)] pt-3">
+                    <h4 className="font-semibold">Internal/test accounts</h4>
+                    <p className="my-2 text-[var(--text-muted)]">Retained for development testing. Not available as accountable human owners or initiating humans.</p>
+                    {data.members.filter((member) => member.accountKind === "internal").map((member) => <div key={member.clerkUserId}>
+                      <IdentityDetails member={member} /><p>{member.role} · Active</p>
+                    </div>)}
+                  </section>}
+                </details>
                 {snapshotQuery.isError && <div role="alert" className="rounded-md border border-[var(--status-red)] bg-[var(--status-red-bg)] p-3 text-xs text-[var(--status-red-fg)]">
                   The list could not be refreshed. Displaying the last loaded groups. {errorText(snapshotQuery.error)}
                   <Button variant="outline" size="sm" className="ml-3" onClick={() => void snapshotQuery.refetch()}>Retry refresh</Button>
@@ -615,8 +638,8 @@ export function AccessGovernanceSettings() {
                         }}
                       >
                         <option value="">Choose initiator user</option>
-                        {data.members.filter((member) => member.role !== "removed").map((member) => (
-                          <option key={member.clerkUserId} value={member.clerkUserId}>{memberLabel(member)}</option>
+                        {humanMembers.map((member) => (
+                          <option key={member.clerkUserId} value={member.clerkUserId}>{memberLabel(member, data.members)}</option>
                         ))}
                       </select>
                     </label>
@@ -628,7 +651,7 @@ export function AccessGovernanceSettings() {
                 </section>
 
                 <section>
-                  <SectionTitle title="Registered agents" detail="Register an existing named agent and assign its accountable owner. Retiring a registration revokes its active participation without deleting the record." />
+                  <SectionTitle title="Registered agents" detail="Registration records a named access identity and an accountable human owner. It does not create, deploy, connect or run an AI agent. Ownership does not grant permissions or select the initiating human. Effective access depends on current grants and the explicitly chosen initiator. Retiring a registration revokes active participation without deleting history." />
                   {canManage && <form className="mb-3 flex flex-wrap gap-2" onSubmit={(event) => {
                     event.preventDefault();
                     if (registeringAgent.current || !agentName.trim() || !agentOwner) return;
@@ -639,13 +662,18 @@ export function AccessGovernanceSettings() {
                   }}>
                     <input aria-label="Agent name" data-testid="input-access-agent-name" className={inputClass} placeholder="Named agent" value={agentName} onChange={(event) => setAgentName(event.target.value)} />
                     <select aria-label="Agent owner" data-testid="select-access-agent-owner" className={inputClass} value={agentOwner} onChange={(event) => setAgentOwner(event.target.value)}>
-                      {data.members.map((member) => <option key={member.clerkUserId} value={member.clerkUserId}>{memberLabel(member)}</option>)}
+                      <option value="">Choose accountable human owner</option>
+                      {humanMembers.map((member) => <option key={member.clerkUserId} value={member.clerkUserId}>{`${identityLabel(member, data.members)} · ${member.role}`}</option>)}
                     </select>
                     <Button type="submit" size="sm" disabled={busy || !agentName.trim() || !agentOwner}><Plus className="mr-1 h-3.5 w-3.5" />Register agent</Button>
                   </form>}
                   <div className="space-y-2">
                     {data.agents.length ? data.agents.map((agent) => <div key={agent.id} id={`access-agent-${agent.id}`} tabIndex={-1} data-testid={`row-access-agent-${agent.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--border)] p-3 text-xs">
-                      <div><span className="font-medium text-[var(--text-primary)]">{agent.name}</span><span className="ml-2 text-[var(--text-muted)]">{agent.id} · owner {principalLabel("user", agent.ownerUserId, data.members, data.agents)}</span></div>
+                      <div className="min-w-0 max-w-full break-words">
+                        <p className="font-medium text-[var(--text-primary)]">{agent.name}</p>
+                        <p className="mt-1 text-[var(--text-muted)]">Accountable owner: {principalLabel("user", agent.ownerUserId, data.members, data.agents)}</p>
+                        <details className="mt-1 text-[var(--text-muted)]"><summary className="cursor-pointer">Registered access identity ID</summary><code className="block select-all break-all py-1">{agent.id}</code></details>
+                      </div>
                       <div className="flex items-center gap-2"><Badge className={agent.status === "active" ? "bg-[var(--status-green-bg)] text-[var(--status-green-fg)]" : "bg-[var(--status-gray-bg)] text-[var(--status-gray-fg)]"}>{agent.status}</Badge>
                         {canManage && agent.status === "active" && <Button variant="outline" size="sm" disabled={busy} onClick={() => void perform(() => accessRequest(`/agents/${encodeURIComponent(agent.id)}`, { method: "PATCH", body: JSON.stringify({ status: "retired", expectedVersion: agent.version }) }), "Agent retired.")}>Retire</Button>}
                       </div>
@@ -754,17 +782,17 @@ export function AccessGovernanceSettings() {
                         <label className="block text-xs">New organization owner
                           <select aria-label="New user-group steward" className={`${inputClass} mt-1 w-full`} disabled={busy || !ownerDirectory.data || ownerDirectory.isError} value={transfer.ownerUserId} onChange={(event) => setTransfer({ ...transfer, ownerUserId: event.target.value, acknowledged: false })}>
                             <option value="">Choose an active owner by name</option>
-                            {(ownerDirectory.data?.members ?? []).filter((member) =>
+                            {(ownerDirectory.data?.members ?? []).filter((member) => member.accountKind !== "internal" &&
                               member.role === "owner" && member.clerkUserId !== transfer.group.ownerUserId &&
                               data.members.some((active) => active.role === "owner" && active.clerkUserId === member.clerkUserId),
-                            ).map((member) => <option key={member.clerkUserId} value={member.clerkUserId}>{memberLabel(member)}</option>)}
+                            ).map((member) => <option key={member.clerkUserId} value={member.clerkUserId}>{memberLabel(member, data.members)}</option>)}
                           </select>
                         </label>
-                        {ownerDirectory.data && !ownerDirectory.data.members.some((member) => member.role === "owner" && member.clerkUserId !== transfer.group.ownerUserId && data.members.some((active) => active.role === "owner" && active.clerkUserId === member.clerkUserId)) && <p className="text-xs">No other active organization owners are available.</p>}
-                        <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={transfer.acknowledged} disabled={busy} onChange={(event) => setTransfer({ ...transfer, acknowledged: event.target.checked })} />I understand the access suspension and confirm transfer to {transfer.ownerUserId ? memberLabel(ownerDirectory.data?.members.find((member) => member.clerkUserId === transfer.ownerUserId) ?? { clerkUserId: transfer.ownerUserId, role: "owner" }) : "the selected owner"}.</label>
+                        {ownerDirectory.data && !ownerDirectory.data.members.some((member) => member.accountKind !== "internal" && member.role === "owner" && member.clerkUserId !== transfer.group.ownerUserId && data.members.some((active) => active.role === "owner" && active.clerkUserId === member.clerkUserId)) && <p className="text-xs">No other active organization owners are available.</p>}
+                        <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={transfer.acknowledged} disabled={busy} onChange={(event) => setTransfer({ ...transfer, acknowledged: event.target.checked })} />I understand the access suspension and confirm transfer to {transfer.ownerUserId ? memberLabel(ownerDirectory.data?.members.find((member) => member.clerkUserId === transfer.ownerUserId) ?? { clerkUserId: transfer.ownerUserId, role: "owner" }, data.members) : "the selected owner"}.</label>
                         {group.version !== transfer.group.version && <p role="alert" className="text-xs text-[var(--status-red)]">This group changed. Cancel and reopen the transfer to review its current settings.</p>}
                         <div className="flex gap-2">
-                          <Button type="submit" size="sm" disabled={busy || ownerDirectory.isError || !transfer.acknowledged || !ownerDirectory.data?.members.some((member) => member.role === "owner" && member.clerkUserId === transfer.ownerUserId) || group.version !== transfer.group.version}>Confirm stewardship transfer</Button>
+                          <Button type="submit" size="sm" disabled={busy || ownerDirectory.isError || !transfer.acknowledged || !ownerDirectory.data?.members.some((member) => member.accountKind !== "internal" && member.role === "owner" && member.clerkUserId === transfer.ownerUserId) || group.version !== transfer.group.version}>Confirm stewardship transfer</Button>
                           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setTransfer(null)}>Cancel</Button>
                         </div>
                       </form>}

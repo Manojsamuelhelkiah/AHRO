@@ -14,11 +14,16 @@ import {
 import type { OnboardingDbTransaction } from "./onboarding/settings";
 
 import { isPlatformSuperAdmin } from "./private-platform-admin";
+import { enrichMemberIdentities, type MemberIdentity, type DirectoryLabel } from "./member-identities";
 
 export type OrganizationMembershipRole = "owner" | "admin" | "member";
 export type OrganizationAdminRole = "admin" | "member";
 
 export type OrganizationMember = {
+  name?: MemberIdentity["name"];
+  email?: MemberIdentity["email"];
+  identityResolution?: MemberIdentity["identityResolution"];
+  accountKind?: MemberIdentity["accountKind"];
   clerkUserId: string;
   role: OrganizationMembershipRole;
   createdAt: string;
@@ -123,6 +128,7 @@ async function findActorAndTarget(
 export async function listOrganizationMembers(
   organizationId: string,
   actorUserId: string,
+  loadLabels?: (ids: string[]) => Promise<DirectoryLabel[]>,
 ): Promise<
   | { kind: "ok"; members: OrganizationMember[] }
   | MutationFailure
@@ -158,12 +164,13 @@ export async function listOrganizationMembers(
       })),
     };
   });
-  return result;
+  return result.kind === "ok" ? { ...result, members: await enrichMemberIdentities(result.members, loadLabels) } : result;
 }
 
 export async function listRemovedOrganizationMembers(
   organizationId: string,
   actorUserId: string,
+  loadLabels?: (ids: string[]) => Promise<DirectoryLabel[]>,
 ): Promise<
   | { kind: "ok"; members: RemovedOrganizationMember[] }
   | MutationFailure
@@ -191,7 +198,7 @@ export async function listRemovedOrganizationMembers(
       members: members.map(removedMemberResponse),
     };
   });
-  return result;
+  return result.kind === "ok" ? { ...result, members: await enrichMemberIdentities(result.members, loadLabels) } : result;
 }
 
 export async function changeOrganizationMemberRole(input: {

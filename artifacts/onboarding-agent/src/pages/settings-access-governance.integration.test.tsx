@@ -133,6 +133,7 @@ test("agent registration preserves drafts, prevents repeat submissions and targe
   const { AccessGovernanceSettings } = await import("./settings-access-governance");
   let tenant = "agent-org-a";
   let outcome: "conflict" | "failure" | "success" = "conflict";
+  let directoryAvailable = false;
   const requests: Array<{ tenant: string; body: Record<string, unknown> }> = [];
   let release: (() => void) | undefined;
   const originalFetch = globalThis.fetch;
@@ -154,7 +155,9 @@ test("agent registration preserves drafts, prevents repeat submissions and targe
         existingAgent: { id: agent.id, name: agent.name, status: agent.status } }, { status: 409 });
     }
     return Response.json({ catalog: [], members: [
-      { clerkUserId: "owner-1", role: "owner" }, { clerkUserId: "member-2", role: "member" },
+      { clerkUserId: "owner-1", role: "owner", name: directoryAvailable ? "Alex" : null, email: directoryAvailable ? "alex-owner@example.test" : null, accountKind: "human", identityResolution: directoryAvailable ? "resolved" : "unavailable" },
+      { clerkUserId: "member-2", role: "member", name: "Alex", email: "alex-member@example.test", accountKind: "human", identityResolution: "resolved" },
+      { clerkUserId: "internal_intent_routing_smoke", role: "owner", accountKind: "internal", identityResolution: "internal" },
     ], agents: [agent], userGroups: [], securityGroups: [], userGroupStarters: [], grants: [], history: [] });
   }) as typeof fetch;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -183,6 +186,24 @@ test("agent registration preserves drafts, prevents repeat submissions and targe
         await settle();
       });
       await act(async () => { await settle(); });
+      assert.match(dom.document.body.textContent!, /does not create, deploy, connect or run an AI agent/);
+      assert.match(dom.document.body.textContent!, /Internal\/test accounts/);
+      for (const selector of ['[aria-label="Agent owner"]', '[data-testid="select-access-initiator"]']) {
+        const choices = dom.document.querySelector<HTMLSelectElement>(selector)!;
+        assert.ok(![...choices.options].some((option) => option.value === "internal_intent_routing_smoke"));
+        assert.ok([...choices.options].some((option) => option.textContent?.includes("alex-member@example.test")));
+      }
+      if (!directoryAvailable) {
+        assert.match(dom.document.body.textContent!, /Some member profiles could not be loaded/);
+        directoryAvailable = true;
+        await act(async () => {
+          [...dom.document.querySelectorAll("button")].find((button) => button.textContent === "Retry directory lookup")!.click();
+          await settle();
+        });
+        await act(async () => { await settle(); });
+        assert.doesNotMatch(dom.document.body.textContent!, /Some member profiles could not be loaded/);
+      }
+      assert.match(owner().textContent!, /alex-owner@example.test/);
       await act(async () => {
         Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, "value")!.set!.call(input(), " Existing agent ");
         input().dispatchEvent(new dom.Event("input", { bubbles: true }));

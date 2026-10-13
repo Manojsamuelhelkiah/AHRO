@@ -8522,6 +8522,10 @@ components:
       type: object
       additionalProperties: false
       properties:
+        name: { type: [string, "null"] }
+        email: { type: [string, "null"], description: "Display only; not a verified recipient binding." }
+        identityResolution: { $ref: "#/components/schemas/MemberIdentityResolution" }
+        accountKind: { $ref: "#/components/schemas/MemberAccountKind" }
         clerkUserId: { type: string }
         role: { type: string, enum: [owner, admin, member] }
         createdAt: { type: string, format: date-time }
@@ -8531,6 +8535,10 @@ components:
       type: object
       additionalProperties: false
       properties:
+        name: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        identityResolution: { $ref: "#/components/schemas/MemberIdentityResolution" }
+        accountKind: { $ref: "#/components/schemas/MemberAccountKind" }
         clerkUserId: { type: string }
         role: { type: string, enum: [owner, admin, member] }
         createdAt: { type: string, format: date-time }
@@ -9213,9 +9221,21 @@ components:
         sensitivity: { type: string, enum: [medium, high] }
         kind: { type: string, enum: [field, flow, tool] }
       required: [key, label, sensitivity, kind]
+    MemberIdentityResolution:
+      type: string
+      enum: [resolved, missing, unavailable, internal]
+      description: "Missing means no directory profile; unavailable means directory lookup failed. Metadata conveys no authority."
+    MemberAccountKind:
+      type: string
+      enum: [human, internal]
+      description: "Internal classification uses the exact trusted smoke identity, never ID prefixes or profile names."
     AccessOrganizationMember:
       type: object
       properties:
+        name: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        identityResolution: { $ref: "#/components/schemas/MemberIdentityResolution" }
+        accountKind: { $ref: "#/components/schemas/MemberAccountKind" }
         clerkUserId: { type: string }
         role: { type: string }
       required: [clerkUserId, role]

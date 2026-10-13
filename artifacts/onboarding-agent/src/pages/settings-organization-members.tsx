@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   getListOrganizationMembersQueryKey,
   getListRemovedOrganizationMembersQueryKey,
+  getPinnedOrganizationIdForPage,
   useListRemovedOrganizationMembers,
   useReinstateOrganizationMember,
   type RemovedOrganizationMember,
@@ -15,6 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { UserRound, UserRoundCog } from "lucide-react";
 import { Badge, Button, Card, CardContent, IconTile, LoadingBlock, cn } from "@/components/ui-shared";
 import { useOrganizationRole } from "@/hooks/use-organization-role";
+import { DirectoryWarning, IdentityDetails, identityLabel } from "@/components/member-identity";
 
 function mutationMessage(error: unknown): string {
   if (!error || typeof error !== "object") return "The membership change failed.";
@@ -31,11 +33,12 @@ export function OrganizationMembersSettings() {
   const queryClient = useQueryClient();
   const canRead = role === "owner" || role === "admin";
   const canManage = role === "owner";
+  const organizationId = getPinnedOrganizationIdForPage();
   const members = useListOrganizationMembers({
-    query: { enabled: canRead, queryKey: getListOrganizationMembersQueryKey() },
+    query: { enabled: canRead && !!organizationId, queryKey: [...getListOrganizationMembersQueryKey(), organizationId], staleTime: 0, refetchOnMount: "always" },
   });
   const removedMembers = useListRemovedOrganizationMembers({
-    query: { enabled: canManage, queryKey: getListRemovedOrganizationMembersQueryKey(), staleTime: 0 },
+    query: { enabled: canManage && !!organizationId, queryKey: [...getListRemovedOrganizationMembersQueryKey(), organizationId], staleTime: 0 },
   });
   const [selected, setSelected] = useState<RemovedOrganizationMember | null>(null);
   const [reason, setReason] = useState("");
@@ -49,7 +52,7 @@ export function OrganizationMembersSettings() {
       onSuccess: () => {
         setSelected(null);
         setReason("");
-        setNotice({ ok: true, message: "Account reinstated as an ordinary member. Specialist grants and historical approval receipts remain revoked." });
+        setNotice({ ok: true, message: "Account reinstated as an ordinary member. Previously revoked permissions and historical approval receipts are not restored." });
         refreshMemberships();
       },
       onError: (error) => {
@@ -94,7 +97,7 @@ export function OrganizationMembersSettings() {
 
   const revoke = (member: OrganizationMember) => {
     if (!canManage || !window.confirm(
-      `Remove ${member.clerkUserId} from this organization?\n\nThis revokes organization access and existing specialist approval authority. Shared join codes cannot restore access. Historical records are retained. Only an owner can explicitly reinstate ordinary membership.`,
+      `Remove ${identityLabel(member, rows)} from this organization?\n\nThis revokes organization access. Shared join codes cannot restore access. Historical records are retained. Only an owner can explicitly reinstate ordinary membership.`,
     )) return;
     setNotice(null);
     remove.mutate({
@@ -126,6 +129,10 @@ export function OrganizationMembersSettings() {
           </Badge>
         </div>
         <div className="p-4 space-y-3">
+          <DirectoryWarning members={[...rows, ...(removedMembers.data ?? [])]} retry={() => {
+            void members.refetch();
+            if (canManage) void removedMembers.refetch();
+          }} busy={members.isFetching || removedMembers.isFetching} />
           {members.isLoading ? (
             <LoadingBlock>Loading members...</LoadingBlock>
           ) : members.isError ? (
@@ -138,16 +145,15 @@ export function OrganizationMembersSettings() {
             rows.map((member) => (
               <div
                 key={member.clerkUserId}
+                aria-label={member.accountKind === "internal" ? "Internal/test account" : undefined}
                 className="flex flex-col gap-3 rounded-md border border-[var(--border)] p-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <UserRound className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
                   <div className="min-w-0">
-                    <p className="truncate text-[var(--text-xs)] font-medium text-[var(--text-primary)]">
-                      {member.clerkUserId}
-                    </p>
+                    <IdentityDetails member={member} peers={rows} />
                     <p className="text-[var(--text-xs)] text-[var(--text-muted)]">
-                      Joined {new Date(member.createdAt).toLocaleDateString()}
+                      Active · Joined {new Date(member.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
@@ -156,7 +162,7 @@ export function OrganizationMembersSettings() {
                     <Badge className="bg-[var(--status-blue-bg)] text-[var(--status-blue-fg)]">owner</Badge>
                   ) : (
                     <select
-                      aria-label={`Role for ${member.clerkUserId}`}
+                      aria-label={`Role for ${identityLabel(member, rows)}`}
                       value={member.role}
                       disabled={!canManage || busy}
                       onChange={(event) => changeRole(member, event.target.value as OrganizationMemberRole)}
@@ -188,9 +194,8 @@ export function OrganizationMembersSettings() {
             <section className="space-y-3 border-t border-[var(--border)] pt-4" aria-label="Removed members">
               <h4 className="text-sm font-semibold">Removed members</h4>
               <p className="text-xs text-[var(--text-muted)]">
-                Only an owner can reinstate an account, as an ordinary member. Legal, Payroll,
-                Occupational Health and all other specialist grants and historical approval receipts
-                remain revoked. Fresh verified grants require the existing governed process.
+                Only an owner can reinstate an account, as an ordinary member. Previously revoked
+                permissions and historical approval receipts are not restored. Access changes require explicit review.
               </p>
               {removedMembers.isLoading ? <LoadingBlock>Loading removed members...</LoadingBlock>
                 : removedMembers.isError ? (
@@ -203,8 +208,8 @@ export function OrganizationMembersSettings() {
                 ) : (removedMembers.data ?? []).map((member) => (
                   <div key={member.clerkUserId} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--border)] p-3">
                     <div className="min-w-0 text-xs">
-                      <p className="break-all font-medium">{member.clerkUserId}</p>
-                      <p className="text-[var(--text-muted)]">Removed {new Date(member.revokedAt).toLocaleString()}</p>
+                      <IdentityDetails member={member} peers={removedMembers.data ?? []} />
+                      <p className="text-[var(--text-muted)]">{member.role} · Removed {new Date(member.revokedAt).toLocaleString()}</p>
                     </div>
                     <Button variant="outline" size="sm" disabled={busy} onClick={() => {
                       setSelected(member);
@@ -219,7 +224,7 @@ export function OrganizationMembersSettings() {
                   if (!canManage || busy || !reason.trim()) return;
                   reinstate.mutate({ userId: selected.clerkUserId, data: { expectedRevokedAt: selected.revokedAt, expectedRevision: selected.revision, reason: reason.trim() } });
                 }}>
-                  <p className="break-all text-sm font-medium">Reinstate {selected.clerkUserId} as member?</p>
+                  <p className="break-words text-sm font-medium">Reinstate {identityLabel(selected, removedMembers.data ?? [])} as member?</p>
                   <label className="block text-xs">
                     Reason for reinstatement (required)
                     <textarea required maxLength={1000} value={reason} disabled={busy}
