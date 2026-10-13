@@ -150,6 +150,45 @@ export interface HroEmailDurationSummary {
 }
 
 export type HroEmailTurnaroundCohortsBasis = typeof HroEmailTurnaroundCohortsBasis[keyof typeof HroEmailTurnaroundCohortsBasis];
+
+
+export const HroEmailTurnaroundCohortsBasis = {
+  'recorded-intake-receipt': 'recorded-intake-receipt',
+} as const;
+
+export type HroEmailTurnaroundCohortsTimeZone = typeof HroEmailTurnaroundCohortsTimeZone[keyof typeof HroEmailTurnaroundCohortsTimeZone];
+
+
+export const HroEmailTurnaroundCohortsTimeZone = {
+  UTC: 'UTC',
+} as const;
+
+/**
+ * Receipt cohort with inclusive start and exclusive end; durations use usable successful human audit evidence through asOf, including events after the receipt period ends. Held conversion is not HR completion.
+ */
+export interface HroEmailTurnaroundCohort {
+  /** Inclusive UTC boundary as an ISO 8601 timestamp. */
+  startAt: string;
+  /** Exclusive UTC boundary as an ISO 8601 timestamp. */
+  endAt: string;
+  requestCount: number;
+  pendingCount: number;
+  firstReview: HroEmailDurationSummary;
+  heldConversion: HroEmailDurationSummary;
+}
+
+/**
+ * Nonempty retained receipt cohorts, newest first. Not grouped by human event date. Current periods are partial as of the snapshot. Pending counts reflect current status, not historical backlog. Omitted periods have no retained eligible requests.
+ */
+export type HroEmailTurnaroundCohorts = {
+  basis: HroEmailTurnaroundCohortsBasis;
+  timeZone: HroEmailTurnaroundCohortsTimeZone;
+  /** Monday-start UTC weeks. */
+  weekly: HroEmailTurnaroundCohort[];
+  /** UTC calendar months. */
+  monthly: HroEmailTurnaroundCohort[];
+};
+
 /**
  * Tenant-only retained requests; recorded intake receipt to first successful authenticated review/rejection or held-case conversion audit event. No HR outcome or reviewer-level metrics.
  */
@@ -9104,7 +9143,7 @@ export interface OnbActionCenterWorkInput {
   requestId: string;
   /** @minimum 1 */
   caseId: number;
-  owner: OnbActionCenterWorkInputOwner;
+  owner?: OnbActionCenterWorkInputOwner;
   /**
      * @maxLength 200
      * @nullable
@@ -10830,6 +10869,98 @@ export interface StandardOperationsView {
   manualFulfillment: StandardOperationsViewManualFulfillmentItem[];
 }
 
+export type ClientOperatingDefaultsDateFormat = typeof ClientOperatingDefaultsDateFormat[keyof typeof ClientOperatingDefaultsDateFormat];
+
+
+export const ClientOperatingDefaultsDateFormat = {
+  'MMM_d,_yyyy': 'MMM d, yyyy',
+  'dd/MM/yyyy': 'dd/MM/yyyy',
+  'MM/dd/yyyy': 'MM/dd/yyyy',
+  'yyyy-MM-dd': 'yyyy-MM-dd',
+} as const;
+
+export interface ClientOperatingDefaults {
+  timezone: string;
+  dateFormat: ClientOperatingDefaultsDateFormat;
+  businessDays: number[];
+  holidays: string[];
+}
+
+export interface ClientCaseFamilySetting {
+  family: string;
+  batchEnabled: boolean;
+  defaultTemplateId: string;
+}
+
+export type ClientActionRoutingRuleOwner = typeof ClientActionRoutingRuleOwner[keyof typeof ClientActionRoutingRuleOwner];
+
+
+export const ClientActionRoutingRuleOwner = {
+  hr: 'hr',
+  recruiter: 'recruiter',
+  'hiring-manager': 'hiring-manager',
+  'bgv-team': 'bgv-team',
+  documentation: 'documentation',
+  operations: 'operations',
+  compliance: 'compliance',
+} as const;
+
+export interface ClientActionRoutingRule {
+  /** @nullable */
+  family: string | null;
+  /** @nullable */
+  country: string | null;
+  owner: ClientActionRoutingRuleOwner;
+  /** @nullable */
+  groupId: string | null;
+}
+
+export type ClientOperationsConfigurationFallbackOwner = typeof ClientOperationsConfigurationFallbackOwner[keyof typeof ClientOperationsConfigurationFallbackOwner];
+
+
+export const ClientOperationsConfigurationFallbackOwner = {
+  hr: 'hr',
+  recruiter: 'recruiter',
+  'hiring-manager': 'hiring-manager',
+  'bgv-team': 'bgv-team',
+  documentation: 'documentation',
+  operations: 'operations',
+  compliance: 'compliance',
+} as const;
+
+export interface ClientOperationsConfiguration {
+  defaults: ClientOperatingDefaults;
+  families: ClientCaseFamilySetting[];
+  routingRules: ClientActionRoutingRule[];
+  fallbackOwner: ClientOperationsConfigurationFallbackOwner;
+}
+
+export interface ClientOperationsGroupOption {
+  id: string;
+  name: string;
+}
+
+export type ClientOperationsSettingsSource = typeof ClientOperationsSettingsSource[keyof typeof ClientOperationsSettingsSource];
+
+
+export const ClientOperationsSettingsSource = {
+  'product-defaults': 'product-defaults',
+  'client-override': 'client-override',
+} as const;
+
+export interface ClientOperationsSettings {
+  version: number;
+  canEdit: boolean;
+  source: ClientOperationsSettingsSource;
+  configuration: ClientOperationsConfiguration;
+  groups: ClientOperationsGroupOption[];
+}
+
+export interface ClientOperationsUpdate {
+  expectedVersion: number;
+  configuration: ClientOperationsConfiguration;
+}
+
 export type RetiredCapabilityResponseCode = typeof RetiredCapabilityResponseCode[keyof typeof RetiredCapabilityResponseCode];
 
 
@@ -11435,38 +11566,3 @@ export type ListSensitiveLifecycleDeletionJobs200 = {
 
 export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
 
-export type HroEmailTurnaroundCohortsTimeZone = typeof HroEmailTurnaroundCohortsTimeZone[keyof typeof HroEmailTurnaroundCohortsTimeZone];
-
-/**
- * Receipt cohort with inclusive start and exclusive end; durations use usable successful human audit evidence through asOf, including events after the receipt period ends. Held conversion is not HR completion.
- */
-export interface HroEmailTurnaroundCohort {
-  /** Inclusive UTC boundary as an ISO 8601 timestamp. */
-  startAt: string;
-  /** Exclusive UTC boundary as an ISO 8601 timestamp. */
-  endAt: string;
-  requestCount: number;
-  pendingCount: number;
-  firstReview: HroEmailDurationSummary;
-  heldConversion: HroEmailDurationSummary;
-}
-
-export const HroEmailTurnaroundCohortsBasis = {
-  'recorded-intake-receipt': 'recorded-intake-receipt',
-} as const;
-
-export const HroEmailTurnaroundCohortsTimeZone = {
-  UTC: 'UTC',
-} as const;
-
-/**
- * Nonempty retained receipt cohorts, newest first. Not grouped by human event date. Current periods are partial as of the snapshot. Pending counts reflect current status, not historical backlog. Omitted periods have no retained eligible requests.
- */
-export type HroEmailTurnaroundCohorts = {
-  basis: HroEmailTurnaroundCohortsBasis;
-  timeZone: HroEmailTurnaroundCohortsTimeZone;
-  /** Monday-start UTC weeks. */
-  weekly: HroEmailTurnaroundCohort[];
-  /** UTC calendar months. */
-  monthly: HroEmailTurnaroundCohort[];
-};

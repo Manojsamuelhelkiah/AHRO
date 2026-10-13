@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
+import { assertBatchFamilyEnabled, ClientOperationsError } from "../lib/onboarding/client-operations-settings";
 import { resolveEffectiveAccessInTransaction } from "../lib/access-governance";
 import {
   onbCaseLogistics,
@@ -149,6 +150,18 @@ export async function createHeldBatch(req: Request, res: Response, next: NextFun
       return;
     }
     const parsedPeople = people as BatchPerson[];
+    // The spreadsheet adapter checks its selected family separately. Legacy
+    // JSON intake must not bypass the same client pause for onboarding/transfer.
+    if (!trustedPeople) {
+      for (const templateId of new Set(parsedPeople.map(person => person.hireType === "internal-transfer"
+        ? "employee-changes-internal-transfer" : "onboarding-external-fte"))) {
+        try { await assertBatchFamilyEnabled(getOrganizationId(req), templateId); }
+        catch (error) {
+          if (error instanceof ClientOperationsError) { res.status(error.status).json({ message: error.message }); return; }
+          throw error;
+        }
+      }
+    }
     if (new Set(parsedPeople.map((person) => person.personKey)).size !== parsedPeople.length) {
       res.status(400).json({ message: "Each person needs a unique stable personKey for safe retry reconciliation." });
       return;

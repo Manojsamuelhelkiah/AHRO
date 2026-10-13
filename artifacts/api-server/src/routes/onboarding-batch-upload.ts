@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { and, desc, eq } from "drizzle-orm";
 import { db, onbCases, onbIntakeBatchPeople, onbIntakeBatches } from "@workspace/db";
+import { assertBatchFamilyEnabled, ClientOperationsError } from "../lib/onboarding/client-operations-settings";
 import { requireBatchAdministrator, createHeldBatch, type BatchPerson } from "./onboarding-batch-intake";
 import { serializeCaseForRequest } from "./onboarding";
 import { getOrganizationId } from "../lib/organization-scope";
@@ -71,6 +72,11 @@ router.post("/onboarding/batch-upload/validate", async (req, res, next) => {
       catch (error) {
         res.status(400).json({ message: (error as { statusCode?: number }).statusCode === 400 ? (error as Error).message : "The file could not be parsed. Use a fresh Excel/CSV template." }); return;
       } finally { req.file.buffer.fill(0); delete req.file; }
+      try { await assertBatchFamilyEnabled(getOrganizationId(req), definition.id); }
+      catch (error) {
+        if (error instanceof ClientOperationsError) { res.status(error.status).json({ message: error.message }); return; }
+        throw error;
+      }
       const result = validateHroRows(definition.id, version, rows);
       if (result.valid) await checkPreviewCollection(req, result.rows);
       res.setHeader("Cache-Control", "no-store");
@@ -85,6 +91,12 @@ router.post("/onboarding/batch-upload", async (req, res, next) => {
   if (!validated.valid) { res.status(400).json({ message: "Fix the template validation errors before creating any cases.", issues: validated.issues }); return; }
   if (typeof name !== "string" || !name.trim() || name.trim().length > 120 || /[\u0000-\u001f]/.test(name)) { res.status(400).json({ message: "Enter a batch name of 1–120 plain-text characters." }); return; }
   const definition = findHroTemplate(templateId)!;
+  try { await assertBatchFamilyEnabled(getOrganizationId(req), definition.id); }
+  catch (error) {
+    if (error instanceof ClientOperationsError) res.status(error.status).json({ message: error.message });
+    else next(error);
+    return;
+  }
   if (definition.id === "offboarding-separation") {
     try {
       const results = await createSeparations(getOrganizationId(req), req.authUserId!, {

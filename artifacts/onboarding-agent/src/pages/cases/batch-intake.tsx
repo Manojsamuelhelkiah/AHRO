@@ -7,6 +7,7 @@ import { getListOnboardingCasesQueryKey } from '@workspace/api-client-react';
 import type { HroBatchResult, HroBatchTemplate, HroBatchValidation } from '@workspace/api-client-react';
 import { Button, Input, Label } from '@/components/ui-shared';
 import { useOrganizationRole } from '@/hooks/use-organization-role';
+import { useClientOperationsSettings } from '../settings-client-operations';
 import { ManualBatchIntakeForm } from './manual-batch-intake';
 import {
   MAX_ROWS, MAX_UPLOAD_BYTES, createHroBatch, downloadHroBatchTemplate, hroBatchHistoryKey, hroBatchTemplatesKey,
@@ -37,6 +38,16 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
   const [settledScope, setSettledScope] = useState(scope);
 
   const templates = useQuery({ queryKey: hroBatchTemplatesKey(scope), queryFn: ({ signal }) => listHroBatchTemplates({ signal }), enabled: !!scope });
+  const ops = useClientOperationsSettings(org.organizationId ?? null);
+  const familySetting = ops.data?.configuration.families.find((f) => f.family === family);
+  const opsReady = ops.isSuccess && !!ops.data;
+  const paused = !!family && opsReady && familySetting?.batchEnabled === false;
+  const intakeBlocked = !opsReady || paused;
+  const chooseFamily = (f: string) => {
+    resetWork(); setFamily(f);
+    const def = ops.data?.configuration.families.find((x) => x.family === f)?.defaultTemplateId ?? '';
+    setTemplateId((templates.data ?? []).some((t) => t.family === f && t.id === def) ? def : '');
+  };
   const history = useQuery({ queryKey: hroBatchHistoryKey(scope), queryFn: ({ signal }) => listHroBatchHistory({ signal }), enabled: !!scope && org.isHR });
 
   const resetWork = (clearInput = true) => {
@@ -61,7 +72,7 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
     setFile(f);
   };
   const validate = async () => {
-    if (!org.isHR || !file || !template || lock.current) return;
+    if (!org.isHR || intakeBlocked || !file || !template || lock.current) return;
     lock.current = true; const mine = ++epoch.current; abort.current?.abort(); abort.current = new AbortController();
     setBusy('validate'); setError(null); setValidation(null); setConsent(false);
     try {
@@ -73,7 +84,7 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
     finally { if (mine === epoch.current) { lock.current = false; setBusy(null); } }
   };
   const commit = async () => {
-    if (!org.isHR || !validation?.valid || !template || !consent || !name.trim() || lock.current) return;
+    if (!org.isHR || intakeBlocked || !validation?.valid || !template || !consent || !name.trim() || lock.current) return;
     lock.current = true; const mine = ++epoch.current; abort.current?.abort(); abort.current = new AbortController();
     setBusy('commit'); setError(null);
     try {
@@ -107,13 +118,16 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
       <div className="space-y-4 p-[var(--space-lg)]">
         {!scope && <p role="status" className="text-xs text-[var(--text-muted)]">{org.loading ? 'Loading your session and organization...' : 'Select an active organization to browse templates. If membership could not be loaded, refresh this page.'}</p>}
         {scope && !org.isHR && <p role="status" className="rounded border border-[var(--border)] p-3 text-xs text-[var(--text-secondary)]">You can browse and download blank templates. Uploading and creating cases requires an organization owner/admin with approved case-flow, profile and notes edit permissions and applicable collection policies.</p>}
+        {scope && ops.isLoading && <p role="status" className="text-xs text-[var(--text-muted)]">Checking client batch settings...</p>}
+        {scope && ops.isError && <p role="alert" className="text-xs text-[var(--status-red)]">Client operations settings are unavailable, so validation and creation are disabled. Template downloads still work. <button className="underline" onClick={() => ops.refetch()}>Retry</button></p>}
+        {paused && <p role="status" data-testid="text-family-paused" className="rounded border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] p-2 text-xs text-[var(--status-amber-fg)]">Batch intake is paused for the {family} family in client settings. New batch imports are disabled; templates remain downloadable. Individual and email case creation are unaffected.</p>}
         {templates.isError && <p role="alert" className="text-xs text-[var(--status-red)]">{hroBatchErrorMessage(templates.error, 'Could not load templates.')} <button className="underline" onClick={() => templates.refetch()}>Retry</button></p>}
         {templates.isLoading && <div className="h-9 animate-pulse rounded bg-[var(--surface-alt)]" />}
         {scope && templates.isSuccess && families.length === 0 && <p role="status" className="text-xs text-[var(--text-muted)]">No batch templates are available. <button className="underline" onClick={() => templates.refetch()}>Reload templates</button></p>}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div><Label>Case family</Label>
-             <select className={select} data-testid="select-family" value={family} disabled={!scope || templates.isPending || templates.isError || families.length === 0} onChange={(e) => { resetWork(); setFamily(e.target.value); setTemplateId(''); }}>
-               <option value="">{!scope || templates.isPending ? 'Loading families…' : templates.isError ? 'Templates unavailable — retry above' : families.length === 0 ? 'No families available' : 'Choose a family'}</option>{families.map((f) => <option key={f} value={f}>{f}</option>)}</select></div>
+             <select className={select} data-testid="select-family" value={family} disabled={!scope || templates.isPending || templates.isError || families.length === 0} onChange={(e) => chooseFamily(e.target.value)}>
+               <option value="">{!scope || templates.isPending ? 'Loading families…' : templates.isError ? 'Templates unavailable — retry above' : families.length === 0 ? 'No families available' : 'Choose a family'}</option>{families.map((f) => <option key={f} value={f}>{f}{ops.data?.configuration.families.find((x) => x.family === f)?.batchEnabled === false ? ' (batch paused)' : ''}</option>)}</select></div>
           <div><Label>Template</Label>
              <select className={select} data-testid="select-template" value={templateId} disabled={!family || templates.isPending || templates.isError} onChange={(e) => { resetWork(); setTemplateId(e.target.value); }}>
               <option value="">Choose a template</option>{options.map((t) => <option key={t.id} value={t.id}>{t.name} (v{t.version})</option>)}</select></div>
@@ -131,7 +145,7 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
           </div>
           <div><Label>Filled file (CSV or Excel, up to 2 MB and {MAX_ROWS} rows)</Label>
              <input ref={fileInput} type="file" disabled={!org.isHR} accept=".csv,.xlsx" data-testid="input-file" className="mt-1 block w-full text-xs" onChange={(e) => pick(e.target.files?.[0] ?? null)} /></div>
-           <Button onClick={validate} disabled={!org.isHR || !file || busy !== null} data-testid="button-validate"><Upload className="mr-1 h-4 w-4" />{busy === 'validate' ? 'Validating...' : 'Validate file'}</Button>
+           <Button onClick={validate} disabled={!org.isHR || intakeBlocked || !file || busy !== null} data-testid="button-validate"><Upload className="mr-1 h-4 w-4" />{busy === 'validate' ? 'Validating...' : 'Validate file'}</Button>
         </>}
         {error && <p role="alert" data-testid="text-error" className="text-xs text-[var(--status-red)]">{error}</p>}
         {validation && template && (
@@ -152,7 +166,7 @@ export function BatchIntakeForm({ onClose }: { onClose: () => void }) {
                 <div className="max-w-md"><Label>Batch name</Label><Input className="mt-1" value={name} onChange={(e) => setName(e.target.value)} data-testid="input-batch-name" /></div>
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" className="mt-0.5" checked={consent} onChange={(e) => setConsent(e.target.checked)} data-testid="checkbox-consent" />
                   <span>I confirm I am authorized to submit this personal data and that it should create {validation.rows.length} held review case(s). Duplicates are reconciled, not recreated.</span></label>
-                 <Button onClick={commit} disabled={!org.isHR || !consent || !name.trim() || busy !== null} data-testid="button-confirm-create">{busy === 'commit' ? 'Creating held cases...' : 'Create held cases'}</Button>
+                 <Button onClick={commit} disabled={!org.isHR || intakeBlocked || !consent || !name.trim() || busy !== null} data-testid="button-confirm-create">{busy === 'commit' ? 'Creating held cases...' : 'Create held cases'}</Button>
               </div>)}
           </div>)}
         {result && (

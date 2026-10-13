@@ -31,7 +31,7 @@ Same-site privileged browser tests must preserve the browser-facing host through
 
 **Why:** Rewriting the upstream Host to a different loopback port makes genuine same-origin browser writes fail the existing cross-site guard. Dropping admin lifetime headers from a mocked rejection can instead make the protected session boundary remount the page, hiding the intended error or dialog.
 
-**How to apply:** Keep Origin and the host seen by the guard consistent without bypassing the guard. Copy actual lifetime headers when mocking an ordinary authorization rejection; omit them only when deliberately testing session expiry. Use fixtures with the permissions required by incidental page requests, or stay on the changed setup flow rather than an unrelated planning wizard.
+**How to apply:** Keep Origin and the host seen by the guard consistent without bypassing the guard. Copy actual lifetime headers when mocking ordinary successful responses or authorization rejections; omit them only when deliberately testing session expiry. Use fixtures with the permissions required by incidental page requests, or stay on the changed setup flow rather than an unrelated planning wizard.
 
 Browser layout assertions must tolerate nodes being replaced during successful mutation-triggered refetches; never put a mutation click inside the retry wrapper.
 

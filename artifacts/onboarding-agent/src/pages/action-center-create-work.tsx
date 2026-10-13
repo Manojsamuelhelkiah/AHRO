@@ -76,7 +76,7 @@ export function ActionCenterCreateWork({
 }: ActionCenterCreateWorkProps) {
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<WorkKind>("assign");
-  const [owner, setOwner] = useState<OnbActionCenterWorkInputOwner>("hr");
+  const [owner, setOwner] = useState<OnbActionCenterWorkInputOwner | "client-routing">("client-routing");
   const [assignee, setAssignee] = useState("");
   const [reason, setReason] = useState(initialReason ?? "");
   const requestRef = useRef<{ fingerprint: string; id: string } | null>(null);
@@ -114,7 +114,7 @@ export function ActionCenterCreateWork({
 
     const payloadWithoutRequestId = {
       caseId,
-      owner,
+      owner: owner === "client-routing" ? undefined : owner,
       assignee: assignee.trim() || null,
       reason: trimmedReason,
       expectedVersion: actionVersion,
@@ -127,7 +127,7 @@ export function ActionCenterCreateWork({
     const data = {
       requestId: requestRef.current.id,
       caseId,
-      owner,
+      owner: owner === "client-routing" ? undefined : owner,
       assignee: assignee.trim() || null,
       reason: trimmedReason,
       expectedVersion: actionVersion,
@@ -201,12 +201,13 @@ export function ActionCenterCreateWork({
               <Select
                 value={owner}
                 disabled={pending}
-                onValueChange={(value) => setOwner(value as OnbActionCenterWorkInputOwner)}
+                onValueChange={(value) => setOwner(value as OnbActionCenterWorkInputOwner | "client-routing")}
               >
                 <SelectTrigger id={`action-center-owner-${caseId}`}>
                   <SelectValue placeholder="Select a queue" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="client-routing">Use client routing</SelectItem>
                   {queues.map((queue) => (
                     <SelectItem key={queue.value} value={queue.value}>
                       {queue.label}
@@ -214,6 +215,7 @@ export function ActionCenterCreateWork({
                   ))}
                 </SelectContent>
               </Select>
+              {owner === "client-routing" && <p className="text-xs text-[var(--text-muted)]">Uses this client's configured routing rule. With no assignee, the configured group label is applied. This is queue responsibility metadata, not an email or access grant.</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor={`action-center-assignee-${caseId}`}>

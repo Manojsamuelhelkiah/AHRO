@@ -84,3 +84,4 @@
 - [Permanent case-test retirement](product-feature-retirement.md) — retired launch/evaluation actions must not return; preserve history, offline fences, genuine operations and commercial modeling.
 - [Controlled offline inventory](offline-inventory-exception.md) — additive Demo-only examples are a narrow one-off exception, not restored creation, reset, execution or authority.
 - [Case pipeline density](case-pipeline-density.md) — desktop cases stay compact and single-line; long narratives belong in detail views or hover text.
+- [Client operating defaults](client-operating-default-boundaries.md) — calendar proposals never reschedule approved obligations; responsibility routing grants neither access nor delivery authority.

@@ -12,6 +12,7 @@ import { Card, Button, Input, cn, Label, PageHeader } from '@/components/ui-shar
 import { format } from 'date-fns';
 import { Plus, Search, SlidersHorizontal, Bot, User, Users, X, FlaskConical, Check, AlertTriangle, Clock, Presentation, ShieldCheck } from 'lucide-react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useClientOperationsSettings } from '../settings-client-operations';
 import { BatchIntakeForm } from './batch-intake';
 import { StandardIntakeForm } from './standard-intake';
 import { listJobProfiles, parseWorkforceTriState } from '@/lib/workforce-policy-api';
@@ -202,6 +203,8 @@ export function CasesPage() {
   const search = useSearch();
   const checklistProfileId = new URLSearchParams(search).get('checklistProfileId');
   const organizationId = getPinnedOrganizationIdForPage();
+  const opsSettings = useClientOperationsSettings(organizationId || null);
+  const caseDateFormat = opsSettings.data?.configuration.defaults.dateFormat ?? 'MMM d, yyyy';
   const transferQuery = useQuery({
     queryKey: ['workforce-transfers', 'programs', organizationId],
     queryFn: ({ signal }) => listWorkforceTransferPrograms({
@@ -335,6 +338,7 @@ export function CasesPage() {
   const selectStyle = 'flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]';
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      {opsSettings.isError && <p role="alert" data-testid="text-date-format-warning" className="mb-2 text-xs text-[var(--status-amber-fg)]">Client date format could not be loaded; dates use the product format (MMM d, yyyy). <button className="underline" onClick={() => void opsSettings.refetch()}>Retry</button></p>}
       <PageHeader title={context.title} subtitle={context.subtitle}>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Link href="/email-intake"><Button variant="outline" className="gap-2" data-testid="link-email-intake">Email intake</Button></Link>
@@ -638,7 +642,7 @@ export function CasesPage() {
                         <div className="truncate" title={caseTypeOf(c)}><CaseTypeBadge type={caseTypeOf(c)} /></div>
                       </td>
                       <td className="hidden lg:table-cell whitespace-nowrap" style={{ padding: '10px 8px', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                        {c.joiningDate && Number.isFinite(Date.parse(c.joiningDate)) ? format(new Date(c.joiningDate), 'MMM d, yyyy') : 'Not applicable'}
+                        {c.joiningDate && Number.isFinite(Date.parse(c.joiningDate)) ? format(new Date(c.joiningDate), caseDateFormat) : 'Not applicable'}
                       </td>
                       <td className="hidden lg:table-cell" style={{ padding: '10px 8px' }}>
                         {c.gateways ? <CompactGates gateways={c.gateways} inline /> : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>N/A</span>}

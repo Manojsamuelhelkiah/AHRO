@@ -43,6 +43,32 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /organizations/current/settings/operations:
+    get:
+      operationId: getClientOperationsSettings
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Tenant operating defaults, batch-family configuration and administrative routing options
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientOperationsSettings" }
+    put:
+      operationId: updateClientOperationsSettings
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClientOperationsUpdate" }
+      responses:
+        "200":
+          description: Saved versioned tenant configuration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientOperationsSettings" }
+        "403": { description: Organization owner or active Super Admin required }
+        "409": { description: Configuration changed; reload before saving }
   /onboarding/email-intake/requests/{requestId}/source:
     get:
       operationId: getHroEmailPrivateSource
@@ -15103,7 +15129,7 @@ components:
         assignee: { type: ["string", "null"], maxLength: 200 }
         reason: { type: ["string", "null"], maxLength: 2000 }
         expectedVersion: { type: integer, minimum: 0 }
-      required: [requestId, caseId, owner, expectedVersion]
+      required: [requestId, caseId, expectedVersion]
     OnbActionCenterWorkReassignInput:
       type: object
       additionalProperties: false
@@ -16129,3 +16155,70 @@ components:
           type: array
           items: { type: string }
       required: [eligible, blockers]
+    ClientOperatingDefaults:
+      type: object
+      additionalProperties: false
+      properties:
+        timezone: { type: string }
+        dateFormat: { type: string, enum: ["MMM d, yyyy", "dd/MM/yyyy", "MM/dd/yyyy", "yyyy-MM-dd"] }
+        businessDays:
+          type: array
+          items: { type: integer }
+        holidays:
+          type: array
+          items: { type: string }
+      required: [timezone, dateFormat, businessDays, holidays]
+    ClientCaseFamilySetting:
+      type: object
+      additionalProperties: false
+      properties:
+        family: { type: string }
+        batchEnabled: { type: boolean }
+        defaultTemplateId: { type: string }
+      required: [family, batchEnabled, defaultTemplateId]
+    ClientActionRoutingRule:
+      type: object
+      additionalProperties: false
+      properties:
+        family: { type: ["string", "null"] }
+        country: { type: ["string", "null"] }
+        owner: { type: string, enum: [hr, recruiter, hiring-manager, bgv-team, documentation, operations, compliance] }
+        groupId: { type: ["string", "null"] }
+      required: [family, country, owner, groupId]
+    ClientOperationsConfiguration:
+      type: object
+      additionalProperties: false
+      properties:
+        defaults: { $ref: "#/components/schemas/ClientOperatingDefaults" }
+        families:
+          type: array
+          items: { $ref: "#/components/schemas/ClientCaseFamilySetting" }
+        routingRules:
+          type: array
+          items: { $ref: "#/components/schemas/ClientActionRoutingRule" }
+        fallbackOwner: { type: string, enum: [hr, recruiter, hiring-manager, bgv-team, documentation, operations, compliance] }
+      required: [defaults, families, routingRules, fallbackOwner]
+    ClientOperationsGroupOption:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+      required: [id, name]
+    ClientOperationsSettings:
+      type: object
+      properties:
+        version: { type: integer }
+        canEdit: { type: boolean }
+        source: { type: string, enum: [product-defaults, client-override] }
+        configuration: { $ref: "#/components/schemas/ClientOperationsConfiguration" }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/ClientOperationsGroupOption" }
+      required: [version, canEdit, source, configuration, groups]
+    ClientOperationsUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion: { type: integer }
+        configuration: { $ref: "#/components/schemas/ClientOperationsConfiguration" }
+      required: [expectedVersion, configuration]

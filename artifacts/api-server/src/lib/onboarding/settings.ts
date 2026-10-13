@@ -16,6 +16,7 @@ import {
   type Day1Logistics,
 } from "./logistics-defaults";
 import { UAT_RUN_SETTING_PREFIX } from "./uat-isolation";
+import { loadClientOperations } from "./client-operations-settings";
 
 /**
  * App-level settings persisted in the onb_settings key/value table so
@@ -574,9 +575,11 @@ export async function autoEscalationCallsEnabled(organizationId: string): Promis
 
 export async function getDay1LogisticsDefault(organizationId: string): Promise<Day1Logistics> {
   const stored = await getSetting(organizationId, DAY1_LOGISTICS_DEFAULT_KEY);
-  return stored
-    ? parseDay1LogisticsDefault(stored)
-    : { ...SYNTHETIC_DAY1_LOGISTICS_DEFAULT };
+  if (stored) return parseDay1LogisticsDefault(stored);
+  const operations = await loadClientOperations(organizationId);
+  return { ...SYNTHETIC_DAY1_LOGISTICS_DEFAULT,
+    ...(operations.source === "client-override" ? { timezone: operations.configuration.defaults.timezone } : {}),
+  };
 }
 
 export async function setDay1LogisticsDefault(

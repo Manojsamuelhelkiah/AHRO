@@ -23,6 +23,7 @@ import { denyRetiredCaseCapability } from "../retired-case-capabilities";
 import { externalProviderDispatchDenied } from "./provider-policy";
 import { isChecklistAdministrator } from "./checklist";
 import { sensitiveClassForDocument, withSensitiveAuthorityFence } from "./sensitive-access";
+import { resolveClientActionRouting } from "./client-operations-settings";
 
 export type ActionCenterScope = "active" | "completed" | "all";
 export type ActionCenterAccess = "standard" | "synthetic-demo-simulation";
@@ -324,6 +325,8 @@ async function reserveAction(input: {
         throw new ActionCenterConflictError("This work item is already resolved.");
       }
     }
+    const routing = (input.kind === "assign" || input.kind === "escalate") && input.owner === undefined
+      ? await resolveClientActionRouting(input.organizationId, ownedCase, tx) : null;
     const [row] = await tx
       .insert(onbActionCenterActions)
       .values({
@@ -331,17 +334,21 @@ async function reserveAction(input: {
         caseId: input.caseId,
         kind: input.kind,
         status: input.status,
-        owner: input.owner ?? null,
-        assignee: input.assignee ?? null,
+        owner: input.owner ?? routing?.owner ?? null,
+        assignee: input.assignee ?? routing?.assignee ?? null,
         outcome: input.outcome ?? null,
-        notes: input.notes ?? null,
+        notes: input.notes ?? routing?.reason ?? null,
         persona: input.persona ?? null,
         selfReported: input.selfReported ?? false,
         verified: input.verified ?? false,
         actorUserId: input.actorUserId,
         actorName: input.actorName,
         requestId: input.requestId,
-        payload: { requestFingerprint, body: input.body },
+        payload: { requestFingerprint, body: input.body,
+          ...(routing ? { clientRouting: {
+            settingsVersion: routing.settingsVersion, groupId: input.assignee != null ? null : routing.groupId,
+          } } : {}),
+        },
       })
       .returning();
     if (!row) throw new Error("Action Center action was not persisted.");

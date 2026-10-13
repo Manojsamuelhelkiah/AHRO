@@ -29,6 +29,7 @@ import { SettingsContextRelocation } from './settings-context-relocation';
 import { AccessGovernanceSettings } from './settings-access-governance';
 import { EmployeeVaultSettings } from '../components/employee-vault-settings';
 import { PrivacyAdministrationCard } from './settings-privacy-tab';
+import { ClientOperationsSettingsPanel } from './settings-client-operations';
 import { EarlyTenureSettingsCard } from './settings-early-tenure';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -584,6 +585,7 @@ function SettingsContent() {
         </div>
       </div>
 
+      <ClientOperationsSettingsPanel />
       <RemoteApproverSettings />
       <ReadinessSlaSettingsCard />
       <EarlyTenureSettingsCard />
@@ -839,8 +841,6 @@ function SettingsContent() {
       </section>
 
       <Day1LogisticsSettingsCard />
-
-      <RemoteApproverSettings />
 
     </div>
   );
