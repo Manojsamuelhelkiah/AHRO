@@ -5,10 +5,12 @@ import { after, before, describe, test } from "node:test";
 import { and, eq, or } from "drizzle-orm";
 import {
   db,
+  accessNamedGrants,
   onbAuthorityAssignments,
   onbAuthorityGovernance,
   onbCases,
   onbFrontlineEvidence,
+  onbFrontlineReleaseState,
   onbSystemChecks,
   onbSensitiveLifecyclePolicies,
   organizationMembershipsTable,
@@ -17,9 +19,11 @@ import {
 import {
   evaluateFrontlineFloorRelease,
   FrontlineValidationError,
+  FrontlineRetainedError,
   getFrontlineKpiAggregate,
   getFrontlineEvidenceHistory,
   getFrontlineReadiness,
+  getFrontlineAccess,
   recordFrontlineEvidence,
   recordFrontlineFulfillment,
   recordFrontlineKpiInput,
@@ -128,6 +132,19 @@ describe("frontline operations service (real DB)", { skip: !hasDb }, () => {
         validFrom: new Date(Date.now() - 60_000), validUntil: new Date(Date.now() + 60 * 60_000),
         status: "active", revision: 1, grantorUserId: "governance", source: "test", governanceDecisionRef: "GOV-TEST",
       });
+      const privateKeys = authorityRole === "occupational-health" ? ["data.medical.read", "data.medical.edit"]
+        : authorityRole === "payroll" ? ["data.payroll.read", "data.payroll.edit"]
+        : authorityRole === "hr-compliance" ? ["data.identity.edit", "data.identity.read", "data.bgv.read", "data.medical.read", "data.payroll.read"]
+        : authorityRole === "site-operations" ? []
+        : ["data.medical.edit", "data.identity.edit", "data.bgv.edit"];
+      for (const resourceKey of ["tool.approval.decide", "flow.case.edit", "flow.case.read", "data.case.notes.read", "data.case.notes.edit", "data.case.profile.read", ...privateKeys]) {
+        await db.insert(accessNamedGrants).values({
+          organizationId, principalType: "human", principalId: userId, resourceKey,
+          resourceType: resourceKey.startsWith("tool.") ? "tool" : resourceKey.startsWith("flow.") ? "flow" : "field",
+          scope: "tenant", source: "named", effect: "allow", status: "active", createdByUserId: "independent-test-owner",
+          approvedByUserId: "independent-test-owner", approvedAt: new Date(),
+        });
+      }
     }
   });
   after(async () => {
@@ -156,15 +173,15 @@ describe("frontline operations service (real DB)", { skip: !hasDb }, () => {
     const medicalHistory = await getFrontlineEvidenceHistory({ organizationId, caseId: c.id, actorUserId: users.medical });
     assert.deepEqual(medicalHistory.evidence.map((row) => row.kind), ["medical-fitness"]);
     assert.deepEqual(medicalHistory.exceptions, []);
-    const storesHistory = await getFrontlineEvidenceHistory({ organizationId, caseId: c.id, actorUserId: users.stores });
-    assert.deepEqual(storesHistory.evidence, []);
+    await assert.rejects(getFrontlineEvidenceHistory({ organizationId, caseId: c.id, actorUserId: users.stores }), /read permissions/);
     assert.equal(released.version, version + 1);
 
     // This is a current server-read authority revocation, not a client-provided
     // remote revocation claim. The next floor attempt must reopen/reblock.
     try {
-      await db.update(onbAuthorityAssignments).set({ status: "revoked", revision: 2 }).where(and(
-        eq(onbAuthorityAssignments.organizationId, organizationId), eq(onbAuthorityAssignments.id, `${suffix}-safety`),
+      await db.update(accessNamedGrants).set({ status: "rejected" }).where(and(
+        eq(accessNamedGrants.organizationId, organizationId), eq(accessNamedGrants.principalId, users.safety),
+        eq(accessNamedGrants.resourceKey, "tool.approval.decide"),
       ));
       await runFrontlineReleaseHeartbeat();
       const reblocked = await getFrontlineReadiness(organizationId, c.id);
@@ -172,8 +189,9 @@ describe("frontline operations service (real DB)", { skip: !hasDb }, () => {
       assert.equal(reblocked.release.reblocked, true);
       assert.match(reblocked.release.blockers.join(" "), /safety-competency/i);
     } finally {
-      await db.update(onbAuthorityAssignments).set({ status: "active", revision: 1 }).where(and(
-        eq(onbAuthorityAssignments.organizationId, organizationId), eq(onbAuthorityAssignments.id, `${suffix}-safety`),
+      await db.update(accessNamedGrants).set({ status: "active" }).where(and(
+        eq(accessNamedGrants.organizationId, organizationId), eq(accessNamedGrants.principalId, users.safety),
+        eq(accessNamedGrants.resourceKey, "tool.approval.decide"),
       ));
     }
   });
@@ -199,8 +217,65 @@ describe("frontline operations service (real DB)", { skip: !hasDb }, () => {
   test("requires both national and state statutory requirements when both jurisdictions apply", async () => {
     const c = await createCase(organizationId, [], policy, "CA");
     const readiness = await getFrontlineReadiness(organizationId, c.id);
-    assert.match(readiness.release.blockers.join(" "), /CA-site-registration/);
-    assert.match(readiness.release.blockers.join(" "), /US-payroll-registration/);
+    assert.equal(readiness.release.blockers.filter(message => message.includes("statutory-registration")).length, 2);
+    assert.doesNotMatch(readiness.release.blockers.join(" "), /CA-site-registration|US-payroll-registration/);
+    assert.equal(readiness.release.reblocked, false);
+  });
+
+  test("case viewing and fulfillment do not require every sensitive edit or private history permission", async () => {
+    const c = await createCase();
+    const access = await getFrontlineAccess({ organizationId, caseId: c.id, actorUserId: users.stores });
+    assert.equal(access.fulfillmentEdit, true);
+    assert.equal(access.historyRead, false);
+    assert.equal(access.kpiRead, false);
+    assert.equal(access.evidenceEdit["medical-fitness"], false);
+    await assert.rejects(getFrontlineAccess({ organizationId, caseId: c.id, actorUserId: users.untrusted }), /case-read authority/);
+    await assert.rejects(getFrontlineAccess({ organizationId: otherOrganizationId, caseId: c.id, actorUserId: users.stores }), /Case not found/);
+  });
+
+  test("retained records remain viewable but direct mutations and heartbeat cannot modify them", async () => {
+    const c = await createCase();
+    await db.update(onbCases).set({ controllerRetired: true }).where(eq(onbCases.id, c.id));
+    const access = await getFrontlineAccess({ organizationId, caseId: c.id, actorUserId: users.hr });
+    assert.equal(access.readOnly, true);
+    assert.equal(access.historyRead, true);
+    assert.equal(access.releaseEdit, false);
+    assert.equal(Object.values(access.evidenceEdit).some(Boolean), false);
+    await assert.rejects(recordFrontlineFulfillment({
+      organizationId, caseId: c.id, actorUserId: users.stores, expectedVersion: 0,
+      item: "badge", assetReference: "fixture-only", requestedQuantity: 1, issuedQuantity: 1,
+      issuerTimestamp: new Date().toISOString(),
+    }), error => error instanceof FrontlineRetainedError && error.statusCode === 410);
+    await runFrontlineReleaseHeartbeat();
+    assert.equal((await db.select().from(onbFrontlineReleaseState).where(eq(onbFrontlineReleaseState.caseId, c.id))).length, 0);
+  });
+
+  test("revoking only the medical field-edit grant reblocks already recorded floor release", async () => {
+    const c = await createCase();
+    await addTrustedBgv(c.id);
+    const version = await completeReleasePrerequisites(c.id);
+    const released = await evaluateFrontlineFloorRelease({ organizationId, caseId: c.id,
+      actorUserId: users.hr, expectedVersion: version });
+    assert.equal(released.release.eligible, true, JSON.stringify(released.release.blockers));
+    const scopedGrant = and(eq(accessNamedGrants.organizationId, organizationId),
+      eq(accessNamedGrants.principalId, users.medical), eq(accessNamedGrants.resourceKey, "data.medical.edit"));
+    await db.update(accessNamedGrants).set({ status: "rejected" }).where(scopedGrant);
+    try {
+      const readiness = await getFrontlineReadiness(organizationId, c.id);
+      assert.equal(readiness.release.eligible, false);
+      assert.match(readiness.release.blockers.join(" "), /medical-fitness/);
+      const retainedApproval = await db.select().from(accessNamedGrants).where(and(
+        eq(accessNamedGrants.principalId, users.medical),
+        eq(accessNamedGrants.resourceKey, "tool.approval.decide"),
+      ));
+      assert.equal(retainedApproval[0]?.status, "active");
+      await runFrontlineReleaseHeartbeat();
+      const [state] = await db.select().from(onbFrontlineReleaseState).where(eq(onbFrontlineReleaseState.caseId, c.id));
+      assert.equal(state?.status, "blocked");
+      assert.ok(state?.reblockedAt);
+    } finally {
+      await db.update(accessNamedGrants).set({ status: "active" }).where(scopedGrant);
+    }
   });
 
   test("keeps expired evidence and each applicable skill as live floor blockers", async () => {
@@ -214,7 +289,8 @@ describe("frontline operations service (real DB)", { skip: !hasDb }, () => {
     const readiness = await getFrontlineReadiness(organizationId, c.id);
     assert.equal(readiness.release.eligible, false);
     assert.match(readiness.release.blockers.join(" "), /medical-fitness/i);
-    assert.match(readiness.release.blockers.join(" "), /skill-certificate \(forklift-certificate\)/i);
+    assert.match(readiness.release.blockers.join(" "), /skill-certificate/i);
+    assert.doesNotMatch(readiness.release.blockers.join(" "), /forklift-certificate/i);
   });
 
   test("records an evidence revocation only from a current scoped human authority and live release does not reuse it", async () => {
@@ -267,7 +343,7 @@ describe("frontline operations service (real DB)", { skip: !hasDb }, () => {
     assert.equal(aggregate.metrics.ppeIssuanceCompliant, true);
     assert.equal(aggregate.metrics.statutoryRegistrationRecorded, true);
     assert.equal(aggregate.metrics.attrition0To30Days.state, "pending-review");
-    await assert.rejects(getFrontlineKpiAggregate({ organizationId, caseId: c.id, actorUserId: users.untrusted }), /scoped authority/i);
+    await assert.rejects(getFrontlineKpiAggregate({ organizationId, caseId: c.id, actorUserId: users.untrusted }), /read permissions/i);
   });
 
   test("does not cross tenant case data", async () => {
@@ -277,7 +353,7 @@ describe("frontline operations service (real DB)", { skip: !hasDb }, () => {
       organizationId: otherOrganizationId, caseId: c.id, actorUserId: users.hr, expectedVersion: 0,
       kind: "age-proof", evidenceReference: "cross-tenant-batch-claim",
       issuerTimestamp: new Date().toISOString(), subjectAgeYears: 21,
-    }), /current tenant case/i);
+    }), /Case not found/i);
   });
 
   test("rejects an actual-exit KPI input without an authoritative dated actual joining anchor", async () => {

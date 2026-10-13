@@ -3,8 +3,10 @@ import { getOrganizationId } from "../lib/organization-scope";
 import {
   evaluateFrontlineFloorRelease,
   FrontlineConflictError,
+  FrontlineRetainedError,
   FrontlineValidationError,
   getFrontlineReadiness,
+  getFrontlineAccess,
   getFrontlineKpiAggregate,
   getFrontlineEvidenceHistory,
   recordFrontlineEvidence,
@@ -16,6 +18,16 @@ import {
 } from "../lib/onboarding/frontline-operations";
 
 const router: IRouter = Router();
+// Every read rechecks the same live, tenant-bound evaluator as administrative
+// actions. Case existence alone does not authorize disclosure.
+router.use("/onboarding/cases/:id/frontline", async (req, res, next) => {
+  try {
+    res.locals.frontlineAccess = await getFrontlineAccess({
+      organizationId: getOrganizationId(req), caseId: caseId(req), actorUserId: req.authUserId!,
+    });
+    next();
+  } catch (error) { if (!sendError(error, res)) next(error); }
+});
 
 function caseId(req: Request): number {
   const value = Number(req.params.id);
@@ -42,19 +54,29 @@ function optionalString(value: unknown, field: string): string | undefined {
   return string(value, field);
 }
 function sendError(error: unknown, res: Response): boolean {
+  if (error instanceof FrontlineRetainedError) {
+    res.status(error.statusCode).json({ message: error.message, code: error.code });
+    return true;
+  }
   if (error instanceof FrontlineConflictError) {
     res.status(409).json({ message: error.message });
     return true;
   }
   if (error instanceof FrontlineValidationError) {
-    res.status(/not found/i.test(error.message) ? 404 : /authority/i.test(error.message) ? 403 : 400).json({ message: error.message });
+    res.status(/not found/i.test(error.message) ? 404 : /authority|permissions/i.test(error.message) ? 403 : 400).json({ message: error.message });
     return true;
   }
   return false;
 }
 
 router.get("/onboarding/cases/:id/frontline/readiness", async (req, res, next) => {
-  try { res.json(await getFrontlineReadiness(getOrganizationId(req), caseId(req))); }
+  try {
+    const readiness = await getFrontlineReadiness(getOrganizationId(req), caseId(req));
+    // Broad operational summaries must not expose opaque policy/evidence keys.
+    res.json({ ...readiness, access: res.locals.frontlineAccess,
+      evidenceStatuses: readiness.evidenceStatuses.map(({ statutoryKey, skillRequirementKey, ...safe }) => safe),
+    });
+  }
   catch (error) { if (!sendError(error, res)) next(error); }
 });
 

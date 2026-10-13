@@ -20,18 +20,22 @@ import { format } from 'date-fns';
 import { AlertTriangle, CheckCircle2, ShieldAlert, Package, Info, Target, FileWarning } from 'lucide-react';
 
 export function FrontlineTab({ caseId }: { caseId: number }) {
-  const { data: readiness, isLoading } = useGetFrontlineReadiness(caseId);
+  const { data: readiness, isLoading, error } = useGetFrontlineReadiness(caseId);
   const {
-    data: evidenceHistory,
+    data: rawEvidenceHistory,
     isLoading: isEvidenceHistoryLoading,
     error: evidenceHistoryError,
-  } = useGetFrontlineEvidenceHistory(caseId, { enabled: Boolean(readiness?.applicable) });
+  } = useGetFrontlineEvidenceHistory(caseId, { enabled: !error && Boolean(readiness?.applicable && readiness.access.historyRead) });
+  const evidenceHistory = !error && readiness?.access.historyRead ? rawEvidenceHistory : undefined;
 
   if (isLoading) {
     return <div className="p-4 text-[var(--text-muted)] text-sm">Loading frontline data...</div>;
   }
 
-  if (!readiness || !readiness.applicable) {
+  if (error || !readiness) {
+    return <p role="alert" className="rounded-md border p-4 text-sm">Frontline access could not be confirmed. {historyErrorMessage(error)} Refresh or verify your administrative session before continuing.</p>;
+  }
+  if (!readiness.applicable) {
     return (
       <div className="p-8 text-center text-[var(--text-muted)]">
         <Package className="w-12 h-12 mx-auto mb-4 opacity-20" />
@@ -43,6 +47,8 @@ export function FrontlineTab({ caseId }: { caseId: number }) {
 
   return (
     <div className="space-y-6 pb-12 max-w-4xl mx-auto">
+      {readiness.access.readOnly && <p role="status" className="rounded-md border p-4 text-sm">Retained Frontline record — read-only even for administrators. Operations are retired; permitted information remains viewable.</p>}
+      {!readiness.access.historyRead && <p role="status" className="rounded-md border p-3 text-sm">Sensitive evidence history is restricted by its specific disclosure permissions. No private history has been requested.</p>}
       <ReadinessOverview readiness={readiness} caseId={caseId} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -60,7 +66,7 @@ export function FrontlineTab({ caseId }: { caseId: number }) {
           isEvidenceHistoryLoading={isEvidenceHistoryLoading}
           evidenceHistoryError={evidenceHistoryError}
         />
-        <KpiSection caseId={caseId} />
+        <KpiSection caseId={caseId} readiness={readiness} />
         <ExceptionSection
           readiness={readiness}
           caseId={caseId}
@@ -82,11 +88,18 @@ type EvidenceHistoryProps = {
 function historyErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Restricted evidence history could not be loaded.';
 }
+function MutationError({ error }: { error: unknown }) {
+  return error ? <p role="alert" className="mt-2 text-sm text-[var(--status-red)]">{historyErrorMessage(error)}</p> : null;
+}
+function ActionNotice({ allowed }: { allowed: boolean }) {
+  return !allowed ? <p className="mt-2 text-xs text-[var(--text-muted)]">This action requires current case-edit and action-specific permissions on an active case. Verify administrator access or request the appropriate grant. Administrative access does not supply professional approval or independent source evidence.</p> : null;
+}
 
 function ReadinessOverview({ readiness, caseId }: { readiness: FrontlineReadiness, caseId: number }) {
   const floorRelease = usePostFrontlineFloorRelease();
 
   const onRelease = () => {
+    if (!readiness.access.releaseEdit) return;
     floorRelease.mutate({
       caseId,
       data: {
@@ -100,7 +113,7 @@ function ReadinessOverview({ readiness, caseId }: { readiness: FrontlineReadines
       "border-2",
       readiness.release.eligible ? "border-[var(--status-green)]" : "border-[var(--border)]"
     )}>
-      <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
+      <CardHeader className="pb-3 border-b flex flex-row flex-wrap gap-3 items-center justify-between">
         <div>
           <CardTitle className="text-[var(--text-base)]">Floor Release Readiness</CardTitle>
           <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">Version: {readiness.version}</p>
@@ -140,13 +153,16 @@ function ReadinessOverview({ readiness, caseId }: { readiness: FrontlineReadines
 
         <div className="flex justify-end pt-2">
           <Button
-            disabled={!readiness.release.eligible || readiness.release.recorded || floorRelease.isPending}
+            disabled={!readiness.access.releaseEdit || !readiness.release.eligible || readiness.release.recorded || floorRelease.isPending}
             onClick={onRelease}
             className={cn(readiness.release.eligible ? "bg-[var(--status-green)] text-white hover:bg-[var(--status-green)]/90" : "")}
           >
             {readiness.release.eligible && readiness.release.recorded ? 'Floor Release Recorded' : 'Authorize Floor Release'}
           </Button>
         </div>
+        <ActionNotice allowed={readiness.access.releaseEdit} />
+        <p className="text-xs text-[var(--text-muted)]">Release requires current independent evidence and approval; administrator verification alone does not make a case floor-ready.</p>
+        <MutationError error={floorRelease.error} />
       </CardContent>
     </Card>
   );
@@ -186,6 +202,7 @@ function FulfillmentSection({
   ) ?? [];
 
   const onSave = () => {
+    if (!readiness.access.fulfillmentEdit) return;
     let finalStatus = form.status;
     if (form.status === 'issued' && form.issued < form.requested) {
       finalStatus = 'shortage';
@@ -216,9 +233,11 @@ function FulfillmentSection({
     <Card>
       <CardHeader className="pb-3 border-b flex flex-row justify-between items-center">
         <CardTitle className="text-[var(--text-base)]">Asset Fulfillment</CardTitle>
-        <Button size="sm" variant="outline" onClick={() => setOpen(true)}>Record Issue</Button>
+        <Button size="sm" variant="outline" disabled={!readiness.access.fulfillmentEdit} onClick={() => setOpen(true)}>Record Issue</Button>
       </CardHeader>
       <CardContent className="pt-4">
+        <ActionNotice allowed={readiness.access.fulfillmentEdit} />
+        <MutationError error={submitFulfillment.error} />
         {readiness.fulfillments?.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)] italic">No assets issued yet.</p>
         ) : (
@@ -337,11 +356,12 @@ function FulfillmentSection({
               )}
             </div>
             <DialogFooter>
+              <MutationError error={submitFulfillment.error} />
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
               <Button
                 onClick={onSave}
                 disabled={
-                  submitFulfillment.isPending ||
+                  !readiness.access.fulfillmentEdit || submitFulfillment.isPending ||
                   (form.ack && !form.ackRecipientRef.trim()) ||
                   ((form.status === 'substituted' || form.status === 'deferred') && !form.exceptionId)
                 }
@@ -371,6 +391,7 @@ function EvidenceSection({
   const evidenceKinds = ['age-proof', 'skill-certificate', 'medical-fitness', 'safety-competency', 'wage-setup', 'timesheet-setup', 'statutory-registration'];
 
   const onRevoke = (evidenceId: number) => {
+    if (!evidenceHistory?.evidence.some(e => e.id === evidenceId && readiness.access.evidenceEdit[e.kind])) return;
     const revocationReference = window.prompt('Enter the authority reference for this evidence revocation:')?.trim();
     if (!revocationReference) return;
     revokeEvidence.mutate({
@@ -381,6 +402,7 @@ function EvidenceSection({
   };
 
   const onSave = () => {
+    if (!readiness.access.evidenceEdit[form.kind]) return;
     submitEvidence.mutate({
       caseId,
       data: {
@@ -405,9 +427,11 @@ function EvidenceSection({
         <CardTitle className="text-[var(--text-base)] flex items-center gap-2">
           Private Evidence Summary <Info className="w-4 h-4 text-[var(--text-muted)]" />
         </CardTitle>
-        <Button size="sm" variant="outline" onClick={() => setOpen(true)}>Record</Button>
+        <Button size="sm" variant="outline" disabled={!Object.values(readiness.access.evidenceEdit).some(Boolean)} onClick={() => setOpen(true)}>Record</Button>
       </CardHeader>
       <CardContent className="pt-4">
+        <ActionNotice allowed={Object.values(readiness.access.evidenceEdit).some(Boolean)} />
+        <MutationError error={revokeEvidence.error} />
         <p className="text-sm text-[var(--text-muted)] mb-4">
           Statutory, wage, and medical evidence records. Detailed history and revocation are restricted to authorized reviewers.
         </p>
@@ -453,7 +477,7 @@ function EvidenceSection({
                   size="sm"
                   variant="outline"
                   className="mt-2 text-[var(--status-red)]"
-                  disabled={revokeEvidence.isPending}
+                   disabled={!readiness.access.evidenceEdit[evidence.kind] || revokeEvidence.isPending}
                   onClick={() => onRevoke(evidence.id)}
                 >
                   Revoke evidence
@@ -505,8 +529,10 @@ function EvidenceSection({
               </div>
             </div>
             <DialogFooter>
+              <ActionNotice allowed={Boolean(readiness.access.evidenceEdit[form.kind])} />
+              <MutationError error={submitEvidence.error} />
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={onSave} disabled={submitEvidence.isPending || !form.evidenceRef.trim()}>Submit Evidence</Button>
+              <Button onClick={onSave} disabled={!readiness.access.evidenceEdit[form.kind] || submitEvidence.isPending || !form.evidenceRef.trim()}>Submit Evidence</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -515,20 +541,22 @@ function EvidenceSection({
   );
 }
 
-function KpiSection({ caseId }: { caseId: number }) {
-  const { data: kpis } = useGetFrontlineKpis(caseId);
+function KpiSection({ caseId, readiness }: { caseId: number; readiness: FrontlineReadiness }) {
+  const { data: kpis, error } = useGetFrontlineKpis(caseId, { enabled: readiness.access.kpiRead });
   const submitKpi = usePostFrontlineKpiInput();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ kind: 'intake', occurredAt: '', actualExitAt: '', evidenceRef: '' });
 
-  // Use the readiness expected version for KPIs, wait we don't have it here...
-  // Wait, I need readiness.version! Let me pass readiness to this component
-  const { data: readiness } = useGetFrontlineReadiness(caseId);
+  const evidenceKindForKpi: Record<string, string> = {
+    intake: 'age-proof', 'actual-exit': 'age-proof', 'medical-result': 'medical-fitness',
+    'statutory-registered': 'statutory-registration', 'safety-completed': 'safety-competency', 'ppe-issued': 'safety-competency',
+  };
+  const canEdit = Boolean(readiness.access.evidenceEdit[evidenceKindForKpi[form.kind]]);
 
   const kpiKinds = ['intake', 'medical-result', 'safety-completed', 'ppe-issued', 'statutory-registered', 'actual-exit'];
 
   const onSave = () => {
-    if (!readiness) return;
+    if (!canEdit) return;
     submitKpi.mutate({
       caseId,
       data: {
@@ -543,6 +571,10 @@ function KpiSection({ caseId }: { caseId: number }) {
     });
   };
 
+  if (!readiness.access.kpiRead) {
+    return <Card><CardContent className="p-4 text-sm">Detailed KPI metrics require current reporting and sensitive-field disclosure permissions.</CardContent></Card>;
+  }
+  if (error) return <Card><CardContent className="p-4"><MutationError error={error} /></CardContent></Card>;
   if (kpis === undefined) {
     return <Card><CardContent className="p-4"><p className="text-sm text-[var(--text-muted)]">Loading metrics...</p></CardContent></Card>;
   }
@@ -553,7 +585,7 @@ function KpiSection({ caseId }: { caseId: number }) {
         <CardTitle className="text-[var(--text-base)] flex items-center gap-2">
           KPI Metrics <Target className="w-4 h-4 text-[var(--text-muted)]" />
         </CardTitle>
-        <Button size="sm" variant="outline" onClick={() => setOpen(true)}>Record</Button>
+        <Button size="sm" variant="outline" disabled={!Object.values(readiness.access.evidenceEdit).some(Boolean)} onClick={() => setOpen(true)}>Record</Button>
       </CardHeader>
       <CardContent className="pt-4">
         {kpis === null ? (
@@ -633,8 +665,10 @@ function KpiSection({ caseId }: { caseId: number }) {
               </div>
             </div>
             <DialogFooter>
+              <ActionNotice allowed={canEdit} />
+              <MutationError error={submitKpi.error} />
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={onSave} disabled={submitKpi.isPending || !form.evidenceRef.trim() || !readiness}>Save KPI</Button>
+              <Button onClick={onSave} disabled={!canEdit || submitKpi.isPending || !form.evidenceRef.trim()}>Save KPI</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -658,6 +692,7 @@ function ExceptionSection({
   const items = ['badge', 'ppe', 'uniform', 'tool', 'locker'];
 
   const onRevoke = (exceptionId: number) => {
+    if (!readiness.access.exceptionEdit) return;
     const revocationReference = window.prompt('Enter the authority reference for this policy exception revocation:')?.trim();
     if (!revocationReference) return;
     revokeException.mutate({
@@ -668,6 +703,7 @@ function ExceptionSection({
   };
 
   const onSave = () => {
+    if (!readiness.access.exceptionEdit) return;
     submitException.mutate({
       caseId,
       data: {
@@ -689,9 +725,11 @@ function ExceptionSection({
         <CardTitle className="text-[var(--text-base)] flex items-center gap-2">
           Policy Exceptions <FileWarning className="w-4 h-4 text-[var(--text-muted)]" />
         </CardTitle>
-        <Button size="sm" variant="outline" onClick={() => setOpen(true)}>Record</Button>
+        <Button size="sm" variant="outline" disabled={!readiness.access.exceptionEdit} onClick={() => setOpen(true)}>Record</Button>
       </CardHeader>
       <CardContent className="pt-4">
+        <ActionNotice allowed={readiness.access.exceptionEdit} />
+        <MutationError error={revokeException.error} />
         <p className="text-sm text-[var(--text-muted)] mb-4">
           Record authorized substitution or deferment of required frontline items as per policy. History and revocation are restricted to authorized reviewers.
         </p>
@@ -714,7 +752,7 @@ function ExceptionSection({
                   size="sm"
                   variant="outline"
                   className="mt-2 text-[var(--status-red)]"
-                  disabled={revokeException.isPending}
+                  disabled={!readiness.access.exceptionEdit || revokeException.isPending}
                   onClick={() => onRevoke(exception.id)}
                 >
                   Revoke exception
@@ -762,8 +800,9 @@ function ExceptionSection({
               </div>
             </div>
             <DialogFooter>
+              <MutationError error={submitException.error} />
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={onSave} disabled={submitException.isPending || !form.reviewRef.trim()}>Record Exception</Button>
+              <Button onClick={onSave} disabled={!readiness.access.exceptionEdit || submitException.isPending || !form.reviewRef.trim()}>Record Exception</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

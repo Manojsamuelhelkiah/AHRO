@@ -33,6 +33,12 @@ Same-site privileged browser tests must preserve the browser-facing host through
 
 **How to apply:** Keep Origin and the host seen by the guard consistent without bypassing the guard. Copy actual lifetime headers when mocking ordinary successful responses or authorization rejections; omit them only when deliberately testing session expiry. Use fixtures with the permissions required by incidental page requests, or stay on the changed setup flow rather than an unrelated planning wizard.
 
+Choose optional product settings explicitly for each isolated journey; do not inherit them from unrelated fixture families.
+
+**Why:** An enabled optional product can make an incidental case-summary read hold organization-wide lifecycle locks. A defect in that separate read can stall otherwise valid administrative saves and make the changed feature appear to be the failing boundary.
+
+**How to apply:** Inspect pending requests and lock ownership before changing authorization. Keep optional-product journeys in their own fixture tenants, and report their independent failures without changing employee consent or weakening collection gates.
+
 Browser layout assertions must tolerate nodes being replaced during successful mutation-triggered refetches; never put a mutation click inside the retry wrapper.
 
 **Why:** Locator scrolling can fail on a detached node even when the refreshed replacement is visible and valid. Retrying the mutation itself could mask duplicate delivery.

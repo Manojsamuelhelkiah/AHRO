@@ -12,7 +12,9 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions,
   if (!/^browser_regression_[0-9]+_[a-f0-9]+$/.test(scope.s) || scope.scopes.length !== 1)
     throw new Error("Admin fixture requires its owned disposable schema, without a shared fallback");
   const { db, organizationsTable, organizationMembershipsTable, onbCases, onbDocuments,
-    onbCommunications, accessNamedGrants, employeeVaultProducts } = dbPackage;
+    onbCommunications, accessNamedGrants, employeeVaultProducts, onbSettings, DEMO_ORGANIZATION_ID } = dbPackage;
+  const { and, eq } = await import("drizzle-orm");
+  const { demoPrincipalSettingKey } = await import("./src/lib/demo-principal.ts");
   const { createDevelopmentAdminContext } = await import("./src/lib/development-super-admin.ts");
   const { createPlatformAdminContext, bindPlatformSuperAdminTenant, signAdminGrant,
     ADMIN_APPROVAL_KEY, ADMIN_COOKIE, ADMIN_LIFETIME_MS } = await import("./src/lib/private-platform-admin.ts");
@@ -20,6 +22,7 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions,
   const { hasCurrentAuthorityScope } = await import("./src/lib/onboarding/decision-authority.ts");
   const background = new AsyncResource("unprivileged-admin-read-fixture");
   const org = `admin-read-${randomUUID()}`;
+  const frontlineOrg = `frontline-admin-${randomUUID()}`;
   const actor = `named-admin-read-${randomUUID()}`;
   ownedIdentities?.set(actor, { firstName: "Isolated", lastName: "Administrator", email: "admin@example.invalid" });
   const secret = randomUUID() + randomUUID();
@@ -36,6 +39,12 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions,
   await db.insert(employeeVaultProducts).values({
     organizationId: org, enabled: process.env.ADMIN_EDIT_E2E_TEST !== "true", version: 1, updatedBy: actor,
   });
+  // Frontline records are separate from the existing enabled-Vault fixtures.
+  await db.insert(organizationsTable).values({
+    id: frontlineOrg, name: "Isolated Frontline administration", slug: frontlineOrg,
+    joinCodeHash: randomUUID(), createdByUserId: actor,
+  });
+  await db.insert(organizationMembershipsTable).values({ organizationId: frontlineOrg, clerkUserId: actor, role: "member" });
   const [c] = await db.insert(onbCases).values({
     organizationId: org, workerName: "Confidential Read Fixture", workerEmail: "fixture@example.invalid",
     workerPhone: "+15550000000", managerName: "Fixture Manager", recruiterName: "Fixture Recruiter",
@@ -44,13 +53,35 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions,
     lifecycleStage: "complete", orchestrationStatus: "completed", notes: "Private client narrative",
     workforceContext: { workCountry: "US" }, createdByUserId: actor,
   }).returning();
+  const { seedApprovedSensitiveLifecyclePolicies } = await import("./src/test-utils/sensitive-lifecycle-fixtures.ts");
+  await seedApprovedSensitiveLifecyclePolicies(org);
+  await seedApprovedSensitiveLifecyclePolicies(frontlineOrg);
+  const frontlinePolicy = { processPolicy: { frontline: {
+    schemaVersion: "frontline-operations/v1", age: { minimumYears: 18 },
+    fulfillment: { requiredItems: ["badge"] }, statutory: { requirements: [] },
+    exceptions: { policyReference: "TEST-POLICY", reviewReference: "TEST-REVIEW", permitted: [] },
+  } } };
+  const frontline = {};
+  for (const state of ["active", "retained", "office"]) {
+    const [record] = await db.insert(onbCases).values({
+      organizationId: frontlineOrg, workerName: `Frontline ${state} fixture`, workerEmail: `${state}@example.invalid`,
+      managerName: "Fixture Manager", recruiterName: "Fixture Recruiter",
+      hireType: "external-fte", workerCategory: "employee", role: "Operator", department: "Test",
+      geography: "US", legalEntity: "Fixture", joiningDate: "2030-01-01",
+      lifecycleStage: "preboarding", orchestrationStatus: "waiting-approval", createdByUserId: actor,
+      controllerRetired: state === "retained",
+      workforceContext: { workCountry: "US", workEnvironment: state === "office" ? "office" : "site" },
+      processPolicySnapshot: frontlinePolicy,
+    }).returning();
+    frontline[state] = record.id;
+  }
   for (const key of ["flow.case.read", "data.case.profile.read", "data.case.notes.read",
     "data.documents.read", "data.case.readiness.read", "flow.document-review.read"]) {
-    await db.insert(accessNamedGrants).values({
-      organizationId: org, principalType: "human", principalId: actor,
+    await db.insert(accessNamedGrants).values([org, frontlineOrg].map(organizationId => ({
+      organizationId, principalType: "human", principalId: actor,
       resourceType: key.startsWith("flow") ? "flow" : "field", resourceKey: key,
       effect: "allow", scope: "tenant", source: "named", createdByUserId: actor,
-    });
+    })));
   }
   await db.insert(onbDocuments).values({
     organizationId: org, caseId: c.id, key: "id-proof",
@@ -82,9 +113,19 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions,
     res.clearCookie("hro_dev_super_admin", { path: "/" });
     res.json({ active: false });
   });
-  app.post("/api/test/admin-read/session", (req, res) => {
+  app.post("/api/test/admin-read/session", async (req, res) => {
     const sessionId = cookie(req, "browser_e2e_session");
     if (!sessionId || !sessions.has(sessionId)) { res.sendStatus(401); return; }
+    // Model the public Demo Administrator identity independently of its proof.
+    // The caller cannot select identities or touch any non-owned database.
+    if (req.body?.sharedDemo) {
+      await db.insert(onbSettings).values({ organizationId: DEMO_ORGANIZATION_ID,
+        key: demoPrincipalSettingKey(actor), value: "administrator" })
+        .onConflictDoUpdate({ target: [onbSettings.organizationId, onbSettings.key], set: { value: "administrator" } });
+    } else {
+      await db.delete(onbSettings).where(and(eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+        eq(onbSettings.key, demoPrincipalSettingKey(actor))));
+    }
     sessions.set(sessionId, actor);
     const mode = req.body?.mode || "ordinary";
     process.env.NODE_ENV = mode === "private" ? "production" : "development";
@@ -112,7 +153,8 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions,
       const value = `${payload}.${createHmac("sha256", secret).update(payload).digest("base64url")}`;
       res.cookie("hro_dev_super_admin", req.body?.invalid ? "invalid" : value, { httpOnly: true, path: "/", sameSite: "lax" });
     }
-    res.json({ organizationId: org, caseId: c.id, actorUserId: actor, ...editFixture?.[mode] });
+    res.json({ caseId: c.id, actorUserId: actor, ...editFixture?.[mode],
+      organizationId: req.body?.frontline ? frontlineOrg : org, frontline });
   });
   const privateContext = createPlatformAdminContext({
     getUser: async () => ({

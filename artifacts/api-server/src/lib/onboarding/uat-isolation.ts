@@ -119,10 +119,11 @@ function linkedCaseIds(value: string): number[] | null {
 export async function getUatCaseIsolation(
   input: Pick<UatIsolationCase, "organizationId" | "id"> &
     Partial<Pick<UatIsolationCase, "scenarioKey">>,
+  readDb: Pick<typeof db, "select"> = db,
 ): Promise<UatCaseIsolation> {
   let scenarioKey = input.scenarioKey;
   if (scenarioKey === undefined) {
-    const [caseRow] = await db.select({ scenarioKey: onbCases.scenarioKey })
+    const [caseRow] = await readDb.select({ scenarioKey: onbCases.scenarioKey })
       .from(onbCases)
       .where(and(
         eq(onbCases.organizationId, input.organizationId),
@@ -131,7 +132,7 @@ export async function getUatCaseIsolation(
     scenarioKey = caseRow?.scenarioKey;
   }
   const fencedByScenarioKey = hasUatScenarioKey({ scenarioKey });
-  const rows = await db.select({ value: onbSettings.value }).from(onbSettings)
+  const rows = await readDb.select({ value: onbSettings.value }).from(onbSettings)
     .where(and(
       eq(onbSettings.organizationId, input.organizationId),
       like(onbSettings.key, `${UAT_RUN_SETTING_PREFIX}%`),

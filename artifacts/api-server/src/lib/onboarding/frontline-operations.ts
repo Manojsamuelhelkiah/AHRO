@@ -19,6 +19,8 @@ import { hasTrustedBgvClearanceEvidence } from "./connector-evidence-provenance"
 import { hasCurrentVaultBgvReceipt } from "../employee-vault/reuse";
 import { hasCurrentAuthorityScope, roleMayExerciseScope } from "./decision-authority";
 import { hasHumanPermissions } from "../human-permissions";
+import { isHistoricalTestRecord } from "./historical-test-record";
+import { getUatCaseIsolation } from "./uat-isolation";
 import { reopenApprovalInTransaction } from "./approval-version";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
@@ -44,6 +46,14 @@ export class FrontlineValidationError extends Error {
 }
 export class FrontlineConflictError extends Error {
   constructor(message: string) { super(message); this.name = "FrontlineConflictError"; }
+}
+export class FrontlineRetainedError extends FrontlineConflictError {
+  readonly statusCode = 410;
+  readonly code = "CASE_TEST_CAPABILITY_RETIRED";
+  constructor() {
+    super("Retained historical Frontline records are read-only, including for administrators.");
+    this.name = "FrontlineRetainedError";
+  }
 }
 
 type FrontlinePolicy = {
@@ -174,10 +184,61 @@ function authorityScopeForEvidence(value: EvidenceKind): OnbAuthorityScope {
 async function currentAuthority(
   tx: any, c: typeof onbCases.$inferSelect, actorUserId: string, scope: OnbAuthorityScope,
 ) {
-  if (!(await hasCurrentAuthorityScope(tx, { organizationId: c.organizationId, actorUserId, scope, caseId: c.id }))) {
+  if (!(await hasCurrentAuthorityScope(tx, { organizationId: c.organizationId, actorUserId, scope, caseId: c.id })) ||
+    !await hasHumanPermissions(tx, { organizationId: c.organizationId, actorUserId, caseId: c.id,
+      requiredKeys: ["flow.case.read", ...editKeysForScope(scope)] })) {
     throw new FrontlineValidationError("Current case-scoped approval and flow-edit permissions are required for this frontline action.");
   }
   return { id: `human-permission/v1:${actorUserId}`, revision: 1, personUserId: actorUserId };
+}
+function editKeysForScope(scope: OnbAuthorityScope) {
+  if (scope === "occupational-health-approve") return ["data.medical.edit"] as const;
+  if (scope === "payroll-approve") return ["data.payroll.edit"] as const;
+  if (scope === "hr-compliance-approve") return ["data.identity.edit"] as const;
+  if (scope === "site-fulfillment-approve") return ["data.case.notes.edit"] as const;
+  return ["data.case.notes.edit", "data.identity.edit", "data.medical.edit", "data.bgv.edit"] as const;
+}
+
+async function assertFrontlineWrite(tx: any, input: { organizationId: string; caseId: number }) {
+  const [c] = await tx.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId),
+  )).for("update");
+  if (!c) throw new FrontlineValidationError("Case not found.");
+  if (isHistoricalTestRecord(c) || (await getUatCaseIsolation(c, tx)).isolated) {
+    throw new FrontlineRetainedError();
+  }
+  return assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
+}
+
+/** Exact live permissions, independently projected from release eligibility. */
+export async function getFrontlineAccess(input: { organizationId: string; caseId: number; actorUserId: string }) {
+  return db.transaction(async tx => {
+    const [c] = await tx.select().from(onbCases).where(and(eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId)));
+    if (!c) throw new FrontlineValidationError("Case not found.");
+    const permits = (requiredKeys: Parameters<typeof hasHumanPermissions>[1]["requiredKeys"]) =>
+      hasHumanPermissions(tx, { ...input, requiredKeys });
+    if (!await permits(["flow.case.read"])) throw new FrontlineValidationError("Current case-read authority is required.");
+    const readOnly = isHistoricalTestRecord(c) || (await getUatCaseIsolation(c, tx)).isolated;
+    const canApprove = await permits(["tool.approval.decide", "flow.case.edit"]);
+    const evidenceEdit: Record<string, boolean> = {};
+    for (const value of EVIDENCE_KINDS) {
+      evidenceEdit[value] = !readOnly && canApprove && await permits(editKeysForScope(authorityScopeForEvidence(value)));
+    }
+    const base = ["flow.case.read", "data.case.profile.read"] as const;
+    const privateRead = ["data.case.notes.read", "data.medical.read", "data.bgv.read", "data.identity.read"] as const;
+    return {
+      readOnly,
+      evidenceEdit,
+      historyRead: await permits([...base, "data.payroll.read"]) ||
+        await permits([...base, "data.medical.read"]) ||
+        await permits([...base, "data.identity.read", "data.bgv.read"]) ||
+        await permits([...base, ...privateRead]),
+      kpiRead: await permits(["flow.case.read", "data.case.notes.read", "data.medical.read", "data.payroll.read", "data.identity.read", "data.bgv.read"]),
+      fulfillmentEdit: !readOnly && canApprove && await permits(editKeysForScope("site-fulfillment-approve")),
+      exceptionEdit: !readOnly && await permits(["tool.policy.manage", "flow.case.edit", "data.case.notes.edit"]),
+      releaseEdit: !readOnly && canApprove && await permits(editKeysForScope("hr-compliance-approve")),
+    };
+  });
 }
 async function authorityStillLive(
   tx: any, c: typeof onbCases.$inferSelect, binding: {
@@ -187,7 +248,9 @@ async function authorityStillLive(
   if (binding.authorityAssignmentId !== `human-permission/v1:${binding.recordedByUserId}` ||
     binding.authorityAssignmentRevision !== 1) return false;
   return hasHumanPermissions(tx, { organizationId: c.organizationId, actorUserId: binding.recordedByUserId,
-    caseId: c.id, requiredKeys: [policyAction ? "tool.policy.manage" : "tool.approval.decide", "flow.case.edit"] });
+    caseId: c.id, requiredKeys: policyAction
+      ? ["tool.policy.manage", "flow.case.edit", "flow.case.read", "data.case.notes.edit"]
+      : ["tool.approval.decide", "flow.case.edit", "flow.case.read", ...editKeysForScope(binding.authorityScope)] });
 }
 async function lockedState(tx: any, organizationId: string, caseId: number) {
   const [state] = await tx.select().from(onbFrontlineReleaseState).where(and(
@@ -239,7 +302,7 @@ export async function recordFrontlineEvidence(input: {
   if (input.revocationReference !== undefined) throw new FrontlineValidationError("revocationReference is accepted only by the server-side evidence revocation endpoint.");
   const revocationReference = null;
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
-    const c = await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
+    const c = await assertFrontlineWrite(tx, input);
     if (!isFrontline(c)) throw new FrontlineValidationError("This case is not established as frontline/site work.");
     const policy = parseFrontlinePolicy(c.processPolicySnapshot ?? {});
     const scope = authorityScopeForEvidence(inputKind);
@@ -289,7 +352,7 @@ export async function revokeFrontlineEvidence(input: {
 }): Promise<{ version: number }> {
   if (!Number.isInteger(input.evidenceId) || input.evidenceId < 1) throw new FrontlineValidationError("evidenceId must be a positive integer.");
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
-    const c = await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
+    const c = await assertFrontlineWrite(tx, input);
     const state = await lockedState(tx, input.organizationId, input.caseId);
     assertVersion(state, input.expectedVersion);
     const [evidence] = await tx.select().from(onbFrontlineEvidence).where(and(
@@ -316,14 +379,14 @@ export async function recordFrontlinePolicyException(input: {
   const expiresAt = input.expiresAt ? isoDate(input.expiresAt, "expiresAt", true) : null;
   if (expiresAt && expiresAt <= effectiveAt) throw new FrontlineValidationError("expiresAt must be after effectiveAt.");
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
-    const c = await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
+    const c = await assertFrontlineWrite(tx, input);
     if (!isFrontline(c)) throw new FrontlineValidationError("This case is not established as frontline/site work.");
     const policy = parseFrontlinePolicy(c.processPolicySnapshot ?? {});
     if (!policy.requiredFulfillment.includes(exceptionItem) || !policy.exceptions.permitted.includes(input.type)) {
       throw new FrontlineValidationError("This substitution/deferment is not explicitly permitted by the immutable frontline policy.");
     }
     if (!await hasHumanPermissions(tx, { organizationId: c.organizationId, caseId: c.id,
-      actorUserId: input.actorUserId, requiredKeys: ["tool.policy.manage", "flow.case.edit"] }))
+      actorUserId: input.actorUserId, requiredKeys: ["tool.policy.manage", "flow.case.edit", "flow.case.read", "data.case.notes.edit"] }))
       throw new FrontlineValidationError("Current policy-management and case-flow edit permissions are required.");
     const authority = { id: `human-permission/v1:${input.actorUserId}`, revision: 1, personUserId: input.actorUserId };
     const state = await lockedState(tx, input.organizationId, input.caseId);
@@ -347,11 +410,11 @@ export async function revokeFrontlinePolicyException(input: {
 }): Promise<{ version: number }> {
   if (!Number.isInteger(input.exceptionId) || input.exceptionId < 1) throw new FrontlineValidationError("exceptionId must be a positive integer.");
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
-    const c = await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
+    const c = await assertFrontlineWrite(tx, input);
     if (!isFrontline(c)) throw new FrontlineValidationError("This case is not established as frontline/site work.");
     parseFrontlinePolicy(c.processPolicySnapshot ?? {});
     if (!await hasHumanPermissions(tx, { organizationId: c.organizationId, caseId: c.id,
-      actorUserId: input.actorUserId, requiredKeys: ["tool.policy.manage", "flow.case.edit"] }))
+      actorUserId: input.actorUserId, requiredKeys: ["tool.policy.manage", "flow.case.edit", "flow.case.read", "data.case.notes.edit"] }))
       throw new FrontlineValidationError("Current policy-management and case-flow edit permissions are required.");
     const state = await lockedState(tx, input.organizationId, input.caseId);
     assertVersion(state, input.expectedVersion);
@@ -404,7 +467,7 @@ export async function recordFrontlineFulfillment(input: {
     throw new FrontlineValidationError(`size is required for ${fulfillmentItem} fulfillment.`);
   }
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
-    const c = await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
+    const c = await assertFrontlineWrite(tx, input);
     if (!isFrontline(c)) throw new FrontlineValidationError("This case is not established as frontline/site work.");
     const policy = parseFrontlinePolicy(c.processPolicySnapshot ?? {});
     if (!policy.requiredFulfillment.includes(fulfillmentItem)) throw new FrontlineValidationError("This physical item is not in the immutable frontline policy.");
@@ -452,7 +515,7 @@ export async function recordFrontlineKpiInput(input: {
   if ((input.kind === "actual-exit") !== Boolean(actualExitAt)) throw new FrontlineValidationError("actualExitAt is required only for actual-exit KPI input.");
   if (actualExitAt && actualExitAt.getTime() !== occurredAt.getTime()) throw new FrontlineValidationError("actualExitAt must equal the dated actual-exit occurrence.");
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
-    const c = await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
+    const c = await assertFrontlineWrite(tx, input);
     if (!isFrontline(c)) throw new FrontlineValidationError("This case is not established as frontline/site work.");
     parseFrontlinePolicy(c.processPolicySnapshot ?? {});
     const scope: OnbAuthorityScope = input.kind === "intake" || input.kind === "actual-exit"
@@ -495,7 +558,10 @@ export async function recordFrontlineKpiInput(input: {
 export async function getFrontlineKpiAggregate(input: { organizationId: string; caseId: number; actorUserId: string }) {
   const [c] = await db.select().from(onbCases).where(and(eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId)));
   if (!c) throw new FrontlineValidationError("Case not found.");
-  await db.transaction((tx) => currentAuthority(tx, c, input.actorUserId, "hr-compliance-approve"));
+  if (!await db.transaction(tx => hasHumanPermissions(tx, { ...input,
+    requiredKeys: ["flow.case.read", "data.case.notes.read", "data.medical.read", "data.payroll.read", "data.identity.read", "data.bgv.read"] }))) {
+    throw new FrontlineValidationError("Current reporting and sensitive-field read permissions are required.");
+  }
   const { organizationId, caseId } = input;
   const [rows, release, outcomes, fulfillments, evidence] = await Promise.all([
     db.select({ kind: onbFrontlineKpiInputs.kind, occurredAt: onbFrontlineKpiInputs.occurredAt })
@@ -600,7 +666,8 @@ async function evaluateRelease(tx: any, c: typeof onbCases.$inferSelect) {
     const row = latest.get(`${requirement.kind}:${requirementKey}`);
     if (!row || row.status !== "verified" || row.effectiveAt > now || (row.expiresAt && row.expiresAt <= now) ||
       !(await authorityStillLive(tx, c, row))) {
-      blockers.push(`Current independently authorized ${requirement.kind}${requirementKey ? ` (${requirementKey})` : ""} evidence is required.`);
+      // Opaque requirement keys belong only in permission-gated history.
+      blockers.push(`Current independently authorized ${requirement.kind} evidence is required.`);
     }
   }
   if (medical && safety && (medical.authorityAssignmentId === safety.authorityAssignmentId || medical.recordedByUserId === safety.recordedByUserId)) {
@@ -652,7 +719,7 @@ export async function runFrontlineReleaseHeartbeat(): Promise<void> {
   for (const candidate of released) {
     await withSensitiveLifecycleFence(candidate.organizationId, () => db.transaction(async (tx) => {
       const [c] = await tx.select().from(onbCases).where(and(eq(onbCases.organizationId, candidate.organizationId), eq(onbCases.id, candidate.caseId))).for("update");
-      if (!c) return;
+      if (!c || isHistoricalTestRecord(c) || (await getUatCaseIsolation(c, tx)).isolated) return;
       const state = await lockedState(tx, candidate.organizationId, candidate.caseId);
       if (state?.status !== "released") return;
       const live = await evaluateFrontlineFloorReadinessInTransaction(tx, c);
@@ -691,7 +758,7 @@ export async function getFrontlineReadiness(organizationId: string, caseId: numb
     }
     return {
       caseId, applicable: isFrontline(c), version: state?.version ?? 0,
-      release: { eligible: release.blockers.length === 0, recorded: state?.status === "released", blockers: release.blockers, reblocked: state?.status === "blocked" },
+      release: { eligible: release.blockers.length === 0, recorded: state?.status === "released", blockers: release.blockers, reblocked: Boolean(state?.reblockedAt) },
       fulfillments: release.fulfillment,
       evidenceStatuses: [...latestEvidence.values()].map((e) => ({
         kind: e.kind,
@@ -757,11 +824,12 @@ export async function evaluateFrontlineFloorRelease(input: {
   organizationId: string; caseId: number; actorUserId: string; expectedVersion: number;
 }) {
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
-    const c = await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, input);
+    const c = await assertFrontlineWrite(tx, input);
     if (!isFrontline(c)) throw new FrontlineValidationError("This case is not established as frontline/site work.");
     const state = await lockedState(tx, input.organizationId, input.caseId);
     assertVersion(state, input.expectedVersion);
     const release = await evaluateRelease(tx, c);
+    const releaseAuthority = await currentAuthority(tx, c, input.actorUserId, "hr-compliance-approve");
     const now = new Date();
     if (release.blockers.length) {
       if (state?.status === "released") {
@@ -777,7 +845,6 @@ export async function evaluateFrontlineFloorRelease(input: {
       const version = await bumpState(tx, c, state, { status: "blocked", reblockedAt: state?.status === "released" ? now : state?.reblockedAt ?? null });
       return { caseId: input.caseId, version, release: { eligible: false, recorded: false, blockers: release.blockers, reblocked: state?.status === "released" }, fulfillments: release.fulfillment };
     }
-    const releaseAuthority = await currentAuthority(tx, c, input.actorUserId, "hr-compliance-approve");
     if (state?.status === "released") {
       return { caseId: input.caseId, version: state.version, release: { eligible: true, recorded: true, blockers: [], reblocked: false }, fulfillments: release.fulfillment };
     }

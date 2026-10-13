@@ -1,9 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { customFetch } from '@workspace/api-client-react';
+import { customFetch, getPinnedOrganizationIdForPage } from '@workspace/api-client-react';
+import { useUser } from '@clerk/react';
 
 export type FrontlineReadiness = {
   version: number;
   applicable: boolean;
+  access: {
+    readOnly: boolean;
+    historyRead: boolean;
+    kpiRead: boolean;
+    fulfillmentEdit: boolean;
+    exceptionEdit: boolean;
+    releaseEdit: boolean;
+    evidenceEdit: Record<string, boolean>;
+  };
   release: {
     eligible: boolean;
     recorded: boolean;
@@ -62,24 +72,31 @@ export type FrontlineKpis = {
 };
 
 export function useGetFrontlineReadiness(caseId: number, options?: { enabled?: boolean }) {
+  const { user } = useUser();
   return useQuery({
-    queryKey: ['frontline-readiness', caseId],
+    queryKey: ['frontline-readiness', caseId, getPinnedOrganizationIdForPage(), user?.id],
     queryFn: () => customFetch<FrontlineReadiness>(`/api/onboarding/cases/${caseId}/frontline/readiness`, { method: 'GET', responseType: 'json' }),
     enabled: !!caseId && options?.enabled !== false,
+    retry: false,
+    refetchInterval: 15_000,
   });
 }
 
 export function useGetFrontlineEvidenceHistory(caseId: number, options?: { enabled?: boolean }) {
+  const { user } = useUser();
   return useQuery({
-    queryKey: ['frontline-evidence-history', caseId],
+    queryKey: ['frontline-evidence-history', caseId, getPinnedOrganizationIdForPage(), user?.id],
     queryFn: () => customFetch<FrontlineEvidenceHistory>(`/api/onboarding/cases/${caseId}/frontline/evidence-history`, { method: 'GET', responseType: 'json' }),
     enabled: !!caseId && options?.enabled !== false,
+    retry: false,
+    refetchInterval: 15_000,
   });
 }
 
 export function useGetFrontlineKpis(caseId: number, options?: { enabled?: boolean }) {
+  const { user } = useUser();
   return useQuery({
-    queryKey: ['frontline-kpis', caseId],
+    queryKey: ['frontline-kpis', caseId, getPinnedOrganizationIdForPage(), user?.id],
     queryFn: async () => {
       try {
         return await customFetch<FrontlineKpis>(`/api/onboarding/cases/${caseId}/frontline/kpis`, { method: 'GET', responseType: 'json' });
@@ -89,6 +106,8 @@ export function useGetFrontlineKpis(caseId: number, options?: { enabled?: boolea
       }
     },
     enabled: !!caseId && options?.enabled !== false,
+    retry: false,
+    refetchInterval: 15_000,
   });
 }
 

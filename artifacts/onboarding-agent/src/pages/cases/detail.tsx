@@ -337,9 +337,7 @@ export function CaseDetailPage() {
           ? <EarlyTenurePanel caseId={caseId} joiningDate={c.joiningDate} />
           : <RestrictedActionNotice>Early-tenure case actions are restricted by your current permissions.</RestrictedActionNotice>)}
         {activeTab === 'Tasks' && <TasksTab c={c} />}
-        {activeTab === 'Frontline' && (permissions.access.flowEdit && permissions.access.notesEdit && Object.values(permissions.sensitive).every((permission) => permission.edit)
-          ? <FrontlineTab caseId={caseId} />
-          : <RestrictedActionNotice>Frontline case actions are restricted by your current permissions.</RestrictedActionNotice>)}
+        {activeTab === 'Frontline' && <FrontlineTab key={caseId} caseId={caseId} />}
         {activeTab === 'Documents' && <DocumentsTab caseId={caseId} docs={docs || []} />}
         {activeTab === 'Activity' && (permissions.access.notesRead
           ? <ActivityTab events={events || []} />
