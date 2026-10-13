@@ -2,8 +2,23 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { isRetiredCaseCapabilityRequest, RetiredCaseCapabilityError, retiredCaseCapabilityResponse } from "./retired-case-capabilities";
+import { isReadOnlyCaseExplanationRequest, isRetiredCaseCapabilityRequest, RetiredCaseCapabilityError, retiredCaseCapabilityResponse } from "./retired-case-capabilities";
 import { isHistoricalTestRecord } from "./onboarding/historical-test-record";
+
+test("read-only classification is exact, numeric, body-bearing, and never general POST permission", () => {
+  assert.equal(isReadOnlyCaseExplanationRequest("POST", "/onboarding/cases/41/explain"), true);
+  assert.equal(isReadOnlyCaseExplanationRequest("POST", "/ONBOARDING/CASES/41/EXPLAIN/"), true);
+  for (const path of [
+    "/onboarding/cases/0/explain", "/onboarding/cases/01/explain",
+    "/onboarding/cases/1e3/explain", "/onboarding/cases/9007199254740992/explain",
+    "/onboarding/cases/%34%31/explain", "/onboarding/cases/41/%65xplain",
+    "/onboarding/cases/41/explain//", "/onboarding/cases/41/explain/execute",
+    "/offboarding/cases/41/explain", "/onboarding/cases/41/explain?question=private",
+  ]) assert.equal(isReadOnlyCaseExplanationRequest("POST", path), false, path);
+  for (const method of ["GET", "HEAD", "PUT", "PATCH", "DELETE"]) {
+    assert.equal(isReadOnlyCaseExplanationRequest(method, "/onboarding/cases/41/explain"), false);
+  }
+});
 
 test("all retired HTTP aliases are tombstoned while real operations remain routed", () => {
   for (const [method, path] of [

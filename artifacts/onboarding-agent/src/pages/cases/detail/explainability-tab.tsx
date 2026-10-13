@@ -35,6 +35,7 @@ interface ChatMessage {
   content: string;
   explanation?: OnbCaseExplanation;
   error?: string;
+  retryable?: boolean;
   isPending?: boolean;
 }
 
@@ -44,10 +45,23 @@ const sessionStore = new Map<string, ChatMessage[]>();
 // Keep track of the active scope (tenant + user) to wipe cross-tenant/user memory completely
 let activeSessionScope: string | null = null;
 export const getActiveSessionScope = () => activeSessionScope;
+export function clearCaseAnalysisMemory(caseId: number, userId?: string) {
+  sessionStore.delete(`${getPinnedOrganizationIdForPage() || 'anon-org'}-${userId || 'anon'}-${caseId}`);
+}
+
+export function analysisErrorFeedback(error: { status?: number; message?: string; data?: unknown }) {
+  const data = error.data && typeof error.data === 'object' ? error.data as { message?: string; retryable?: boolean } : undefined;
+  return {
+    message: data?.message || error.message || 'Failed to analyze case. Please try again.',
+    retryable: data?.retryable ?? (!error.status || error.status === 429 || error.status >= 500),
+    clearSources: [401, 403, 404].includes(error.status ?? 0),
+  };
+}
 
 // Temporary hook pending backend codegen
 export const useExplainOnboardingCase = (options?: { request?: RequestInit }) => {
   return useMutation({
+    retry: false,
     mutationFn: async ({ id, data, signal }: { id: number; data: OnbCaseExplanationInput; signal?: AbortSignal }) => {
       return customFetch<OnbCaseExplanation>(`/api/onboarding/cases/${id}/explain`, {
         method: 'POST',
@@ -96,8 +110,10 @@ export function ExplainabilityTab({ caseId, userId }: { caseId: number, userId?:
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      const cached = sessionStore.get(sessionKey);
+      if (cached) sessionStore.set(sessionKey, cached.filter(message => !message.isPending));
     };
-  }, []);
+  }, [sessionKey]);
 
   // Auto-scroll to bottom on new message
   useEffect(() => {
@@ -145,6 +161,7 @@ export function ExplainabilityTab({ caseId, userId }: { caseId: number, userId?:
       abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
+    const requestController = abortControllerRef.current;
 
     // Build history (max 8 messages, limit size if needed)
     const history = updatedMessages
@@ -156,10 +173,10 @@ export function ExplainabilityTab({ caseId, userId }: { caseId: number, userId?:
       }));
 
     explainCase.mutate(
-      { id: caseId, data: { question: targetQuestion, history }, signal: abortControllerRef.current.signal },
+      { id: caseId, data: { question: targetQuestion, history }, signal: requestController.signal },
       {
         onSuccess: (data) => {
-          if (currentSessionKeyRef.current !== sessionKey) return; // Ignore stale response
+          if (requestController.signal.aborted || currentSessionKeyRef.current !== sessionKey) return;
           
           setMessages(prev => {
             if (!prev.some(m => m.id === assistantMsgId)) return prev; // Was cleared
@@ -169,15 +186,18 @@ export function ExplainabilityTab({ caseId, userId }: { caseId: number, userId?:
           setTimeout(() => inputRef.current?.focus(), 50);
         },
         onError: (error: any) => {
-          if (currentSessionKeyRef.current !== sessionKey) return;
+          if (requestController.signal.aborted || currentSessionKeyRef.current !== sessionKey) return;
           if (error?.name === 'AbortError') return;
           
+          const feedback = analysisErrorFeedback(error);
+          if (feedback.clearSources) sessionStore.delete(sessionKey);
           setMessages(prev => {
             if (!prev.some(m => m.id === assistantMsgId)) return prev;
-            return prev.map(m => m.id === assistantMsgId ? { 
+            return (feedback.clearSources ? prev.filter(m => m.id === userMsgId || m.id === assistantMsgId) : prev).map(m => m.id === assistantMsgId ? {
               ...m, 
               isPending: false, 
-              error: error?.message || 'Failed to analyze case. Please try again.' 
+              error: feedback.message,
+              retryable: feedback.retryable,
             } : m)
           });
         }
@@ -194,6 +214,8 @@ export function ExplainabilityTab({ caseId, userId }: { caseId: number, userId?:
 
   const handleClear = () => {
     if (window.confirm('Clear conversation history?')) {
+      abortControllerRef.current?.abort();
+      explainCase.reset();
       setMessages([]);
       sessionStore.delete(sessionKey);
     }
@@ -239,7 +261,7 @@ export function ExplainabilityTab({ caseId, userId }: { caseId: number, userId?:
             </div>
             <div>
               <h4 className="text-[var(--text-lg)] font-bold text-[var(--text-primary)] mb-2">What would you like to know?</h4>
-              <p className="text-[var(--text-sm)] text-[var(--text-secondary)]">I can summarize case status, review communications, or check background screening results.</p>
+               <p className="text-[var(--text-sm)] text-[var(--text-secondary)]">Ask about recorded status and unresolved work. Private messages, screening details and unrecorded reasons are excluded. Analysis never changes the case.</p>
             </div>
             <div className="w-full flex flex-col gap-2">
               <button onClick={() => handleSuggest('What is currently blocking this case?')} className="text-left px-4 py-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-alt)] hover:border-[var(--primary)] text-[var(--text-sm)] text-[var(--text-primary)] transition-all">
@@ -286,12 +308,12 @@ export function ExplainabilityTab({ caseId, userId }: { caseId: number, userId?:
                   <div className="bg-[var(--status-red-bg)] border border-[var(--status-red)] text-[var(--status-red-fg)] px-4 py-3 rounded-[var(--radius-lg)] rounded-tl-sm text-[var(--text-sm)] w-full shadow-sm">
                     <div className="flex items-center gap-2 mb-2 font-bold">
                       <AlertCircle className="w-4 h-4" />
-                      An error occurred
+                       {msg.retryable ? 'Analysis temporarily unavailable' : 'Analysis restricted'}
                     </div>
                     <p className="mb-3">{msg.error}</p>
-                    <Button variant="outline" size="sm" onClick={() => handleSubmit(undefined, messages[index - 1]?.id)} className="h-7 text-[11px] gap-1.5 bg-[var(--surface)] text-[var(--text-primary)]">
+                    {msg.retryable && <Button variant="outline" size="sm" disabled={explainCase.isPending} onClick={() => handleSubmit(undefined, messages[index - 1]?.id)} className="h-7 text-[11px] gap-1.5 bg-[var(--surface)] text-[var(--text-primary)]">
                       <RefreshCw className="w-3 h-3" /> Retry Analysis
-                    </Button>
+                    </Button>}
                   </div>
                 ) : msg.explanation ? (
                   <div className="bg-[var(--surface)] border border-[var(--border)] p-4 rounded-[var(--radius-lg)] rounded-tl-sm text-[var(--text-sm)] w-full shadow-sm space-y-4">

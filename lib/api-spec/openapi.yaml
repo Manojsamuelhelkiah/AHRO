@@ -4015,6 +4015,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Current case access, retained-record isolation, or AI-provider disclosure policy prevents analysis; retrying without a permission or policy change will not help
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Case not found in the requesting organization
           content:

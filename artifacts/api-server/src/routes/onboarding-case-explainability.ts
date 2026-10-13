@@ -13,6 +13,9 @@ import {
   type ExplainabilityCompletion,
 } from "../lib/onboarding/case-explainability";
 import { logger } from "../lib/logger";
+import { caseAnalysisRestriction } from "../lib/onboarding/case-analysis-eligibility";
+import { isReadOnlyCaseExplanationRequest } from "../lib/retired-case-capabilities";
+import { defaultCompletion } from "../lib/onboarding/case-explainability";
 
 const MAX_IN_FLIGHT_PER_USER = 2;
 const MAX_REQUESTS_PER_MINUTE = 20;
@@ -40,6 +43,7 @@ export type CaseExplainabilityRouterDeps = {
   collectEvidence?: EvidenceCollector;
   resolveAccess?: CaseAccessLookup;
   complete?: ExplainabilityCompletion;
+  analysisRestriction?: typeof caseAnalysisRestriction;
 };
 
 type RateState = {
@@ -101,7 +105,7 @@ export function createOnboardingCaseExplainabilityRouter(
   const router: IRouter = Router();
   router.post("/onboarding/cases/:id/explain", async (req, res, next) => {
     const id = caseId(req);
-    if (id === null) {
+    if (id === null || !isReadOnlyCaseExplanationRequest(req.method, req.path)) {
       res.status(400).json({ message: "Valid case id is required." });
       return;
     }
@@ -128,6 +132,11 @@ export function createOnboardingCaseExplainabilityRouter(
         });
         return;
       }
+      const restriction = await (deps.analysisRestriction ?? caseAnalysisRestriction)(ownedCase);
+      if (restriction) {
+        res.status(403).json({ code: "CASE_ANALYSIS_RESTRICTED", message: restriction, retryable: false });
+        return;
+      }
       const explainableCase = effectiveAccess.allows.includes("data.case.profile.read")
         ? ownedCase
         : { ...ownedCase, joiningDate: "Restricted" };
@@ -145,6 +154,18 @@ export function createOnboardingCaseExplainabilityRouter(
         return;
       }
       try {
+        // Recheck at each model stage and before returning private sources.
+        // Revocation or a changed case projection discards this answer.
+        const assertCurrentRead = async () => {
+          const current = await lookup(organizationId, id);
+          const access = await resolveAccess(organizationId, userId, id);
+          if (!current || !access.allows.includes("flow.case.read") ||
+            effectiveAccess.allows.includes("data.case.profile.read") !== access.allows.includes("data.case.profile.read") ||
+            JSON.stringify(current) !== JSON.stringify(ownedCase) ||
+            await (deps.analysisRestriction ?? caseAnalysisRestriction)(current)) {
+            throw new ExplainabilityUnavailableError(undefined, { stage: "generation", code: "case_analysis_scope_changed" });
+          }
+        };
         const evidence = await collect(organizationId, id, explainableCase);
         if (!evidence) {
           res.status(404).json({ message: "Case not found" });
@@ -155,11 +176,26 @@ export function createOnboardingCaseExplainabilityRouter(
           question,
           body.history,
           evidence,
-          deps.complete,
+          async (...args) => {
+            await assertCurrentRead();
+            return (deps.complete ?? defaultCompletion(explainableCase))(...args);
+          },
         );
+        await assertCurrentRead();
         res.json(answer);
       } catch (error) {
         if (error instanceof ExplainabilityUnavailableError) {
+          const restrictions: Record<string, string> = {
+            case_analysis_scope_changed: "Case access or evidence changed during analysis. Reopen the case with current access before asking again.",
+            provider_dispatch_denied: "Ask AI is unavailable because external AI-provider use is disabled by the current safety policy.",
+            provider_governance_or_lifecycle_denied: "Ask AI is unavailable because current provider approval, record isolation, or data-disclosure policy does not permit AI analysis. Review the permitted case records directly.",
+            sensitive_external_disclosure_blocked: "This question or its evidence includes restricted content that cannot be sent to an AI provider. Ask about general case status without private details, or review permitted records directly.",
+          };
+          const message = restrictions[error.metadata?.code ?? ""];
+          if (message) {
+            res.status(403).json({ code: error.metadata?.code, message, retryable: false });
+            return;
+          }
           logger.error({
             err: error,
             explainability: error.metadata,
@@ -167,7 +203,7 @@ export function createOnboardingCaseExplainabilityRouter(
             caseId: id,
             userId,
           }, "Case explanation model unavailable or malformed");
-          res.status(503).json({ message: MODEL_ERRORS });
+          res.status(503).json({ message: MODEL_ERRORS, retryable: true });
           return;
         }
         next(error);

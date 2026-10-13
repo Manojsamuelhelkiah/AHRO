@@ -11,6 +11,9 @@ import {
   onbSystemChecks,
 } from "@workspace/db/schema";
 import { getReadinessSlaView } from "./readiness-sla-policy";
+import { isHistoricalTestRecord } from "./historical-test-record";
+import { activationRecord, evidenceBelongsToOperationalGeneration, operationalWorkflowHasStarted } from "./operational-eligibility";
+import { validStoredPreparation } from "./offline-preparation";
 export type ExplainabilityTab =
   | "overview"
   | "activity"
@@ -150,7 +153,7 @@ function source(
   };
 }
 
-function caseStateExcerpt(row: ExplainableCase, identifiers: readonly string[]): string {
+export function caseStateExcerpt(row: ExplainableCase, identifiers: readonly string[]): string {
   const readiness = row.readiness.length > 0
     ? row.readiness.map((item) => `Restricted onboarding check: ${item.status}`).join("; ")
     : "No case readiness items recorded";
@@ -158,6 +161,11 @@ function caseStateExcerpt(row: ExplainableCase, identifiers: readonly string[]):
     ? row.workstreams.map((item) => `Restricted workstream: ${item.status}`).join("; ")
     : "No workstreams recorded";
   return redactExplainabilityText([
+    isHistoricalTestRecord(row)
+      ? activationRecord(row)
+        ? `Example activated for a real worker. Original and prior-generation history is not fresh evidence. Operational workflow explicitly started: ${operationalWorkflowHasStarted(row) ? "yes" : "no"}.`
+        : `Fictional offline example, not operationally activated. Preparation draft recorded: ${validStoredPreparation(row) ? "yes" : "no"}. Source statuses are fictional history, not verified readiness or live connector results. Preparation permits no execution.`
+      : "Ordinary case; only recorded statuses are evidence, not proof of unrecorded execution.",
     `Lifecycle stage: ${row.lifecycleStage}.`,
     `Orchestration status: ${row.orchestrationStatus}.`,
     `Last checkpoint: ${row.orchestrationCheckpoint ?? "not recorded"}.`,
@@ -265,7 +273,9 @@ export async function collectCaseExplainabilityEvidence(
       ))
       .orderBy(desc(onbCommunications.createdAt), desc(onbCommunications.id))
       .limit(MAX_COMMUNICATIONS + 1),
-    getReadinessSlaView(organizationId, caseId),
+    // Historical snapshots/ledger rows have no provable generation identity.
+    // Do not present them as current readiness after activation.
+    isHistoricalTestRecord(row) ? Promise.resolve(null) : getReadinessSlaView(organizationId, caseId),
   ]);
 
   truncated = collectLimit(limitations, "Activity history", events.length, MAX_EVENTS) || truncated;
@@ -398,6 +408,25 @@ export async function collectCaseExplainabilityEvidence(
       identifiers,
     })),
   ];
+  if (isHistoricalTestRecord(row)) {
+    const records = new Map<string, { at: Date; id: number; kind: string }>([
+      ...boundedEvents.map(item => [`event:${item.id}`, { at: item.createdAt, id: item.id, kind: "events" }] as const),
+      ...boundedApprovals.map(item => [`approval:${item.id}`, { at: item.createdAt, id: item.id, kind: "approvals" }] as const),
+      ...boundedDocuments.map(item => [`document:${item.id}`, { at: item.createdAt, id: item.id, kind: "documents" }] as const),
+      ...boundedUploads.map(item => [`upload:${item.id}`, { at: item.createdAt, id: item.id, kind: "candidateUploads" }] as const),
+      ...boundedChecks.map(item => [`check:${item.id}`, { at: item.requestedAt, id: item.id, kind: "systemChecks" }] as const),
+    ]);
+    // Approval history is not a generation-bound record kind. It cannot prove
+    // a current approval even when its timestamp is later than activation.
+    for (const item of sources) {
+      if (item.kind === "case-state") continue;
+      const record = records.get(item.id);
+      const fresh = record && evidenceBelongsToOperationalGeneration(row, record.at, record.id, record.kind);
+      item.title = `${fresh ? "Current operational generation" : "Retained example / prior-generation history"} — ${item.title}`;
+      if (!fresh) item.excerpt = `Historical only; not current approval, readiness, clearance, delivery, or execution evidence. ${item.excerpt}`;
+    }
+    limitations.push("Original fictional and prior-generation records are labelled historical. Unproven historical readiness snapshots are excluded; current readiness must be established independently.");
+  }
 
   if (!readiness) {
     limitations.push("Current readiness SLA data was not available for this case.");

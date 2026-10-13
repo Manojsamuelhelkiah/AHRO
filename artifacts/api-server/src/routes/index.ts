@@ -59,8 +59,6 @@ import employeeVaultEmployerRouter from "./employee-vault-employer";
 import uatAuthRouter from "./uat-auth";
 import { requireUatAdmission } from "../middlewares/uat-admission";
 import { caseRetirementFence } from "../middlewares/case-retirement";
-import { isRetiredCaseCapabilityRequest, retiredCaseCapabilityResponse } from "../lib/retired-case-capabilities";
-import { registeredDemoProfile } from "../lib/demo-principal";
 import onboardingOfflinePreparationRouter from "./onboarding-offline-preparation";
 
 const router: IRouter = Router();
@@ -113,6 +111,9 @@ router.use(requireUatAdmission);
 // UAT/controller/collection fences and does not admit any operational effects.
 router.use(onboardingOfflinePreparationRouter);
 router.use(caseRetirementFence);
+// Read-only analysis precedes mutation-only separation/service-request gates.
+// The explanation router owns its current read/disclosure checks.
+router.use(onboardingCaseExplainabilityRouter);
 // Service requests have no onboarding execution adapter; deletion keeps its
 // existing hold-aware path. Separation closure remains specification-blocked.
 router.use("/onboarding/cases/:caseId", async (req, res, next) => {
@@ -172,7 +173,6 @@ router.use(onboardingStandardOperationsRouter);
 router.use(onboardingFrontlineOperationsRouter);
 router.use(onboardingWorkforceTransfersRouter);
 router.use(onboardingContactRouter);
-router.use(onboardingCaseExplainabilityRouter);
 router.use(onboardingEarlyTenureRouter);
 router.use(candidateAdminRouter);
 router.use(pricingRateSetsRouter);

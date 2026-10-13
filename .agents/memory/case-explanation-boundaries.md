@@ -20,3 +20,9 @@ Conversation continuity must not cross case, authenticated-user, or organization
 **Why:** Changing a cache key alone does not reset mounted React state or stop an old request from completing into another case's conversation.
 
 **How to apply:** Reset or remount at scope boundaries, cancel outstanding requests, and fence late callbacks, including after Clear Chat. Avoid persistent browser storage of sensitive case conversations unless separately designed and authorized.
+
+Read-only analysis eligibility is separate from activation and provider-disclosure authorization. Accessible curated examples can be analysed as historical evidence, but actual UAT/controller isolation and final provider governance still apply.
+
+**Why:** A body-bearing explanation question was mistaken for a live mutation and returned a misleading retirement error. Removing that classification must not silently authorize a provider request or convert fictional source history into fresh evidence.
+
+**How to apply:** Admit only the supported explanation operation through mutation-oriented fences. Report genuine record or disclosure restrictions explicitly without repeated retry prompts. Keep preparation, activation and workflow start distinct, and require generation provenance for current child evidence; unproven historical snapshots cannot establish readiness.

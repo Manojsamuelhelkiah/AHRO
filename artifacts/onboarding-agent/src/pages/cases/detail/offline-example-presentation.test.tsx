@@ -27,6 +27,7 @@ test("read-only health cards and tabs retain accessible narrow-screen layouts", 
   assert.doesNotMatch(health, /Automated execution active/);
   const tabs = renderToStaticMarkup(<CaseTabs activeTab="Overview" setTab={() => {}} offlineSample />);
   assert.match(tabs, /flex-wrap/);
+  assert.match(tabs, /Ask AI/, "Availability must remain discoverable even when analysis is restricted");
   assert.doesNotMatch(tabs, /overflow-x-auto/);
 });
 

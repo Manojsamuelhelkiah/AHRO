@@ -2,9 +2,19 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import React, { useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ExplainabilityTab, getActiveSessionScope } from './explainability-tab';
+import { ExplainabilityTab, getActiveSessionScope, analysisErrorFeedback } from './explainability-tab';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { pinOrganizationIdForPage } from '@workspace/api-client-react';
+
+test('analysis restrictions use specific guidance without retry and discard old sources', () => {
+  const feedback = analysisErrorFeedback({ status: 403, message: 'HTTP error', data: {
+    message: 'AI provider approval is required.', retryable: false,
+  } });
+  assert.deepStrictEqual(feedback, { message: 'AI provider approval is required.', retryable: false, clearSources: true });
+  assert.strictEqual(analysisErrorFeedback({ status: 503 }).retryable, true);
+  assert.strictEqual(analysisErrorFeedback({ status: 429 }).retryable, true);
+  assert.strictEqual(analysisErrorFeedback({ status: 410 }).retryable, false);
+});
 
 test('ExplainabilityTab renders correctly', () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

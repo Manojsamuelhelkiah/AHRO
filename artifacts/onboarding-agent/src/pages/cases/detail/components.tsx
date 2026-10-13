@@ -219,7 +219,7 @@ export function CaseTabs({ activeTab, setTab, offlineSample = false }: { activeT
   const access = useCaseAccess();
   const tabs = ['Overview', ...(offlineSample ? [] : ['Early tenure']), 'Tasks', 'Frontline', 'Documents',
     ...(access?.access.notesRead ? ['Activity', 'Communications', 'Audit'] : []),
-    ...(access?.access.profileRead && access.access.notesRead && access && Object.values(access.sensitive).every((permission) => permission.read) ? ['Ask AI'] : [])];
+    'Ask AI'];
   return (
     <div className="flex flex-wrap border-b border-[var(--border)] mb-6">
       {tabs.map(t => (

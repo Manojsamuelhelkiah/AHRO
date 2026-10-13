@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'wouter';
 import {
   useGetOnboardingCase,
@@ -34,7 +34,7 @@ import { OverviewTab } from './detail/overview';
 import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
 import { FrontlineTab } from './detail/frontline-tab';
 import { DocumentsTab } from './detail/documents-tab';
-import { ExplainabilityTab } from './detail/explainability-tab';
+import { ExplainabilityTab, clearCaseAnalysisMemory } from './detail/explainability-tab';
 import { PortalControls } from './detail/portal-controls';
 import { EarlyTenurePanel } from './detail/early-tenure-panel';
 import { getApprovalRefetchInterval } from '../../lib/approval-actions';
@@ -87,6 +87,11 @@ export function CaseDetailPage() {
       ([key, value]) => [key, { ...value, edit: false }],
     )) as typeof rawPermissions.sensitive,
   } : rawPermissions;
+  const canAnalyze = Boolean(permissions?.access.profileRead && permissions.access.notesRead &&
+    Object.values(permissions.sensitive).every(permission => permission.read) && !permissionsError && !caseError);
+  useEffect(() => {
+    if (!canAnalyze) clearCaseAnalysisMemory(caseId, user?.id);
+  }, [canAnalyze, caseId, user?.id]);
   const { data: standardIntakeEvidence } = useQuery({
     queryKey: ['standard-intake-evidence', caseId],
     queryFn: () => customFetch<{
@@ -350,8 +355,9 @@ export function CaseDetailPage() {
         {activeTab === 'Audit' && (permissions.access.notesRead
           ? <AuditTab events={events || []} approvals={approvals} records={records || []} />
           : <RestrictedActionNotice>Audit notes are restricted by your current permissions.</RestrictedActionNotice>)}
-        {activeTab === 'Ask AI' && permissions.access.profileRead && permissions.access.notesRead && Object.values(permissions.sensitive).every((permission) => permission.read)
-          && <ExplainabilityTab key={`${getPinnedOrganizationIdForPage() || 'anon'}-${user?.id || 'anon'}-${caseId}`} caseId={caseId} userId={user?.id} />}
+        {activeTab === 'Ask AI' && (canAnalyze
+          ? <ExplainabilityTab key={`${getPinnedOrganizationIdForPage() || 'anon'}-${user?.id || 'anon'}-${caseId}`} caseId={caseId} userId={user?.id} />
+          : <RestrictedActionNotice>Ask AI requires current case and sensitive-field read permissions. Review only the case records available to your account.</RestrictedActionNotice>)}
       </div>
     </div>
     </CaseAccessProvider>

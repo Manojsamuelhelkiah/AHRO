@@ -7,6 +7,11 @@ import {
 } from "@workspace/db";
 import { resolveEffectiveAccess, resolveEffectiveAccessForCases } from "../access-governance";
 import { demoPrincipalSettingKey } from "../demo-principal";
+import express from "express";
+import { caseRetirementFence } from "../../middlewares/case-retirement";
+import { createOnboardingCaseExplainabilityRouter } from "../../routes/onboarding-case-explainability";
+import { collectCaseExplainabilityEvidence } from "./case-explainability-evidence";
+import { onbCommunications, onbApprovals, onbEvents, onbSystemChecks } from "@workspace/db";
 import { recordHumanPermissionDecision } from "../human-permissions";
 import { PREPARATION_EDIT_KEYS } from "./offline-preparation";
 import { operationalEligibilityInTransaction, operationalWorkflowHasStarted,
@@ -24,6 +29,50 @@ const organizationId = "demo";
 let caseId: number;
 const shared = "owned-generation-shared-demo";
 const named = "owned-generation-named-reader";
+
+// Real access evaluator, real collector and the global mounted retirement
+// fence. Only completion output is stubbed; no external I/O is permitted.
+async function ask(principal: string, options: { path?: string; tenant?: string } = {}) {
+  let modelCalls = 0;
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.authUserId = principal;
+    req.organizationId = options.tenant ?? organizationId;
+    next();
+  });
+  app.use(caseRetirementFence);
+  app.use(createOnboardingCaseExplainabilityRouter({
+    complete: async () => {
+      modelCalls++;
+      return { paragraphs: [{ text: "The requested reason is not recorded in the bounded evidence.", sourceIds: [], kind: "not-recorded" }] };
+    },
+  }));
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}${options.path ?? `/onboarding/cases/${caseId}/explain`}`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question: "What is currently blocking this case?" }),
+    });
+    return { status: response.status, body: await response.json() as any, modelCalls };
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+}
+
+async function operationalSnapshot() {
+  return Promise.all([
+    db.select().from(onbCases).where(eq(onbCases.id, caseId)),
+    db.select().from(onbCommunications).where(eq(onbCommunications.caseId, caseId)),
+    db.select().from(onbApprovals).where(eq(onbApprovals.caseId, caseId)),
+    db.select().from(onbEvents).where(eq(onbEvents.caseId, caseId)),
+    db.select().from(onbSystemChecks).where(eq(onbSystemChecks.caseId, caseId)),
+    db.select().from(onbDocuments).where(eq(onbDocuments.caseId, caseId)),
+  ]);
+}
 
 after(async () => {
   if (!caseId) return;
@@ -56,6 +105,28 @@ test("future-dated original records and previous generations never become live e
   assert.ok((await resolveEffectiveAccess({
     organizationId, principalType: "human", principalId: shared, caseId,
   })).allows.includes("flow.case.read"));
+  const beforeAnalysis = await operationalSnapshot();
+  const offlineAnalysis = await ask(shared);
+  assert.equal(offlineAnalysis.status, 200, JSON.stringify(offlineAnalysis.body));
+  assert.equal(offlineAnalysis.modelCalls, 1);
+  assert.match(offlineAnalysis.body.sources[0].excerpt, /Fictional offline example, not operationally activated/);
+  assert.deepEqual(await operationalSnapshot(), beforeAnalysis, "Read-only analysis must not mutate case, evidence, approvals, messages or connector checks");
+  assert.equal((await ask(shared, { path: `/onboarding/cases/${caseId}/start` })).status, 410);
+  assert.equal((await ask(named, { tenant: "other-tenant" })).status, 404);
+  assert.equal((await ask("revoked-user")).status, 403);
+  const uatKey = "onboarding-uat.run.v1:owned-analysis-isolation";
+  await db.insert(onbSettings).values({ organizationId, key: uatKey, value: JSON.stringify({ runId: "owned-analysis", linkedCaseIds: [caseId] }) });
+  const uatAnalysis = await ask(shared);
+  assert.equal(uatAnalysis.status, 403);
+  assert.equal(uatAnalysis.modelCalls, 0);
+  assert.match(uatAnalysis.body.message, /UAT/);
+  await db.delete(onbSettings).where(and(eq(onbSettings.organizationId, organizationId), eq(onbSettings.key, uatKey)));
+  await db.update(onbCases).set({ checklistProfileId: "demo-controller" }).where(eq(onbCases.id, caseId));
+  const controllerAnalysis = await ask(shared);
+  assert.equal(controllerAnalysis.status, 403);
+  assert.equal(controllerAnalysis.modelCalls, 0);
+  assert.match(controllerAnalysis.body.message, /controller/);
+  await db.update(onbCases).set({ checklistProfileId: original.checklistProfileId }).where(eq(onbCases.id, caseId));
   const future = new Date(Date.now() + 86_400_000);
   const [oldDocument] = await db.insert(onbDocuments).values({
     organizationId, caseId, key: "original-file", label: "Fictional original", category: "identity",
@@ -138,6 +209,14 @@ test("future-dated original records and previous generations never become live e
   ]) assert.deepEqual((await resolve()).allows, [], "shared Demo must not inherit real worker access");
   assert.ok((await resolveEffectiveAccess({ organizationId, principalType: "human", principalId: named, caseId }))
     .allows.includes("flow.case.read"), "current named access is unaffected");
+  const activatedSnapshot = await operationalSnapshot();
+  const activatedAnalysis = await ask(named);
+  assert.equal(activatedAnalysis.status, 200, JSON.stringify(activatedAnalysis.body));
+  assert.match(activatedAnalysis.body.sources[0].excerpt, /explicitly started: no/);
+  assert.deepEqual(await operationalSnapshot(), activatedSnapshot);
+  const sharedActivatedAnalysis = await ask(shared);
+  assert.equal(sharedActivatedAnalysis.status, 403);
+  assert.equal(sharedActivatedAnalysis.modelCalls, 0);
   const [fresh] = await db.insert(onbDocuments).values({
     organizationId, caseId, key: "current-file", label: "Fresh separate record", category: "identity",
   }).returning();
@@ -158,6 +237,9 @@ test("future-dated original records and previous generations never become live e
   assert.deepEqual(visibleSessions, []);
   assert.equal(evidenceBelongsToOperationalGeneration(activated!, future, oldDocument!.id, "documents"), false);
   assert.equal(evidenceBelongsToOperationalGeneration(activated!, fresh!.createdAt, fresh!.id, "documents"), true);
+  const analysisEvidence = await collectCaseExplainabilityEvidence(organizationId, caseId);
+  assert.match(analysisEvidence!.sources.find(item => item.id === `document:${oldDocument!.id}`)!.title, /Retained example/);
+  assert.match(analysisEvidence!.sources.find(item => item.id === `document:${fresh!.id}`)!.title, /Current operational generation/);
 
   const updatedActivation = {
     ...activation,

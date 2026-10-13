@@ -30,6 +30,12 @@ export const retiredCaseCapabilityResponse: RequestHandler = (_req, res) => {
   });
 };
 
+/** Only the supported body-bearing analysis route, never a POST namespace. */
+export function isReadOnlyCaseExplanationRequest(method: string, path: string): boolean {
+  const match = /^\/onboarding\/cases\/([1-9]\d*)\/explain\/?$/i.exec(path);
+  return method === "POST" && Boolean(match && Number.isSafeInteger(Number(match[1])));
+}
+
 export function isRetiredCaseCapabilityRequest(method: string, path: string): boolean {
   path = path.replace(/\/+$/, "");
   if (/^\/onboarding\/(?:scenarios(?:\/.*)?|synthetic-reset|demo\/full-coverage)\/?$/.test(path)) return true;
