@@ -7165,10 +7165,36 @@ components:
     HroEmailTurnaround:
       type: object
       description: Tenant-only retained requests; recorded intake receipt to first successful authenticated review/rejection or held-case conversion audit event. No HR outcome or reviewer-level metrics.
-      required: [asOf, waiting, firstReview, heldConversion]
+      required: [asOf, waiting, firstReview, heldConversion, cohorts]
       properties:
         asOf: { type: string }
         waiting: { $ref: "#/components/schemas/HroEmailWaitingBands" }
+        firstReview: { $ref: "#/components/schemas/HroEmailDurationSummary" }
+        heldConversion: { $ref: "#/components/schemas/HroEmailDurationSummary" }
+        cohorts:
+          type: object
+          description: Nonempty retained receipt cohorts, newest first. Not grouped by human event date. Current periods are partial as of the snapshot. Pending counts reflect current status, not historical backlog. Omitted periods have no retained eligible requests.
+          required: [basis, timeZone, weekly, monthly]
+          properties:
+            basis: { type: string, enum: [recorded-intake-receipt] }
+            timeZone: { type: string, enum: [UTC] }
+            weekly:
+              type: array
+              description: Monday-start UTC weeks.
+              items: { $ref: "#/components/schemas/HroEmailTurnaroundCohort" }
+            monthly:
+              type: array
+              description: UTC calendar months.
+              items: { $ref: "#/components/schemas/HroEmailTurnaroundCohort" }
+    HroEmailTurnaroundCohort:
+      type: object
+      description: Receipt cohort with inclusive start and exclusive end; durations use usable successful human audit evidence through asOf, including events after the receipt period ends. Held conversion is not HR completion.
+      required: [startAt, endAt, requestCount, pendingCount, firstReview, heldConversion]
+      properties:
+        startAt: { type: string, description: Inclusive UTC boundary as an ISO 8601 timestamp. }
+        endAt: { type: string, description: Exclusive UTC boundary as an ISO 8601 timestamp. }
+        requestCount: { type: integer }
+        pendingCount: { type: integer }
         firstReview: { $ref: "#/components/schemas/HroEmailDurationSummary" }
         heldConversion: { $ref: "#/components/schemas/HroEmailDurationSummary" }
     HroEmailRequest:

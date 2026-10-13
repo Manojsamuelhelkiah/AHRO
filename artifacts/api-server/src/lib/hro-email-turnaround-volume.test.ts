@@ -109,7 +109,20 @@ test("retained cohorts keep correlation queries and aggregate payloads bounded",
         size / 8 - conversions.length));
       assert.ok(maxParameterBytes < 150_000, `unbounded SQL parameters: ${maxParameterBytes}`);
       assert.ok(maxReturnedRows <= 1000, `unbounded correlation rows: ${maxReturnedRows}`);
-      assert.ok(Buffer.byteLength(JSON.stringify(result)) < 1000);
+      // Payload grows with receipt periods, not with retained request volume.
+      // This fixture spans two weeks and two months at both queue sizes.
+      const { cohorts, ...overall } = result;
+      assert.ok(Buffer.byteLength(JSON.stringify(overall)) < 1000);
+      for (const periods of [cohorts.weekly, cohorts.monthly]) {
+        assert.equal(periods.length, 2);
+        assert.equal(periods.reduce((sum, c) => sum + c.requestCount, 0), size);
+        assert.equal(periods.reduce((sum, c) => sum + c.pendingCount, 0), 3 * size / 4);
+        assert.equal(periods.reduce((sum, c) => sum + c.firstReview.sampleCount, 0), result.firstReview.sampleCount);
+        assert.equal(periods.reduce((sum, c) => sum + c.firstReview.missingEvidenceCount, 0), result.firstReview.missingEvidenceCount);
+        assert.equal(periods.reduce((sum, c) => sum + c.heldConversion.sampleCount, 0), result.heldConversion.sampleCount);
+        assert.equal(periods.reduce((sum, c) => sum + c.heldConversion.missingEvidenceCount, 0), result.heldConversion.missingEvidenceCount);
+        for (const period of periods) assert.ok(Buffer.byteLength(JSON.stringify(period)) < 1000);
+      }
       assert.ok(!JSON.stringify(result).includes("private-reviewer"));
       const remaining = await tx.execute(sql`select count(*)::integer as count from pg_class
         where relnamespace = pg_my_temp_schema() and relname like 'email_review_refs_%'`);

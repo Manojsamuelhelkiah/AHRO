@@ -18,6 +18,7 @@ const integratedEntryPoints = [
   "src/pages/settings-access-governance.integration.test.tsx",
   "src/pages/settings-context-retention.integration.test.tsx",
   "src/pages/settings-context-manager.integration.test.tsx",
+  "src/pages/email-intake/turnaround.integration.test.tsx",
 ].map((file) => path.join(dir, file));
 const standardEntryPoints = entryPoints.filter(
   (entryPoint) => !integratedEntryPoints.includes(entryPoint),

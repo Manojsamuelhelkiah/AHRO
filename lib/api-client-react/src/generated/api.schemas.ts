@@ -149,6 +149,7 @@ export interface HroEmailDurationSummary {
   p90Hours: number | null;
 }
 
+export type HroEmailTurnaroundCohortsBasis = typeof HroEmailTurnaroundCohortsBasis[keyof typeof HroEmailTurnaroundCohortsBasis];
 /**
  * Tenant-only retained requests; recorded intake receipt to first successful authenticated review/rejection or held-case conversion audit event. No HR outcome or reviewer-level metrics.
  */
@@ -157,6 +158,8 @@ export interface HroEmailTurnaround {
   waiting: HroEmailWaitingBands;
   firstReview: HroEmailDurationSummary;
   heldConversion: HroEmailDurationSummary;
+  /** Nonempty retained receipt cohorts, newest first. Not grouped by human event date. Current periods are partial as of the snapshot. Pending counts reflect current status, not historical backlog. Omitted periods have no retained eligible requests. */
+  cohorts: HroEmailTurnaroundCohorts;
 }
 
 /**
@@ -11431,3 +11434,39 @@ export type ListSensitiveLifecycleDeletionJobs200 = {
 };
 
 export type DownloadFairnessEvidenceReport200 = { [key: string]: unknown };
+
+export type HroEmailTurnaroundCohortsTimeZone = typeof HroEmailTurnaroundCohortsTimeZone[keyof typeof HroEmailTurnaroundCohortsTimeZone];
+
+/**
+ * Receipt cohort with inclusive start and exclusive end; durations use usable successful human audit evidence through asOf, including events after the receipt period ends. Held conversion is not HR completion.
+ */
+export interface HroEmailTurnaroundCohort {
+  /** Inclusive UTC boundary as an ISO 8601 timestamp. */
+  startAt: string;
+  /** Exclusive UTC boundary as an ISO 8601 timestamp. */
+  endAt: string;
+  requestCount: number;
+  pendingCount: number;
+  firstReview: HroEmailDurationSummary;
+  heldConversion: HroEmailDurationSummary;
+}
+
+export const HroEmailTurnaroundCohortsBasis = {
+  'recorded-intake-receipt': 'recorded-intake-receipt',
+} as const;
+
+export const HroEmailTurnaroundCohortsTimeZone = {
+  UTC: 'UTC',
+} as const;
+
+/**
+ * Nonempty retained receipt cohorts, newest first. Not grouped by human event date. Current periods are partial as of the snapshot. Pending counts reflect current status, not historical backlog. Omitted periods have no retained eligible requests.
+ */
+export type HroEmailTurnaroundCohorts = {
+  basis: HroEmailTurnaroundCohortsBasis;
+  timeZone: HroEmailTurnaroundCohortsTimeZone;
+  /** Monday-start UTC weeks. */
+  weekly: HroEmailTurnaroundCohort[];
+  /** UTC calendar months. */
+  monthly: HroEmailTurnaroundCohort[];
+};

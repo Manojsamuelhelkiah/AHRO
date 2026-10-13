@@ -61,12 +61,19 @@ export async function emailReviewTurnaround(tx: Tx, org: string, asOf = new Date
       group by a.object_id
     ), measured as (
       select r.status, r.review_recorded,
+        date_trunc('week', r.created_at at time zone 'UTC') as week_start,
+        date_trunc('month', r.created_at at time zone 'UTC') as month_start,
         extract(epoch from (${asOf}::timestamptz - r.created_at)) / 3600.0 as age,
         extract(epoch from (e.review_at - r.created_at)) / 3600.0 as review_hours,
         extract(epoch from (e.conversion_at - r.created_at)) / 3600.0 as conversion_hours
       from requests r left join events e on e.object_id = r.audit_id
     )
     select
+      case when grouping(week_start) = 0 then 'weekly'
+        when grouping(month_start) = 0 then 'monthly' else 'all' end as cohort_kind,
+      coalesce(week_start, month_start) at time zone 'UTC' as cohort_start,
+      count(*)::integer as request_count,
+      count(*) filter (where status in ('received','needs-review','blocked'))::integer as pending_count,
       count(*) filter (where status in ('received','needs-review','blocked') and age < 24)::integer as under24,
       count(*) filter (where status in ('received','needs-review','blocked') and age >= 24 and age < 72)::integer as from24,
       count(*) filter (where status in ('received','needs-review','blocked') and age >= 72 and age < 168)::integer as from72,
@@ -82,13 +89,15 @@ export async function emailReviewTurnaround(tx: Tx, org: string, asOf = new Date
       percentile_cont(0.5) within group (order by conversion_hours) as conversion_median,
       percentile_cont(0.9) within group (order by conversion_hours) as conversion_p90
     from measured
+    group by grouping sets ((), (week_start), (month_start))
+    order by cohort_start desc nulls last
   `);
   // Successful reads release disk space immediately even inside a long
   // transaction. On errors PostgreSQL's rollback/ON COMMIT DROP owns cleanup;
   // do not mask the original error with a query in an aborted transaction.
   await tx.execute(sql`drop table ${refs}`);
-  const row = result.rows[0];
-  const duration = (prefix: string) => ({
+  const row = result.rows.find(r => r.cohort_kind === "all")!;
+  const duration = (row: Record<string, unknown>, prefix: string) => ({
     sampleCount: Number(row[`${prefix}_count`]),
     missingEvidenceCount: Number(row[`${prefix}_missing`]),
     meanHours: row[`${prefix}_mean`] == null ? null : Number(row[`${prefix}_mean`]),
@@ -99,6 +108,24 @@ export async function emailReviewTurnaround(tx: Tx, org: string, asOf = new Date
     asOf: asOf.toISOString(),
     waiting: { under24Hours: Number(row.under24), from24To72Hours: Number(row.from24),
       from72To168Hours: Number(row.from72), atLeast168Hours: Number(row.from168) },
-    firstReview: duration("review"), heldConversion: duration("conversion"),
+    firstReview: duration(row, "review"), heldConversion: duration(row, "conversion"),
+    cohorts: {
+      basis: "recorded-intake-receipt", timeZone: "UTC",
+      weekly: cohorts("weekly"), monthly: cohorts("monthly"),
+    },
   };
+
+  function cohorts(kind: "weekly" | "monthly") {
+    return result.rows.filter(r => r.cohort_kind === kind).map(r => {
+      const start = new Date(r.cohort_start as string | Date);
+      const end = new Date(start);
+      if (kind === "weekly") end.setUTCDate(end.getUTCDate() + 7);
+      else end.setUTCMonth(end.getUTCMonth() + 1);
+      return {
+        startAt: start.toISOString(), endAt: end.toISOString(),
+        requestCount: Number(r.request_count), pendingCount: Number(r.pending_count),
+        firstReview: duration(r, "review"), heldConversion: duration(r, "conversion"),
+      };
+    });
+  }
 }
