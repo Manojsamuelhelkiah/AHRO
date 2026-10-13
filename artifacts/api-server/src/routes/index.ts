@@ -62,7 +62,6 @@ import { caseRetirementFence } from "../middlewares/case-retirement";
 import { isRetiredCaseCapabilityRequest, retiredCaseCapabilityResponse } from "../lib/retired-case-capabilities";
 import { registeredDemoProfile } from "../lib/demo-principal";
 import onboardingOfflinePreparationRouter from "./onboarding-offline-preparation";
-import { isRestrictedOfflineCase as isSyntheticOfflineCase, isRestrictedControllerCase as isRetiredControllerCase,
 
 const router: IRouter = Router();
 
