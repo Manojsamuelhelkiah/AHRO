@@ -52,6 +52,8 @@ test('sample labels, reference cleanup and read-only navigation at phone, tablet
       await route.fulfill({ json: { caseId: c.id,
         access: { flowRead: true, profileRead: !restricted, notesRead: true, flowEdit: false, notesEdit: false, profileEdit: false },
         sensitive: Object.fromEntries(['identity', 'medical', 'payroll', 'bgv'].map(key => [key, { read: false, edit: false }])) } });
+    } else if (path.endsWith('/operational-preparation')) {
+      await route.fulfill({ status: 404, json: { message: 'No operational preparation exists for this retained example.' } });
     } else if (path.endsWith('/governance-impact')) {
       await route.fulfill({ json: { caseId: c.id, snapshot: null, impacts: [] } });
     } else if (path.endsWith(String(c.id))) {

@@ -9,7 +9,7 @@ import {
   onbSettings,
 } from "@workspace/db/schema";
 import { sendAdministrativeEmail } from "./channels";
-import { isHistoricalTestRecord } from "./historical-test-record";
+import { isRestrictedHistoricalCase as isHistoricalTestRecord, evidenceBelongsToOperationalGeneration } from "./operational-eligibility";
 import { getUatCaseIsolation } from "./uat-isolation";
 import {
   HR_ALERT_EMAIL_KEY,
@@ -355,6 +355,8 @@ export async function decideApproval(opts: {
         eq(onbApprovals.id, opts.approvalId),
     )).for("update");
     if (!approval) return { outcome: "not-found" } as const;
+    if (!evidenceBelongsToOperationalGeneration(currentCase, approval.createdAt, approval.id, "approvals"))
+      return { outcome: "unauthorized", reason: "This retained approval belongs to fictional source history, not the current operational generation." } as const;
     // A direct invocation cannot turn an arbitrary From string into a remote
     // authority. Only the raw-Gmail verifier can manufacture this proof.
     if (opts.responderEmail && !isRemoteEmailReply(opts)) {

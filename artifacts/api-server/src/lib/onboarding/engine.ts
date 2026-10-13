@@ -1,4 +1,5 @@
 import { db } from "@workspace/db";
+import { operationalEligibilityInTransaction } from "./operational-eligibility";
 import {
   onbApprovals,
   onbCases,
@@ -57,10 +58,10 @@ import type {
   OnbChecklistTemplateItem,
 } from "@workspace/db/schema";
 import { approvalVersion, reopenApprovalInTransaction } from "./approval-version";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
-import { isHistoricalTestRecord } from "./historical-test-record";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase, isRestrictedHistoricalCase as isHistoricalTestRecord,
+  activationRecord } from "./operational-eligibility";
 import { getUatCaseIsolation } from "./uat-isolation";
-import { isRetiredControllerCase } from "./controller-retirement";
+import { isRestrictedControllerCase as isRetiredControllerCase } from "./operational-eligibility";
 import {
   initializeOperationalRequests,
   initializeWorkforceStepTasks,
@@ -652,7 +653,7 @@ async function runIntake(caseId: number, claim?: OrchestrationClaim): Promise<"c
     } = await import("./records-agent");
     // Demo constructs (scenario/persona cases) get a synthetic archive so
     // the flow is demonstrable; manual rehires keep honest "no records".
-    if (c.scenarioKey) {
+    if (c.scenarioKey && !activationRecord(c)) {
       await ensureDemoRehireArchive(c.workerEmail, c.workerName, c.organizationId);
     }
     const { questions, viaLlm } = await formulateRecordsQuestions(
@@ -1528,6 +1529,8 @@ export function startOrchestration(caseId: number) {
         .from(onbCases)
         .where(eq(onbCases.id, caseId));
       if (offlineCase && (isHistoricalTestRecord(offlineCase) || isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase) || (await getUatCaseIsolation(offlineCase)).isolated)) return;
+      if (offlineCase?.operationalActivation && !(await db.transaction(tx =>
+        operationalEligibilityInTransaction(tx, offlineCase, { requireStarted: true }))).allowed) return;
       const owner = randomUUID();
       const [claimed] = await db.update(onbCases)
         .set({
@@ -1594,6 +1597,8 @@ async function resumeChecklistOrchestrationInContext(caseId: number): Promise<bo
     .from(onbCases)
     .where(eq(onbCases.id, caseId));
   if (offlineCase && (isHistoricalTestRecord(offlineCase) || isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase) || (await getUatCaseIsolation(offlineCase)).isolated)) return false;
+  if (offlineCase?.operationalActivation && !(await db.transaction(tx =>
+    operationalEligibilityInTransaction(tx, offlineCase, { requireStarted: true }))).allowed) return false;
   const owner = randomUUID();
   const [claimed] = await db.update(onbCases)
     .set({
@@ -1973,6 +1978,8 @@ export function resumeAfterDecision(opts: {
         .from(onbCases)
         .where(eq(onbCases.id, opts.caseId));
       if (offlineCase && (isHistoricalTestRecord(offlineCase) || isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase) || (await getUatCaseIsolation(offlineCase)).isolated)) return;
+      if (offlineCase?.operationalActivation && !(await db.transaction(tx =>
+        operationalEligibilityInTransaction(tx, offlineCase, { requireStarted: true }))).allowed) return;
       if (opts.ruleRef === MIGRATION_REVIEW_HOLD_RULE) {
         if (!opts.approved) return;
         // This approval is an explicit governance classification of the
@@ -2094,6 +2101,8 @@ export function handleInbound(caseId: number, channel: "email" | "whatsapp", bod
     try {
       const c = await getCase(caseId);
       if (isHistoricalTestRecord(c) || isSyntheticOfflineCase(c) || isRetiredControllerCase(c) || (await getUatCaseIsolation(c)).isolated) return;
+      if (c.operationalActivation && !(await db.transaction(tx =>
+        operationalEligibilityInTransaction(tx, c, { requireStarted: true }))).allowed) return;
       const sensitive = /salary|pay|compensation|visa|immigration|medical|health|legal|complaint|harass|grievance/i.test(body);
 
       if (sensitive) {

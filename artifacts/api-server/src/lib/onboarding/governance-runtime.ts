@@ -18,7 +18,7 @@ import {
   hasActiveCaseDispatchMarker,
 } from "./dispatch-guard";
 import { reopenGateCApprovalInTransaction } from "./readiness-sla-policy";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase } from "./operational-eligibility";
 import { assertGovernanceMutationAllowed } from "./governance-dispatch";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,

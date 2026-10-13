@@ -5,7 +5,7 @@ import {
   type GovernanceExecutionGate,
 } from "./governance-runtime";
 import { externalProviderDispatchDenied } from "./provider-policy";
-import { isRetiredControllerCase } from "./controller-retirement";
+import { isRestrictedControllerCase as isRetiredControllerCase } from "./operational-eligibility";
 import {
   withGovernanceDispatch,
   type GovernanceDispatchResult,
@@ -19,7 +19,7 @@ import {
 } from "./sensitive-lifecycle";
 import { getUatCaseIsolation } from "./uat-isolation";
 import { candidateEmailDeliveryDecision } from "./channel-routing";
-import { sampleCandidateEmailEligible } from "./synthetic-offline";
+import { operationalCandidateEmailEligible as sampleCandidateEmailEligible } from "./operational-eligibility";
 import { withHroCaseContext, recordHroContextStep } from "../hro-context/manager";
 
 /**

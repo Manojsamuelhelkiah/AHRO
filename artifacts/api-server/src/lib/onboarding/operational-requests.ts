@@ -12,8 +12,7 @@ import {
   organizationMembershipsTable,
 } from "@workspace/db/schema";
 import { isNonEmployee } from "./external-systems";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
-import { isHistoricalTestRecord } from "./historical-test-record";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase, isRestrictedHistoricalCase as isHistoricalTestRecord } from "./operational-eligibility";
 import {
   listOnboardingAgents,
   resolveOnboardingAgent,

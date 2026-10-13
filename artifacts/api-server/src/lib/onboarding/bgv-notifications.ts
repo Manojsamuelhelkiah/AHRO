@@ -15,8 +15,7 @@ import {
   explicitlyConfiguredAddressAllowed,
 } from "./channels";
 import { getSetting, HR_ALERT_EMAIL_KEY, HR_APPROVER_EMAIL_KEY, isValidEmail } from "./settings";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
-import { isRetiredControllerCase } from "./controller-retirement";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase, isRestrictedControllerCase as isRetiredControllerCase } from "./operational-eligibility";
 import {
   ACTION_IDENTITY_SETTING_KEY,
   identityForRole,

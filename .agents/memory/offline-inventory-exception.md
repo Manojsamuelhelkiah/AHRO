@@ -9,6 +9,11 @@ verified Demo workspace. Ten is a coverage target, not a cap: older examples
 remain and list totals may exceed ten. Complementary scenarios must vary
 supported request attributes and unresolved review needs, not just names.
 
+Later authorization for [explicit operational preparation and activation](offline-operational-authorization.md)
+supersedes this note's earlier permanent read-only and reporting-exclusion scope
+for eligible fictional examples. Inventory creation stays developer-only;
+activation is never automatic and does not restore retired run/reset tools.
+
 **Why:** The product owner requested an additive sample inventory after retiring
 synthetic execution controls, not a return of public creation, reset, simulation,
 provider activity, authority, or genuine outcome measurement.
@@ -43,13 +48,13 @@ Demo readers, while a blanket offline exemption could reveal private records.
 inventory; continue enforcing case read grants, denials and narrative restrictions
 on all other records.
 
-**Reporting boundary:** List visibility must not feed Dashboard or Analytics
-operational populations. Filter examples and retained test records before any
-total, active/blocked count, domain summary, readiness gate or rate denominator,
-and intersect approval history with that operational population.
+**Reporting boundary:** Authorized offline and online cases belong in applicable
+status counts and cohorts. Actual UAT and retained real/controller histories
+remain isolated. Missing or simulated evidence is unknown, never business success;
+only valid post-activation verified evidence may establish measured outcomes.
 
-**Why:** A Cases-list visibility change can bypass the backend outcome filters
-when other screens derive operational statistics directly from the list API.
+**Why:** The owner superseded offline-only reporting exclusions while preserving
+evidence-based outcomes and genuine UAT isolation.
 
 **Sample label boundary:** Sample case references are display labels, not verified
 employee identities, evidence references, or authority. Simplifying names and

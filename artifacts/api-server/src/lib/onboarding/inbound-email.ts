@@ -13,7 +13,7 @@ import {
   jurisdictionForWorkforceContext,
   withSensitiveLifecycleFence,
 } from "./sensitive-lifecycle";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase } from "./operational-eligibility";
 import {
   listSimulationEmailRoutes,
   recordSimulationEmailReply,

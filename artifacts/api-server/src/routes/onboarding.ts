@@ -1,7 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { retiredCaseCapabilityResponse, isRetiredCaseCapabilityRequest, denyRetiredCaseCapability } from "../lib/retired-case-capabilities";
-import { isHistoricalTestRecord } from "../lib/onboarding/historical-test-record";
+import { isRestrictedHistoricalCase as isHistoricalTestRecord, activationRecord, currentOperationalRecordSql,
+  isRestrictedControllerCase as isRetiredControllerCase, isRestrictedOfflineCase as isSyntheticOfflineCase,
+  operationalEligibilityInTransaction, evidenceBelongsToOperationalGeneration } from "../lib/onboarding/operational-eligibility";
 import { isAuthoritativelyUatRunOwnedCase, authoritativelyUatRunOwnedCaseIds } from "../lib/onboarding/uat-isolation";
+import { preparationSource, actualRunOwnsCase } from "../lib/onboarding/offline-preparation";
 import { randomUUID } from "node:crypto";
 import { decideApproval, getApprovalHistory } from "../lib/onboarding/approval-decisions";
 import { runConnectedReadinessTick } from "../lib/onboarding/connected-readiness-automation";
@@ -83,7 +86,7 @@ import {
   isDemoFullCoverageScenarioKey,
   seedDemoFullCoverage,
 } from "../lib/onboarding/demo-full-coverage";
-import { normalizedWorkCountry as normalizedDemoWorkCountry, isRetiredControllerCase } from "../lib/onboarding/controller-retirement";
+import { normalizedWorkCountry as normalizedDemoWorkCountry } from "../lib/onboarding/controller-retirement";
 import {
   ACTIVATION_PENDING_CONNECTOR_REQUIREMENTS,
   ensureConnectorsSeeded,
@@ -267,11 +270,10 @@ import {
   OperationalRequestOfflineError,
 } from "../lib/onboarding/operational-requests";
 import {
-  isSyntheticOfflineCase,
-  sampleCandidateEmailEligible,
   SYNTHETIC_OFFLINE_MARKER,
   SYNTHETIC_OFFLINE_WARNING,
 } from "../lib/onboarding/synthetic-offline";
+import { operationalCandidateEmailEligible as sampleCandidateEmailEligible } from "../lib/onboarding/operational-eligibility";
 import { getUatCaseIsolation } from "../lib/onboarding/uat-isolation";
 import {
   acquireCaseDispatchMutationLock,
@@ -325,7 +327,7 @@ import {
 } from "../lib/onboarding/sensitive-access";
 
 import { readHroBatchRequest, policyWithoutBatchIntake } from "../lib/onboarding/hro-batch-templates";
-import { isFictionalOfflineExampleCase } from "../lib/onboarding/offline-example-display";
+import { isFictionalOfflineExampleCase, isReportableFictionalOfflineExampleCase } from "../lib/onboarding/offline-example-display";
 import { CURATED_OFFLINE_EXAMPLES } from "../lib/onboarding/offline-example-extension";
 
 const router: IRouter = Router();
@@ -489,10 +491,11 @@ async function demoPrincipalVisibleCases<T extends {
   syntheticProvenance?: OnbSyntheticProvenance | null;
   candidateEmailAuthorizedAt?: Date | null;
   candidateEmailAuthorizedBy?: string | null;
+  operationalActivation?: typeof onbCases.$inferSelect["operationalActivation"];
 }>(req: Request, rows: T[]): Promise<T[]> {
   return await registeredDemoProfile(req.authUserId!)
     ? rows.filter((row) =>
-      isSyntheticOfflineCase(row) || isVerifiedHybridDemoControllerCase(row)
+      !row.operationalActivation && (isSyntheticOfflineCase(row) || isVerifiedHybridDemoControllerCase(row))
     )
     : rows;
 }
@@ -870,8 +873,11 @@ async function serializeCase(
   const profileSensitiveAccess = canReadProfile ? sensitiveAccess : NO_SENSITIVE_ACCESS;
   return {
     id: row.id,
-    controllerRetired: isHistoricalTestRecord(row) ||
+    controllerRetired: (!activationRecord(row, false) && isHistoricalTestRecord(row)) ||
       (presentation ? presentation.uatOwned : await isAuthoritativelyUatRunOwnedCase(row)),
+    reportingCaseEligible: (isReportableFictionalOfflineExampleCase(row) || Boolean(preparationSource(row)))
+      ? !await actualRunOwnsCase(db, row)
+      : !isHistoricalTestRecord(row) && !(presentation ? presentation.uatOwned : await isAuthoritativelyUatRunOwnedCase(row)),
     caseFamily: canReadProfile ? intakeRequest?.family ?? null : null,
     requestType: canReadProfile ? intakeRequest?.requestType ?? null : null,
     intakeSource: canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess) && emailIntake?.requestId ? "Email" : null,
@@ -906,7 +912,11 @@ async function serializeCase(
     scenarioKey: canReadProfile ? row.scenarioKey : null,
     // This server-derived output flag keeps every marker-backed offline case
     // out of interactive provider/contact controls in the client.
-    offlineSample: isSyntheticOfflineCase(row),
+    offlineSample: !activationRecord(row, false) && isSyntheticOfflineCase(row),
+    operationalActivated: Boolean(activationRecord(row, false)),
+    operationalStartedAt: row.operationalActivation?.generationStartedAt ?? row.operationalActivation?.activatedAt ?? null,
+    operationalSourceLabel: activationRecord(row, false)
+      ? `Fictional source ${row.scenarioKey}; original identity and records retained separately, not current evidence.` : null,
     /** Only server-marked, fictional Demo fixtures may bypass identity authority. */
     fictionalOfflineIdentity: canReadProfile && fictionalOfflineIdentity,
     planSummary: canReadNotes
@@ -1123,6 +1133,9 @@ router.get("/onboarding/dashboard", async (req, res, next) => {
       .map(({ approval }) => approval)
       .filter((approval) =>
         approval.status === "pending" &&
+        cases.some(candidate => candidate.id === approval.caseId &&
+          !isHistoricalTestRecord(candidate) &&
+          evidenceBelongsToOperationalGeneration(candidate, approval.createdAt, approval.id, "approvals")) &&
         aggregateCaseIds.has(approval.caseId) &&
         (!isDay1ReadinessApproval(approval) || readinessCaseIds.has(approval.caseId)));
     const recent = (await db
@@ -6101,10 +6114,19 @@ async function excludeUatAggregateCases<T extends {
   syntheticProvenance?: OnbSyntheticProvenance | null;
   notes?: string | null;
 }>(rows: T[]): Promise<T[]> {
-  const isolated = await Promise.all(rows.map(async (row) =>
-    (await getUatCaseIsolation(row)).isolated,
+  if (rows.length === 0) return [];
+  const originals = await db.select().from(onbCases).where(and(
+    inArray(onbCases.id, rows.map(row => row.id)),
+    inArray(onbCases.organizationId, [...new Set(rows.map(row => row.organizationId))]),
   ));
-  return rows.filter((row, index) => !isolated[index] && !isHistoricalTestRecord(row));
+  const byScope = new Map(originals.map(row => [`${row.organizationId}:${row.id}`, row]));
+  const isolated = await Promise.all(rows.map(async row => {
+    const original = byScope.get(`${row.organizationId}:${row.id}`);
+    if (!original) return true;
+    return (isReportableFictionalOfflineExampleCase(original) || preparationSource(original)) ? await actualRunOwnsCase(db, original)
+      : (await getUatCaseIsolation(row)).isolated || isHistoricalTestRecord(row);
+  }));
+  return rows.filter((row, index) => Boolean(byScope.get(`${row.organizationId}:${row.id}`)) && !isolated[index]);
 }
 
 async function loadOutcomeKpis(req: Request) {
@@ -6140,8 +6162,10 @@ async function loadOutcomeKpis(req: Request) {
         : new Date(asOf.getTime() - periodDays * 24 * 60 * 60 * 1000);
     const caseFilters = [
       organizationWhere(onbCases, organizationId),
-      lte(onbCases.createdAt, asOf),
-      ...(lowerBound ? [gte(onbCases.createdAt, lowerBound)] : []),
+      lte(sql<Date>`coalesce((coalesce(${onbCases.operationalActivation}->>'generationStartedAt',
+        ${onbCases.operationalActivation}->>'activatedAt'))::timestamptz, ${onbCases.createdAt})`, asOf),
+      ...(lowerBound ? [gte(sql<Date>`coalesce((coalesce(${onbCases.operationalActivation}->>'generationStartedAt',
+        ${onbCases.operationalActivation}->>'activatedAt'))::timestamptz, ${onbCases.createdAt})`, lowerBound)] : []),
       ...(parsed.data.region ? [eq(onbCases.geography, parsed.data.region)] : []),
       ...(parsed.data.hireType ? [eq(onbCases.hireType, parsed.data.hireType)] : []),
     ];
@@ -6150,14 +6174,14 @@ async function loadOutcomeKpis(req: Request) {
           .select()
           .from(onbCases)
           .where(and(...caseFilters))))
-          // Synthetic reset and retired controller cases are deliberately not
-          // evidence of a genuine onboarding outcome. Keep their simulated
-          // activity visible on their own run timeline, never in KPI cohorts.
-          .filter((candidate) =>
-            !isSyntheticOfflineCase(candidate) &&
-            !isRetiredControllerCase(candidate) &&
-            (candidate.scenarioKey === null || candidate.scenarioKey === undefined),
-          )
+          // Include authorized fictional examples in cohort counts without
+          // treating their retained simulated activity as verified outcomes.
+          .map(candidate => ({
+            ...candidate,
+            offlineExampleReportable: isReportableFictionalOfflineExampleCase(candidate) || Boolean(preparationSource(candidate)),
+            operationalEvidenceStartedAt: activationRecord(candidate)?.generationStartedAt
+              ?? activationRecord(candidate)?.activatedAt ?? null,
+          }))
       : [];
 
     const caseIds = cases.map((row) => row.id);
@@ -6183,6 +6207,7 @@ async function loadOutcomeKpis(req: Request) {
             and(
               organizationWhere(onbEvents, organizationId),
               inArray(onbCases.id, caseIds),
+              currentOperationalRecordSql(onbEvents.organizationId, onbEvents.caseId, onbEvents.createdAt),
             ),
           ),
         db
@@ -6200,6 +6225,7 @@ async function loadOutcomeKpis(req: Request) {
               organizationWhere(onbSystemChecks, organizationId),
               inArray(onbCases.id, caseIds),
               eq(onbSystemChecks.system, "bgv"),
+              currentOperationalRecordSql(onbSystemChecks.organizationId, onbSystemChecks.caseId, onbSystemChecks.createdAt),
             ),
           ),
         db
@@ -6372,6 +6398,9 @@ router.get("/onboarding/analytics", async (req, res, next) => {
     const approvals = approvalRows
       .map(({ approval }) => approval)
       .filter((approval) =>
+        cases.some(candidate => candidate.id === approval.caseId &&
+          !isHistoricalTestRecord(candidate) &&
+          evidenceBelongsToOperationalGeneration(candidate, approval.createdAt, approval.id, "approvals")) &&
         aggregateCaseIds.has(approval.caseId) &&
         (!isDay1ReadinessApproval(approval) || readinessCaseIds.has(approval.caseId)));
 

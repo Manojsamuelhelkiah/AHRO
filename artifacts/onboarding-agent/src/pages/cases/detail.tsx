@@ -27,6 +27,7 @@ import { Presentation, AlertTriangle } from 'lucide-react';
 
 import { useUser } from '@clerk/react';
 import { CaseHeader, CaseHealthStrip, CaseTabs, isOfflineDemoSample } from './detail/components';
+import { OperationalPreparationPanel } from './detail/operational-preparation-panel';
 import { GatewaysStrip } from './detail/gateways-strip';
 import { EmployeeVaultPanel } from './detail/employee-vault-panel';
 import { OverviewTab } from './detail/overview';
@@ -314,6 +315,7 @@ export function CaseDetailPage() {
             : <div className="mb-6"><div role="status" className="rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] px-3 py-2 text-xs text-[var(--status-amber-fg)]">Logistics and portal edits are restricted by your current case permissions.</div></div>}
         </>
       )}
+      {(offlineSample || c.operationalActivated) && <OperationalPreparationPanel caseId={caseId} canRead={permissions.access.flowRead && permissions.access.profileRead} />}
       <CaseHealthStrip c={c} pendingApprovals={pendingApprovals} offlineSample={offlineSample} />
 
       <CaseTabs activeTab={activeTab} setTab={setActiveTab} offlineSample={offlineSample} />

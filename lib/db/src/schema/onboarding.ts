@@ -16,6 +16,7 @@ import {
 import { sql } from "drizzle-orm";
 import { organizationsTable } from "./organizations";
 import type { HumanPermissionDecision } from "./human-permission";
+import type { OfflineCasePreparation, OfflineCaseActivation } from "./offline-preparation";
 
 export type OnbReadinessItemRow = {
   key: string;
@@ -234,6 +235,9 @@ export const onbCases = pgTable("onb_cases", {
   notes: text("notes"),
   /** Set only by server-owned fictional offline case creators; never inferred from notes. */
   syntheticProvenance: text("synthetic_provenance").$type<OnbSyntheticProvenance>(),
+  /** Preparation only: no approval, runtime checkpoint or effect eligibility. */
+  operationalPreparation: jsonb("operational_preparation").$type<OfflineCasePreparation>(),
+  operationalActivation: jsonb("operational_activation").$type<OfflineCaseActivation>(),
   /** Permanent operational deny fence; never implies fictional identity. */
   controllerRetired: boolean("controller_retired").notNull().default(false),
   /**
@@ -584,6 +588,8 @@ export const onbSystemChecks = pgTable(
     status: text("status").notNull().default("pending"),
     requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
     dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    /** Runtime boundary, not reconstructed historical outcome evidence. */
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     /**
      * Immutable classification of the source that produced the terminal
@@ -701,6 +707,8 @@ export const onbDocuments = pgTable(
     reminderCount: integer("reminder_count").notNull().default(0),
     lastReminderAt: timestamp("last_reminder_at", { withTimezone: true }),
     reminderNextAt: timestamp("reminder_next_at", { withTimezone: true }),
+    /** Runtime boundary; legacy rows predate any subsequently activated generation. */
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

@@ -172,6 +172,9 @@ import type {
   ListSensitiveLifecycleDeletionJobs200,
   ListSensitiveLifecycleHolds200,
   ModelOption,
+  OfflineActivationInput,
+  OfflinePreparationInput,
+  OfflinePreparationView,
   OnbActionCenter,
   OnbActionCenterActionResult,
   OnbActionCenterCallOutcomeInput,
@@ -351,6 +354,7 @@ import type {
   StandardProviderConfigurationInput,
   StandardProviderSourceConfirmationRefreshInput,
   StandardProviderStatusResponse,
+  StartOfflineCaseWorkflowBody,
   StartOnboardingVoiceCall200,
   StartOnboardingVoiceCallBody,
   SystemInfo,
@@ -430,6 +434,155 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetOfflineCasePreparationUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/operational-preparation`
+}
+
+/**
+ * @summary Read preparation prerequisites without admitting operational effects
+ */
+export const getOfflineCasePreparation = async (caseId: number, options?: RequestInit): Promise<OfflinePreparationView> => {
+
+  return customFetch<OfflinePreparationView>(getGetOfflineCasePreparationUrl(caseId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOfflineCasePreparationQueryKey = (caseId: number,) => {
+    return [
+    `/api/onboarding/cases/${caseId}/operational-preparation`
+    ] as const;
+    }
+
+
+export const getGetOfflineCasePreparationQueryOptions = <TData = Awaited<ReturnType<typeof getOfflineCasePreparation>>, TError = ErrorType<unknown>>(caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOfflineCasePreparation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOfflineCasePreparationQueryKey(caseId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOfflineCasePreparation>>> = ({ signal }) => getOfflineCasePreparation(caseId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOfflineCasePreparation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOfflineCasePreparationQueryResult = NonNullable<Awaited<ReturnType<typeof getOfflineCasePreparation>>>
+export type GetOfflineCasePreparationQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Read preparation prerequisites without admitting operational effects
+ */
+
+export function useGetOfflineCasePreparation<TData = Awaited<ReturnType<typeof getOfflineCasePreparation>>, TError = ErrorType<unknown>>(
+ caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOfflineCasePreparation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOfflineCasePreparationQueryOptions(caseId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveOfflineCasePreparationUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/operational-preparation`
+}
+
+/**
+ * @summary Save revision-fenced real request input separately from fictional history
+ */
+export const saveOfflineCasePreparation = async (caseId: number,
+    offlinePreparationInput: OfflinePreparationInput, options?: RequestInit): Promise<OfflinePreparationView> => {
+
+  return customFetch<OfflinePreparationView>(getSaveOfflineCasePreparationUrl(caseId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(offlinePreparationInput)
+  }
+);}
+
+
+
+
+
+export const getSaveOfflineCasePreparationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveOfflineCasePreparation>>, TError,{caseId: number;data: BodyType<OfflinePreparationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveOfflineCasePreparation>>, TError,{caseId: number;data: BodyType<OfflinePreparationInput>}, TContext> => {
+
+const mutationKey = ['saveOfflineCasePreparation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveOfflineCasePreparation>>, {caseId: number;data: BodyType<OfflinePreparationInput>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  saveOfflineCasePreparation(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveOfflineCasePreparationMutationResult = NonNullable<Awaited<ReturnType<typeof saveOfflineCasePreparation>>>
+    export type SaveOfflineCasePreparationMutationBody = BodyType<OfflinePreparationInput>
+    export type SaveOfflineCasePreparationMutationError = ErrorType<void>
+
+    /**
+ * @summary Save revision-fenced real request input separately from fictional history
+ */
+export const useSaveOfflineCasePreparation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveOfflineCasePreparation>>, TError,{caseId: number;data: BodyType<OfflinePreparationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveOfflineCasePreparation>>,
+        TError,
+        {caseId: number;data: BodyType<OfflinePreparationInput>},
+        TContext
+      > => {
+      return useMutation(getSaveOfflineCasePreparationMutationOptions(options));
+    }
 
 export const getGetAgentCatalogueUrl = () => {
 
@@ -577,6 +730,222 @@ export const useRegisterCatalogueAgent = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRegisterCatalogueAgentMutationOptions(options));
+    }
+
+export const getActivateOfflineCaseUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/operational-activation`
+}
+
+/**
+ * @summary Explicit named-user activation; starts no work and sends nothing
+ */
+export const activateOfflineCase = async (caseId: number,
+    offlineActivationInput: OfflineActivationInput, options?: RequestInit): Promise<OfflinePreparationView> => {
+
+  return customFetch<OfflinePreparationView>(getActivateOfflineCaseUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(offlineActivationInput)
+  }
+);}
+
+
+
+
+
+export const getActivateOfflineCaseMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateOfflineCase>>, TError,{caseId: number;data: BodyType<OfflineActivationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof activateOfflineCase>>, TError,{caseId: number;data: BodyType<OfflineActivationInput>}, TContext> => {
+
+const mutationKey = ['activateOfflineCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof activateOfflineCase>>, {caseId: number;data: BodyType<OfflineActivationInput>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  activateOfflineCase(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActivateOfflineCaseMutationResult = NonNullable<Awaited<ReturnType<typeof activateOfflineCase>>>
+    export type ActivateOfflineCaseMutationBody = BodyType<OfflineActivationInput>
+    export type ActivateOfflineCaseMutationError = ErrorType<void>
+
+    /**
+ * @summary Explicit named-user activation; starts no work and sends nothing
+ */
+export const useActivateOfflineCase = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateOfflineCase>>, TError,{caseId: number;data: BodyType<OfflineActivationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof activateOfflineCase>>,
+        TError,
+        {caseId: number;data: BodyType<OfflineActivationInput>},
+        TContext
+      > => {
+      return useMutation(getActivateOfflineCaseMutationOptions(options));
+    }
+
+export const getReconfirmOfflineCaseActivationUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/operational-reconfirmation`
+}
+
+/**
+ * @summary Renew current named-user identity and policy review without starting work
+ */
+export const reconfirmOfflineCaseActivation = async (caseId: number,
+    offlineActivationInput: OfflineActivationInput, options?: RequestInit): Promise<OfflinePreparationView> => {
+
+  return customFetch<OfflinePreparationView>(getReconfirmOfflineCaseActivationUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(offlineActivationInput)
+  }
+);}
+
+
+
+
+
+export const getReconfirmOfflineCaseActivationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reconfirmOfflineCaseActivation>>, TError,{caseId: number;data: BodyType<OfflineActivationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reconfirmOfflineCaseActivation>>, TError,{caseId: number;data: BodyType<OfflineActivationInput>}, TContext> => {
+
+const mutationKey = ['reconfirmOfflineCaseActivation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reconfirmOfflineCaseActivation>>, {caseId: number;data: BodyType<OfflineActivationInput>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  reconfirmOfflineCaseActivation(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReconfirmOfflineCaseActivationMutationResult = NonNullable<Awaited<ReturnType<typeof reconfirmOfflineCaseActivation>>>
+    export type ReconfirmOfflineCaseActivationMutationBody = BodyType<OfflineActivationInput>
+    export type ReconfirmOfflineCaseActivationMutationError = ErrorType<void>
+
+    /**
+ * @summary Renew current named-user identity and policy review without starting work
+ */
+export const useReconfirmOfflineCaseActivation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reconfirmOfflineCaseActivation>>, TError,{caseId: number;data: BodyType<OfflineActivationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reconfirmOfflineCaseActivation>>,
+        TError,
+        {caseId: number;data: BodyType<OfflineActivationInput>},
+        TContext
+      > => {
+      return useMutation(getReconfirmOfflineCaseActivationMutationOptions(options));
+    }
+
+export const getStartOfflineCaseWorkflowUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/operational-start`
+}
+
+/**
+ * @summary Explicitly start the supported operational workflow after activation
+ */
+export const startOfflineCaseWorkflow = async (caseId: number,
+    startOfflineCaseWorkflowBody: StartOfflineCaseWorkflowBody, options?: RequestInit): Promise<OfflinePreparationView> => {
+
+  return customFetch<OfflinePreparationView>(getStartOfflineCaseWorkflowUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(startOfflineCaseWorkflowBody)
+  }
+);}
+
+
+
+
+
+export const getStartOfflineCaseWorkflowMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startOfflineCaseWorkflow>>, TError,{caseId: number;data: BodyType<StartOfflineCaseWorkflowBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startOfflineCaseWorkflow>>, TError,{caseId: number;data: BodyType<StartOfflineCaseWorkflowBody>}, TContext> => {
+
+const mutationKey = ['startOfflineCaseWorkflow'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startOfflineCaseWorkflow>>, {caseId: number;data: BodyType<StartOfflineCaseWorkflowBody>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  startOfflineCaseWorkflow(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartOfflineCaseWorkflowMutationResult = NonNullable<Awaited<ReturnType<typeof startOfflineCaseWorkflow>>>
+    export type StartOfflineCaseWorkflowMutationBody = BodyType<StartOfflineCaseWorkflowBody>
+    export type StartOfflineCaseWorkflowMutationError = ErrorType<void>
+
+    /**
+ * @summary Explicitly start the supported operational workflow after activation
+ */
+export const useStartOfflineCaseWorkflow = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startOfflineCaseWorkflow>>, TError,{caseId: number;data: BodyType<StartOfflineCaseWorkflowBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startOfflineCaseWorkflow>>,
+        TError,
+        {caseId: number;data: BodyType<StartOfflineCaseWorkflowBody>},
+        TContext
+      > => {
+      return useMutation(getStartOfflineCaseWorkflowMutationOptions(options));
     }
 
 export const getGetIntentCatalogUrl = () => {

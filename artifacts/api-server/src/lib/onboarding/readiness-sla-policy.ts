@@ -34,8 +34,7 @@ import {
 import type { OnboardingDbTransaction } from "./settings";
 import { isValidEmail } from "./settings";
 import { reopenApprovalInTransaction } from "./approval-version";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
-import { isRetiredControllerCase } from "./controller-retirement";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase, isRestrictedControllerCase as isRetiredControllerCase } from "./operational-eligibility";
 import {
   hasTrustedBgvClearanceEvidence,
   hasTrustedHrisActivationEvidence,

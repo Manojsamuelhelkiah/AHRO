@@ -34,8 +34,8 @@ import {
   OPAQUE_CANDIDATE_UPLOAD_DATA_CLASSES,
   saveReservedCandidateUpload,
 } from "../lib/onboarding/candidate-upload-reservations";
-import { isUatRunIsolatedCase } from "../lib/onboarding/synthetic-offline";
-import { isHistoricalTestRecord } from "../lib/onboarding/historical-test-record";
+import { isRestrictedUatKeyCase as isUatRunIsolatedCase, isRestrictedHistoricalCase as isHistoricalTestRecord,
+  currentOperationalRecordSql } from "../lib/onboarding/operational-eligibility";
 import { isAuthoritativelyUatRunOwnedCase } from "../lib/onboarding/uat-isolation";
 
 const router: IRouter = Router();
@@ -97,7 +97,8 @@ router.get("/candidate/portal", async (req, res, next) => {
     const [logistics, documents, uploads] = await Promise.all([
       ensureCaseLogistics(ctx.organizationId, ctx.caseId),
       db.select({ id: onbDocuments.id, label: onbDocuments.label, required: onbDocuments.required, status: onbDocuments.status, note: onbDocuments.note })
-        .from(onbDocuments).where(and(eq(onbDocuments.organizationId, ctx.organizationId), eq(onbDocuments.caseId, ctx.caseId))).orderBy(onbDocuments.id),
+        .from(onbDocuments).where(and(eq(onbDocuments.organizationId, ctx.organizationId), eq(onbDocuments.caseId, ctx.caseId),
+          currentOperationalRecordSql(onbDocuments.organizationId, onbDocuments.caseId, onbDocuments.createdAt))).orderBy(onbDocuments.id),
       db.select({
         documentId: onbCandidateUploads.documentId,
         checksumSha256: onbCandidateUploads.checksumSha256,
@@ -107,7 +108,8 @@ router.get("/candidate/portal", async (req, res, next) => {
         malwareScannedAt: onbCandidateUploads.malwareScannedAt,
         malwareScanSha256: onbCandidateUploads.malwareScanSha256,
       })
-          .from(onbCandidateUploads).where(and(eq(onbCandidateUploads.organizationId, ctx.organizationId), eq(onbCandidateUploads.caseId, ctx.caseId))).orderBy(desc(onbCandidateUploads.id)),
+          .from(onbCandidateUploads).where(and(eq(onbCandidateUploads.organizationId, ctx.organizationId), eq(onbCandidateUploads.caseId, ctx.caseId),
+            currentOperationalRecordSql(onbCandidateUploads.organizationId, onbCandidateUploads.caseId, onbCandidateUploads.createdAt))).orderBy(desc(onbCandidateUploads.id)),
     ]);
     res.setHeader("Cache-Control", "private, no-store");
      const latest = new Map<number, typeof uploads[number]>();
@@ -197,6 +199,7 @@ router.post("/candidate/documents/:documentId/upload", async (req, res, next) =>
     if (Number.isFinite(length) && length > MAX_CANDIDATE_FILE_BYTES) return res.status(413).json({ message: "File exceeds the 10MB limit" });
     const [doc] = await db.select().from(onbDocuments).where(and(
       eq(onbDocuments.id, documentId), eq(onbDocuments.organizationId, ctx.organizationId), eq(onbDocuments.caseId, ctx.caseId),
+      currentOperationalRecordSql(onbDocuments.organizationId, onbDocuments.caseId, onbDocuments.createdAt),
     ));
     if (!doc) return res.status(404).json({ message: "Checklist item not found" });
     const dataClass = sensitiveDataClassForDocument(doc);

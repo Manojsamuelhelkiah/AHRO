@@ -60,10 +60,9 @@ import uatAuthRouter from "./uat-auth";
 import { requireUatAdmission } from "../middlewares/uat-admission";
 import { caseRetirementFence } from "../middlewares/case-retirement";
 import { isRetiredCaseCapabilityRequest, retiredCaseCapabilityResponse } from "../lib/retired-case-capabilities";
-import { isSyntheticOfflineCase } from "../lib/onboarding/synthetic-offline";
-import { isRetiredControllerCase } from "../lib/onboarding/controller-retirement";
 import { registeredDemoProfile } from "../lib/demo-principal";
-import { isHistoricalTestRecord } from "../lib/onboarding/historical-test-record";
+import onboardingOfflinePreparationRouter from "./onboarding-offline-preparation";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase, isRestrictedControllerCase as isRetiredControllerCase,
 
 const router: IRouter = Router();
 
@@ -111,6 +110,9 @@ router.use((req, res, next) => {
 });
 router.use(hroRequestContext);
 router.use(requireUatAdmission);
+// This exact-source, named-permission draft endpoint has its own independent
+// UAT/controller/collection fences and does not admit any operational effects.
+router.use(onboardingOfflinePreparationRouter);
 router.use(caseRetirementFence);
 // Service requests have no onboarding execution adapter; deletion keeps its
 // existing hold-aware path. Separation closure remains specification-blocked.

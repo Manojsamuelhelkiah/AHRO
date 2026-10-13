@@ -2,7 +2,7 @@ import type { RequestHandler } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, onbCases } from "@workspace/db";
 import { registeredDemoProfile } from "../lib/demo-principal";
-import { isHistoricalTestRecord } from "../lib/onboarding/historical-test-record";
+import { isRestrictedHistoricalCase as isHistoricalTestRecord, operationalEligibilityInTransaction } from "../lib/onboarding/operational-eligibility";
 import { getUatCaseIsolation } from "../lib/onboarding/uat-isolation";
 import { isRetiredCaseCapabilityRequest, retiredCaseCapabilityResponse } from "../lib/retired-case-capabilities";
 
@@ -42,6 +42,10 @@ export const caseRetirementFence: RequestHandler = async (req, res, next) => {
         if (row && (isHistoricalTestRecord(row) || (await getUatCaseIsolation(row)).isolated)) {
           retiredCaseCapabilityResponse(req, res, next);
           return;
+        }
+        if (row) {
+          const live = await db.transaction(tx => operationalEligibilityInTransaction(tx, row));
+          if (!live.allowed) { res.status(409).json({ message: live.reason }); return; }
         }
       }
     }

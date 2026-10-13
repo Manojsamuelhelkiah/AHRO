@@ -11,7 +11,9 @@ import {
   accessUserGroups,
   accessUserGroupMembers,
   db,
+  DEMO_ORGANIZATION_ID,
   onbCases,
+  onbSettings,
   organizationMembershipsTable,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -73,6 +75,7 @@ export type AccessGovernanceKey =
   | (typeof ACCESS_GOVERNANCE_CATALOG.tools)[number];
 
 import { isPlatformSuperAdmin } from "./private-platform-admin";
+import { demoPrincipalSettingKey, parseRegisteredDemoProfile } from "./demo-principal";
 
 const FIELD_KEYS = new Set<string>(ACCESS_GOVERNANCE_CATALOG.fields);
 const FLOW_KEYS = new Set<string>(ACCESS_GOVERNANCE_CATALOG.flows);
@@ -120,6 +123,7 @@ type PrincipalSubject = { principalType: "human" | "agent"; principalId: string 
 type AccessReadBatch = {
   now: Date;
   cases: Set<number>;
+  activatedCases: Set<number>;
   members: Set<string>;
   agents: (typeof accessAgents.$inferSelect)[];
   memberships: (typeof accessUserGroupMembers.$inferSelect)[];
@@ -153,7 +157,7 @@ export async function resolveEffectiveAccessForCases(
     const scope = (table: { scope: AnyColumn; caseId: AnyColumn }) =>
       or(eq(table.scope, "tenant"), and(eq(table.scope, "case"), inArray(table.caseId, ids)))!;
     const principals = [...new Set([input.principalId, input.initiatorUserId].filter((id): id is string => Boolean(id)))];
-    const cases = await tx.select({ id: onbCases.id }).from(onbCases).where(and(
+    const cases = await tx.select({ id: onbCases.id, activation: onbCases.operationalActivation }).from(onbCases).where(and(
       eq(onbCases.organizationId, input.organizationId), inArray(onbCases.id, ids),
     ));
     const agents = input.principalType === "agent" ? await tx.select().from(accessAgents).where(and(
@@ -210,7 +214,9 @@ export async function resolveEffectiveAccessForCases(
         inArray(organizationMembershipsTable.clerkUserId, memberIds), isNull(organizationMembershipsTable.revokedAt),
       )) : [];
     const batch: AccessReadBatch = {
-      now, cases: new Set(cases.map(row => row.id)), members: new Set(members.map(row => row.userId)),
+      now, cases: new Set(cases.map(row => row.id)),
+      activatedCases: new Set(cases.filter(row => row.activation !== null).map(row => row.id)),
+      members: new Set(members.map(row => row.userId)),
       agents, memberships, userGroups, groupLinks, directLinks, securityGroups, attachments, policies, grants,
     };
     const result = new Map<number, EffectiveAccess>();
@@ -663,6 +669,22 @@ async function evaluateEffectiveAccess(
       !(await caseBelongsToTenant(tx, input.organizationId, input.caseId, batch))) {
       for (const key of keys) reasons[key].push("Case does not belong to the requested tenant.");
       return { allows: [], reasons };
+    }
+    const activated = batch
+      ? batch.activatedCases.has(input.caseId)
+      : Boolean((await tx.select({ activation: onbCases.operationalActivation }).from(onbCases).where(and(
+        eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.caseId),
+      )).limit(1))[0]?.activation);
+    if (activated) {
+      const human = input.principalType === "human" ? input.principalId : input.initiatorUserId;
+      const [registration] = human ? await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+        eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+        eq(onbSettings.key, demoPrincipalSettingKey(human)),
+      )).limit(1) : [];
+      if (parseRegisteredDemoProfile(registration?.value)) {
+        for (const key of keys) reasons[key].push("Activated examples contain real operational data; a shared public Demo identity cannot inherit access to those records.");
+        return { allows: [], reasons };
+      }
     }
   }
 

@@ -13,21 +13,20 @@ const examples = CASE_TYPES.filter(family => family !== "All Cases").flatMap((fa
   })),
 );
 
-test("the full 120-example inventory stays in ordinary lists but contributes no operational population or denominators", () => {
+test("all 120 authorized offline examples reconcile between ordinary lists and reporting totals", () => {
   assert.equal(examples.length, 120);
   assert.equal(casesForList(examples, false).length, 120);
   const approvals = examples.map(row => ({ caseId: row.id, status: "pending", agent: "Historical example" }));
   const population = operationalReportingPopulation(examples, approvals);
-  assert.equal(population.cases.length, 0);
+  assert.equal(population.cases.length, 120);
   assert.equal(population.approvals.length, 0);
-  assert.equal(new Set(population.cases.map(row => row.caseFamily)).size, 0);
-  assert.equal(new Set(population.cases.map(row => row.geography)).size, 0);
-  assert.equal(population.cases.flatMap(row => Object.values(row.gateways)).length, 0);
-  // Dashboard and Analytics derive their totals, rates, choices and readiness
-  // summaries from this shared empty population, not the 120 visible rows.
+  assert.equal(new Set(population.cases.map(row => row.caseFamily)).size, 12);
+  assert.equal(new Set(population.cases.map(row => row.geography)).size, 12);
+  assert.equal(population.cases.flatMap(row => Object.values(row.gateways)).length, 360);
+  assert.equal(population.cases.filter(row => row.status === "Blocked").length, 120);
 });
 
-test("operational totals and intervention denominators stay unchanged after adding all 120 blocked examples", () => {
+test("online plus offline cases add up while fixture approvals do not become current interventions", () => {
   const live = [
     { ...examples[0]!, id: 1, caseFamily: "Payroll", controllerRetired: false, offlineSample: false, status: "Completed" },
     { ...examples[1]!, id: 2, caseFamily: "Leave", controllerRetired: false, offlineSample: false, status: "In Progress" },
@@ -36,15 +35,19 @@ test("operational totals and intervention denominators stay unchanged after addi
   const historicalApprovals = examples.map(row => ({ caseId: row.id, status: "pending", agent: "Example" }));
   const before = operationalReportingPopulation(live, liveApprovals);
   const after = operationalReportingPopulation([...live, ...examples], [...liveApprovals, ...historicalApprovals]);
-  assert.deepEqual(after, before);
-  assert.equal(after.cases.filter(row => row.status !== "Completed").length, 1);
-  assert.equal(after.cases.filter(row => row.status === "Blocked").length, 0);
-  assert.equal(after.approvals.length / after.cases.length, 0.5);
-  assert.deepEqual([...new Set(after.cases.map(row => row.caseFamily))], ["Payroll", "Leave"]);
+  assert.equal(after.cases.length, before.cases.length + 120);
+  assert.equal(after.cases.filter(row => row.status !== "Completed").length, 121);
+  assert.equal(after.cases.filter(row => row.status === "Blocked").length, 120);
+  assert.deepEqual(after.approvals, before.approvals);
+  assert.ok(new Set(after.cases.map(row => row.caseFamily)).size >= 12);
 });
 
-test("either offline or retired flag independently excludes a row and its approvals", () => {
+test("offline status does not exclude counts; explicit exclusions and retained real history remain isolated", () => {
   const cases = [{ id: 1, offlineSample: true }, { id: 2, controllerRetired: true }, { id: 3 }];
   assert.deepEqual(operationalReportingPopulation(cases, [{ caseId: 1 }, { caseId: 2 }, { caseId: 3 }]),
-    { cases: [cases[2]], approvals: [{ caseId: 3 }] });
+    { cases: [cases[0], cases[2]], approvals: [{ caseId: 3 }] });
+  assert.deepEqual(operationalReportingPopulation([
+    { id: 4, offlineSample: true, reportingCaseEligible: false },
+    { id: 5, controllerRetired: true, fictionalOfflineIdentity: true, reportingCaseEligible: true },
+  ], []), { cases: [{ id: 5, controllerRetired: true, fictionalOfflineIdentity: true, reportingCaseEligible: true }], approvals: [] });
 });

@@ -43,6 +43,36 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /onboarding/cases/{caseId}/operational-preparation:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer } }
+    get:
+      operationId: getOfflineCasePreparation
+      tags: [onboarding]
+      summary: Read preparation prerequisites without admitting operational effects
+      responses:
+        "200":
+          description: Scoped preparation journey and current prerequisites
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OfflinePreparationView" }
+    put:
+      operationId: saveOfflineCasePreparation
+      tags: [onboarding]
+      summary: Save revision-fenced real request input separately from fictional history
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OfflinePreparationInput" }
+      responses:
+        "200":
+          description: Saved preparation, without starting work or contacting anyone
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OfflinePreparationView" }
+        "403": { description: Current named-user field and case permissions required }
+        "409": { description: "Stale revision, restricted history or unmet collection policy" }
   /agent-catalogue:
     get:
       operationId: getAgentCatalogue
@@ -83,6 +113,76 @@ paths:
           description: Current client administration required
         "409":
           description: Setup conflict; reload and explicitly resolve
+  /onboarding/cases/{caseId}/operational-activation:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer } }
+    post:
+      operationId: activateOfflineCase
+      tags: [onboarding]
+      summary: Explicit named-user activation; starts no work and sends nothing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OfflineActivationInput" }
+      responses:
+        "200":
+          description: Fresh operational generation recorded on the same case
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OfflinePreparationView" }
+        "403": { description: Named user and current case permissions required }
+        "409": { description: "Stale review, restricted history or unmet current requirements" }
+  /onboarding/cases/{caseId}/operational-reconfirmation:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer } }
+    post:
+      operationId: reconfirmOfflineCaseActivation
+      tags: [onboarding]
+      summary: Renew current named-user identity and policy review without starting work
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OfflineActivationInput" }
+      responses:
+        "200":
+          description: Reviewed current bindings without replaying history
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OfflinePreparationView" }
+        "403": { description: Named user and current case permissions required }
+        "409": { description: "Stale review or unmet current requirements" }
+  /onboarding/cases/{caseId}/operational-start:
+    parameters:
+      - name: caseId
+        in: path
+        required: true
+        schema: { type: integer }
+    post:
+      operationId: startOfflineCaseWorkflow
+      tags: [onboarding]
+      summary: Explicitly start the supported operational workflow after activation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedRevision, requirementsFingerprint, confirmStart]
+              properties:
+                expectedRevision: { type: integer, minimum: 1 }
+                requirementsFingerprint: { type: string, pattern: "^[a-f0-9]{64}$" }
+                confirmStart: { type: boolean, enum: [true] }
+      responses:
+        "200":
+          description: Started the current supported generation without replaying history
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OfflinePreparationView" }
+        "403": { description: Current named-user workflow and dispatch permissions required }
+        "409": { description: "Stale confirmation, unsupported family, or unmet requirements" }
   /intent-catalog:
     get:
       operationId: getIntentCatalog
@@ -6924,6 +7024,59 @@ components:
         type: integer
         minimum: 1
   schemas:
+    OfflinePreparationInput:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, data]
+      properties:
+        expectedRevision: { type: integer }
+        data:
+          type: object
+          additionalProperties: { type: string, maxLength: 240 }
+    OfflinePreparationField:
+      type: object
+      required: [key, label, kind, required, description]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        kind: { type: string, enum: [text, date, email, country, choice] }
+        required: { type: boolean }
+        description: { type: string }
+        values: { type: array, items: { type: string } }
+    OfflinePreparationView:
+      type: object
+      required: [caseId, eligible, canEdit, canReadData, revision, family, fields, data, blockers, state, sourceLabel, evidenceStatus, canActivate, canReconfirm, requirementsFingerprint, workflowBlocker, activationGeneration]
+      properties:
+        caseId: { type: integer }
+        eligible: { type: boolean }
+        canEdit: { type: boolean }
+        canReadData: { type: boolean }
+        canActivate: { type: boolean }
+        canReconfirm: { type: boolean }
+        canStart: { type: boolean }
+        workflowStarted: { type: boolean }
+        sourceName: { type: ["string", "null"] }
+        sourceEmail: { type: ["string", "null"] }
+        requirementsFingerprint: { type: ["string", "null"] }
+        workflowBlocker: { type: ["string", "null"] }
+        activationGeneration: { type: ["string", "null"] }
+        revision: { type: integer }
+        family: { type: ["string", "null"] }
+        state: { type: string, enum: [unprepared, preparing, restricted-history, activated, activated-blocked] }
+        sourceLabel: { type: string }
+        evidenceStatus: { type: string, enum: [unverified] }
+        fields: { type: array, items: { $ref: "#/components/schemas/OfflinePreparationField" } }
+        data: { type: object, additionalProperties: { type: string } }
+        blockers: { type: array, items: { type: string } }
+    OfflineActivationInput:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, requirementsFingerprint, confirmIdentity, excludeHistoricalEvidence]
+      properties:
+        expectedRevision: { type: integer, minimum: 1 }
+        requirementsFingerprint: { type: string, pattern: "^[a-f0-9]{64}$" }
+        confirmIdentity: { type: boolean, enum: [true] }
+        excludeHistoricalEvidence: { type: boolean, enum: [true] }
     CatalogueAgentRegistrationInput:
       type: object
       additionalProperties: false
@@ -12366,6 +12519,18 @@ components:
         offlineSample:
           type: boolean
           description: Server-derived marker for a provider-isolated offline Demo sample
+        operationalActivated:
+          type: boolean
+          description: Retained named-user activation; current permission and policy checks still govern work
+        reportingCaseEligible:
+          type: boolean
+          description: Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history
+        operationalStartedAt:
+          type: ["string", "null"]
+          description: Current operational generation boundary, separate from original source creation
+        operationalSourceLabel:
+          type: ["string", "null"]
+          description: Original fictional source, not current employee identity or evidence
         fictionalOfflineIdentity:
           type: boolean
           description: Case-scoped identity projection is synthetic and does not represent sensitive-record authority

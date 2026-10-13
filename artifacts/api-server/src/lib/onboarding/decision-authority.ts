@@ -3,7 +3,7 @@ import { clerkClient } from "@clerk/express";
 import { and, eq } from "drizzle-orm";
 import { onbApprovals, onbAuthorityAudit, onbCases, onbSettings, type OnbAuthorityRole, type OnbAuthorityScope } from "@workspace/db/schema";
 import type { OnboardingDbTransaction } from "./settings";
-import { isRetiredControllerCase } from "./controller-retirement";
+import { isRestrictedControllerCase as isRetiredControllerCase } from "./operational-eligibility";
 import type { ApprovalDecision, ApprovalProposal } from "./compound-action-contract";
 import { hasHumanPermissions, permissionReceiptStillCurrent, type HumanPermissionReceipt } from "../human-permissions";
 

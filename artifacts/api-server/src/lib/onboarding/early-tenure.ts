@@ -24,8 +24,7 @@ import {
 import { sendAdministrativeEmail } from "./channels";
 import { hasCurrentAuthorityScope, roleMayExerciseScope } from "./decision-authority";
 import { hasHumanPermissions } from "../human-permissions";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
-import { isRetiredControllerCase } from "./controller-retirement";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase, isRestrictedControllerCase as isRetiredControllerCase } from "./operational-eligibility";
 import { type OnboardingDbTransaction } from "./settings";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,

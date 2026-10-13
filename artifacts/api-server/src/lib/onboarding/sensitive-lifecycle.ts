@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { hasHumanPermissions, recordHumanPermissionDecision, recordedHumanPermissionDecisionCurrent } from "../human-permissions";
+import { operationalEligibilityInTransaction } from "./operational-eligibility";
 import { isSeparationOrLegacyExit } from "./separation-isolation";
 import { withHroOrganizationContext, withHroCaseContext } from "../hro-context/manager";
 import { currentHroContext } from "../hro-context/core";
@@ -149,6 +150,28 @@ export function jurisdictionForWorkforceContext(value: unknown): string | null {
 }
 
 /**
+ * A separate unverified operational draft still contains real personal data.
+ * Its explicitly supplied work country therefore participates in collection
+ * and retention even while the fictional source has no runtime jurisdiction.
+ * Conflicting scopes stay unresolved; never choose whichever policy is shorter.
+ */
+export function jurisdictionForCaseDerivedEnvelope(row: {
+  id: number; organizationId: string; workforceContext: unknown;
+  operationalPreparation?: typeof onbCases.$inferSelect.operationalPreparation;
+}): string | null {
+  const original = jurisdictionForWorkforceContext(row.workforceContext);
+  const draft = row.operationalPreparation;
+  if (!draft) return original;
+  if (draft.schema !== "offline-case-preparation/v1" ||
+    draft.organizationId !== row.organizationId || draft.caseId !== row.id ||
+    !draft.data || typeof draft.data !== "object" || Array.isArray(draft.data)) return null;
+  const country = jurisdictionForWorkforceContext({ workCountry: draft.data.work_country });
+  if (!country) return null;
+  if (original && original.split("-")[0] !== country) return null;
+  return original ?? country;
+}
+
+/**
  * Persist a fixed, non-sensitive operator marker for a legacy case whose work
  * jurisdiction cannot be proven. This deliberately does not pass through the
  * case-derived collection gate: the marker contains no case narrative, and
@@ -165,12 +188,14 @@ export async function quarantineCountrylessLegacyCase(input: {
   return withSensitiveLifecycleFence(input.organizationId, () => db.transaction(async (tx) => {
     const [caseRow] = await tx.select({
       id: onbCases.id,
+      organizationId: onbCases.organizationId,
+      operationalPreparation: onbCases.operationalPreparation,
       workforceContext: onbCases.workforceContext,
     }).from(onbCases).where(and(
       eq(onbCases.organizationId, input.organizationId),
       eq(onbCases.id, input.caseId),
     )).for("update");
-    if (!caseRow || jurisdictionForWorkforceContext(caseRow.workforceContext)) return false;
+    if (!caseRow || jurisdictionForCaseDerivedEnvelope(caseRow)) return false;
     await recordCountrylessLegacyCaseQuarantineInTransaction(tx, input);
     return true;
   }));
@@ -366,10 +391,14 @@ export async function assertCaseDerivedLifecycleWriteAllowedInTransaction(
       eq(onbCases.id, input.caseId),
   )).for("update");
   if (!caseRow) throw new SensitiveLifecycleValidationError("Case-derived sensitive write requires a current tenant case.");
+  if (caseRow.operationalActivation) {
+    const operational = await operationalEligibilityInTransaction(tx, caseRow);
+    if (!operational.allowed) throw new SensitiveLifecycleConflictError(operational.reason!);
+  }
   if (isSeparationOrLegacyExit(caseRow)) throw new SensitiveLifecycleConflictError("Separation and historical exit requests require the dedicated separation lifecycle.");
   const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
     organizationId: input.organizationId,
-    jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+    jurisdiction: jurisdictionForCaseDerivedEnvelope(caseRow),
   });
   if (!gate.allowed) throw new SensitiveLifecycleConflictError(`SENSITIVE_LIFECYCLE_BLOCKED:${gate.reason}`);
   const unsafeSettings = await unsafeCaseDerivedSettingsInTransaction(tx, input.organizationId, input.caseId);
@@ -588,6 +617,7 @@ async function eligibleUploadsForPolicyInTransaction(tx: any, input: {
   const [caseRows, opaquePolicies] = await Promise.all([
     tx.select({
       id: onbCases.id, workforceContext: onbCases.workforceContext, workerEmail: onbCases.workerEmail,
+      organizationId: onbCases.organizationId, operationalPreparation: onbCases.operationalPreparation,
       createdAt: onbCases.createdAt, updatedAt: onbCases.updatedAt,
     }).from(onbCases).where(eq(onbCases.organizationId, input.organizationId)),
     tx.select().from(onbSensitiveLifecyclePolicies).where(and(
@@ -627,8 +657,8 @@ async function eligibleUploadsForPolicyInTransaction(tx: any, input: {
     (!hold.dataClass || OPAQUE_CASE_DERIVED_CLASSES.includes(hold.dataClass as SensitiveDataClass)) &&
     (!hold.caseId || hold.caseId === caseId));
   const eligibleEnvelopeKeys = opaqueCoverageComplete
-    ? caseRows.filter((caseRow: { id: number; workforceContext: unknown }) =>
-      jurisdictionForWorkforceContext(caseRow.workforceContext) === input.jurisdiction &&
+    ? caseRows.filter((caseRow: Parameters<typeof jurisdictionForCaseDerivedEnvelope>[0]) =>
+      jurisdictionForCaseDerivedEnvelope(caseRow) === input.jurisdiction &&
       OPAQUE_CASE_DERIVED_CLASSES.every((dataClass) => {
         const days = dataClass === input.dataClass ? input.retentionDays : opaqueByClass.get(dataClass)!.retentionDays;
         return sourceAges.get(caseRow.id)! <= new Date(input.now.getTime() - days * 86_400_000);
@@ -637,8 +667,8 @@ async function eligibleUploadsForPolicyInTransaction(tx: any, input: {
     ).map((caseRow: { id: number }) => `case-derived-envelope:${caseRow.id}`)
     : [];
   const heldEnvelopeCount = opaqueCoverageComplete
-    ? caseRows.filter((caseRow: { id: number; workforceContext: unknown }) =>
-      jurisdictionForWorkforceContext(caseRow.workforceContext) === input.jurisdiction &&
+    ? caseRows.filter((caseRow: Parameters<typeof jurisdictionForCaseDerivedEnvelope>[0]) =>
+      jurisdictionForCaseDerivedEnvelope(caseRow) === input.jurisdiction &&
       OPAQUE_CASE_DERIVED_CLASSES.every((dataClass) => {
         const days = dataClass === input.dataClass ? input.retentionDays : opaqueByClass.get(dataClass)!.retentionDays;
         return sourceAges.get(caseRow.id)! <= new Date(input.now.getTime() - days * 86_400_000);
@@ -1020,7 +1050,7 @@ export async function evaluateCaseDerivedLifecycleGateInTransaction(tx: any, inp
  * operator remediates it. Operational request state is keyed by the case ID,
  * so only malformed namespace keys are globally unresolved.
  */
-async function unsafeCaseDerivedSettingsInTransaction(
+export async function unsafeCaseDerivedSettingsInTransaction(
   tx: any, organizationId: string, _caseId?: number,
 ): Promise<string | null> {
   const rows = await tx.select({ key: onbSettings.key, value: onbSettings.value })
@@ -1256,6 +1286,7 @@ async function scheduleExpiredCaseDerivedEnvelopes(now: Date, limit: number): Pr
       const cases = await tx.select({
         id: onbCases.id, organizationId: onbCases.organizationId,
         workerEmail: onbCases.workerEmail, workforceContext: onbCases.workforceContext,
+        operationalPreparation: onbCases.operationalPreparation,
         updatedAt: onbCases.updatedAt,
       }).from(onbCases).where(gt(onbCases.id, cursor.cursorCaseId))
         .orderBy(asc(onbCases.id)).limit(limit);
@@ -1270,7 +1301,7 @@ async function scheduleExpiredCaseDerivedEnvelopes(now: Date, limit: number): Pr
       }
       let inserted = 0;
       for (const caseRow of cases) {
-        const jurisdiction = jurisdictionForWorkforceContext(caseRow.workforceContext);
+        const jurisdiction = jurisdictionForCaseDerivedEnvelope(caseRow);
         if (!jurisdiction) continue;
         const newestSourceAt = await newestCaseDerivedSourceAtInTransaction(
           tx, caseRow.organizationId, caseRow.id, caseRow.workerEmail, caseRow.updatedAt,
@@ -1654,7 +1685,7 @@ async function processCaseDerivedEnvelopeDeletionJob(
         message: "UAT run-owned cases are retained for isolated cleanup; generic privacy minimisation cannot erase their ownership fence.",
       };
     }
-    const jurisdiction = jurisdictionForWorkforceContext(caseRow.workforceContext);
+    const jurisdiction = jurisdictionForCaseDerivedEnvelope(caseRow);
     if (!jurisdiction) {
       // Eight class-fenced jobs may be queued for one opaque envelope. Once
       // one has durably completed, its siblings observe the explicit
@@ -1740,7 +1771,7 @@ async function processCaseDerivedEnvelopeDeletionJob(
       legalEntity: "[minimized]", managerName: "[minimized]", recruiterName: "[minimized]",
       joiningDate: "[minimized]", workforceContext: {}, workforceClassification: null,
       checklistSnapshot: [], checklistMatchedCriteria: {}, checklistMatchExplanation: "[minimized]",
-      processPolicySnapshot: {}, readiness: [], workstreams: [],
+      processPolicySnapshot: {}, operationalPreparation: null, operationalActivation: null, readiness: [], workstreams: [],
       primarySkill: null, skillCriticality: null, scenarioKey: null,
       planSummary: null, notes: null, candidateEmailAuthorizedAt: null, candidateEmailAuthorizedBy: null,
       offerAcceptanceCompletedAt: null, offerAcceptanceCompletedBy: null, createdByUserId: null, updatedAt: now,
@@ -1948,7 +1979,7 @@ async function relationalRecordIsSafeToDeleteInTransaction(tx: any, job: typeof 
       eq(onbCases.organizationId, job.organizationId),
       eq(onbCases.id, caseId),
     )).for("update");
-  if (!caseRow || jurisdictionForWorkforceContext(caseRow.workforceContext) !== current.jurisdiction) {
+  if (!caseRow || jurisdictionForCaseDerivedEnvelope(caseRow) !== current.jurisdiction) {
     return { state: "blocked" as const, message: "Current workforce jurisdiction no longer matches the queued policy." };
   }
   if (await holdApplies(tx, {
@@ -2103,7 +2134,7 @@ async function uploadMatchesCurrentLifecycleContext(
   if (caseRow.workerName === "[minimized]") {
     return true;
   }
-  return jurisdictionForWorkforceContext(caseRow.workforceContext) === policy.jurisdiction;
+  return jurisdictionForCaseDerivedEnvelope(caseRow) === policy.jurisdiction;
 }
 
 async function processDeletionJob(jobId: number, owner: string, now: Date): Promise<"completed" | "blocked" | "skipped"> {

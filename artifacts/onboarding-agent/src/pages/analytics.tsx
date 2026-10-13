@@ -13,6 +13,7 @@ import { ShieldAlert, AlertTriangle, AlertOctagon, Timer, RefreshCw, ChevronDown
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { Link } from 'wouter';
 import { statusOf, caseTypeOf } from './cases/index';
+import { CASE_TYPES } from './cases/case-presentation';
 
 import { OutcomeKpis } from './analytics/outcome-kpis';
 import { BottleneckSimulator } from './analytics/bottleneck-simulator';
@@ -68,7 +69,7 @@ export function AnalyticsPage() {
     return allCases.filter(c => {
       if (cutoffDate && c.createdAt < cutoffDate) return false;
       if (domain !== 'All domains') {
-        const caseDomain = caseTypeOf(c) === 'Employee Changes' ? 'Employee Changes' : 'Onboarding';
+        const caseDomain = caseTypeOf(c);
         if (caseDomain !== domain) return false;
       }
       if (region !== 'All regions' && c.geography !== region) return false;
@@ -110,10 +111,11 @@ export function AnalyticsPage() {
     const exceptions = filteredCases.filter(c => (c.lifecycleStage || '').toLowerCase() === 'exception');
     
     // Autonomy uses all-time review history, not the period-clipped set.
-    const autonomous = completed.filter(c => !everReviewedCaseIds.has(c.id));
+    const measuredCompleted = completed.filter(c => !c.offlineSample);
+    const autonomous = measuredCompleted.filter(c => !everReviewedCaseIds.has(c.id));
     const reviewedInScope = new Set(filteredCases.filter(c => everReviewedCaseIds.has(c.id)).map(c => c.id));
 
-    const autoRate = completed.length > 0 ? (autonomous.length / completed.length) * 100 : null;
+    const autoRate = measuredCompleted.length > 0 ? (autonomous.length / measuredCompleted.length) * 100 : null;
     const intRate = total > 0 ? (reviewedInScope.size / total) * 100 : null;
     const excRate = total > 0 ? (exceptions.length / total) * 100 : null;
 
@@ -188,13 +190,12 @@ export function AnalyticsPage() {
 
   // Derived Metrics for HRO Domain Intelligence
   const domainStats = useMemo(() => {
-    const domainsList = ['Onboarding', 'Employee Changes', 'Payroll', 'Benefits', 'Leave', 'Compliance', 'Offboarding', 'HR Helpdesk'];
+    const domainsList = CASE_TYPES.filter(domain => domain !== 'All Cases');
     return domainsList.map(dom => {
-      if (dom === 'Onboarding' || dom === 'Employee Changes') {
-        const dcases = filteredCases.filter(c => (dom === 'Employee Changes' ? caseTypeOf(c) === 'Employee Changes' : caseTypeOf(c) === 'Onboarding'));
-        if (dcases.length === 0) return { domain: dom, volume: '—', autonomy: '—', intervention: '—', exceptions: '—' };
+        const dcases = filteredCases.filter(c => caseTypeOf(c) === dom);
+        if (dcases.length === 0) return { domain: dom, volume: 0, autonomy: '—', intervention: '—', exceptions: 0 };
         
-        const dcomp = dcases.filter(c => { const st = (c.lifecycleStage || '').toLowerCase(); return st === 'complete' || st === 'completed'; });
+        const dcomp = dcases.filter(c => { const st = (c.lifecycleStage || '').toLowerCase(); return !c.offlineSample && (st === 'complete' || st === 'completed'); });
         const dapp = filteredApprovals.filter(a => dcases.some(dc => dc.id === a.caseId));
         const dSet = new Set(dapp.map(a => a.caseId));
         const dAuto = dcomp.filter(c => !dSet.has(c.id));
@@ -206,8 +207,6 @@ export function AnalyticsPage() {
           intervention: `${Math.round((dSet.size / dcases.length) * 100)}%`,
           exceptions: dcases.filter(c => (c.lifecycleStage || '').toLowerCase() === 'exception').length,
         };
-      }
-      return { domain: dom, volume: '—', autonomy: '—', intervention: '—', exceptions: '—' };
     });
   }, [filteredCases, filteredApprovals]);
 
@@ -221,12 +220,12 @@ export function AnalyticsPage() {
     <div className="max-w-7xl mx-auto pb-16 pt-2">
       <PageHeader 
         title="HRO Intelligence" 
-        subtitle="AI-powered intelligence across HR operations, agent performance, workforce risk, and operational efficiency." 
+        subtitle="Authorized online and offline cases are included in totals. Historical examples are not verified business outcomes."
       />
 
       <div className="flex flex-wrap gap-4 mb-10 items-end bg-[var(--surface)] p-4 rounded-[var(--radius-lg)] border border-[var(--border)] shadow-[var(--shadow-sm)]">
         <FilterSelect label="Period" value={period} onChange={setPeriod} options={[{l: 'Last 7 days', v: '7'}, {l: 'Last 30 days', v: '30'}, {l: 'Last 90 days', v: '90'}, {l: 'All time', v: 'All'}]} />
-        <FilterSelect label="HRO Domain" value={domain} onChange={setDomain} options={[{l: 'All domains', v: 'All domains'}, {l: 'Onboarding', v: 'Onboarding'}]} />
+        <FilterSelect label="HRO Domain" value={domain} onChange={setDomain} options={[{l: 'All domains', v: 'All domains'}, ...CASE_TYPES.filter(family => family !== 'All Cases').map(family => ({ l: family, v: family }))]} />
         <FilterSelect label="Region" value={region} onChange={setRegion} options={[{l: 'All regions', v: 'All regions'}, ...regions.map(r => ({l: r, v: r}))]} />
         <FilterSelect label="Case Type" value={caseType} onChange={setCaseType} options={[{l: 'All cases', v: 'All cases'}, ...caseTypes.map(c => ({l: c, v: c}))]} />
         <FilterSelect label="Agent" value={agent} onChange={setAgent} options={[{l: 'All agents', v: 'All agents'}, ...agents.map(a => ({l: a, v: a}))]} />

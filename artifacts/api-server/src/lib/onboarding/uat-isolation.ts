@@ -1,4 +1,5 @@
 import { and, eq, like, sql, type SQLWrapper } from "drizzle-orm";
+import { activationRecord } from "./operational-eligibility";
 import { db, onbCases, onbSettings } from "@workspace/db";
 
 /**
@@ -53,6 +54,7 @@ export function hasUatScenarioKey(
 export function ordinaryCaseSql(
   organizationId: SQLWrapper,
   caseId: SQLWrapper,
+  recordCreatedAt?: SQLWrapper,
 ) {
   return sql`
     not exists (
@@ -61,7 +63,17 @@ export function ordinaryCaseSql(
       where uat_case.organization_id = ${organizationId}
         and uat_case.id = ${caseId}
         and (
-          coalesce(uat_case.scenario_key, '') like ${`${UAT_SCENARIO_KEY_PREFIX}%`}
+          (coalesce(uat_case.scenario_key, '') like ${`${UAT_SCENARIO_KEY_PREFIX}%`}
+            and not coalesce((
+              uat_case.operational_activation->>'schema' = 'offline-case-activation/v1'
+              and uat_case.operational_activation->>'organizationId' = uat_case.organization_id
+              and uat_case.operational_activation->>'caseId' = uat_case.id::text
+              and uat_case.operational_activation->>'sourceKey' = uat_case.scenario_key
+              and ${recordCreatedAt
+                ? sql`${recordCreatedAt} >= coalesce(uat_case.operational_activation->>'generationStartedAt',
+                    uat_case.operational_activation->>'activatedAt')::timestamptz`
+                : sql`true`}
+            ), false))
           or exists (
             select 1
             from ${onbSettings} uat_run
@@ -131,17 +143,22 @@ export async function getUatCaseIsolation(
       ));
     scenarioKey = caseRow?.scenarioKey;
   }
-  const fencedByScenarioKey = hasUatScenarioKey({ scenarioKey });
+  const [current] = await readDb.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, input.organizationId), eq(onbCases.id, input.id),
+  ));
+  const fencedByScenarioKey = hasUatScenarioKey({ scenarioKey: current?.scenarioKey ?? scenarioKey }) &&
+    !activationRecord(current ?? {});
   const rows = await readDb.select({ value: onbSettings.value }).from(onbSettings)
     .where(and(
       eq(onbSettings.organizationId, input.organizationId),
       like(onbSettings.key, `${UAT_RUN_SETTING_PREFIX}%`),
     ));
   const linkedToRun = rows.some((row) => linkedCaseIds(row.value)?.includes(input.id));
+  const uncertainOwnership = Boolean(current?.operationalActivation) && rows.some(row => linkedCaseIds(row.value) === null);
   return {
     fencedByScenarioKey,
     linkedToRun,
-    isolated: fencedByScenarioKey || linkedToRun,
+    isolated: fencedByScenarioKey || linkedToRun || uncertainOwnership,
   };
 }
 

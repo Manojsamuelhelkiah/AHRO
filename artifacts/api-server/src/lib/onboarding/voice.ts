@@ -13,7 +13,7 @@
  * so the flow can be demonstrated without a phone.
  */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { isRetiredControllerCase } from "./controller-retirement";
+import { isRestrictedControllerCase as isRetiredControllerCase, isRestrictedOfflineCase as isSyntheticOfflineCase } from "./operational-eligibility";
 import { db } from "@workspace/db";
 import { recordGuardrailEvent } from "./guardrails";
 import { onbCases, onbCommunications, onbEffectJournal, onbVoiceSessions } from "@workspace/db/schema";
@@ -41,7 +41,6 @@ import {
   markAmbiguousEffectForManualRepair,
 } from "./effect-journal";
 import {
-  isSyntheticOfflineCase,
   SYNTHETIC_OFFLINE_WARNING,
 } from "./synthetic-offline";
 import { withCaseDispatchGuard } from "./dispatch-guard";

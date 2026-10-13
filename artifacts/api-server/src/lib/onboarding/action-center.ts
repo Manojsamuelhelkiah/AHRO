@@ -16,8 +16,8 @@ import {
 } from "@workspace/db/schema";
 import { documentNeedsCorrection, sendDocumentReminder, type DocumentReminderMode } from "./document-validation";
 import { reminderEligible } from "./document-validation-policy";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
-import { isHistoricalTestRecord } from "./historical-test-record";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase } from "./operational-eligibility";
+import { isRestrictedHistoricalCase as isHistoricalTestRecord } from "./operational-eligibility";
 import { getUatCaseIsolation } from "./uat-isolation";
 import { denyRetiredCaseCapability } from "../retired-case-capabilities";
 import { externalProviderDispatchDenied } from "./provider-policy";

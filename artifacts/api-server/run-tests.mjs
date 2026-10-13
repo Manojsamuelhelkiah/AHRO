@@ -18,6 +18,8 @@ const ownedWorkspaceSuites = new Set([
   "src/lib/onboarding/frontline-operations.db.test.ts",
   "src/lib/private-platform-admin.test.ts",
   "src/lib/onboarding/controller-retirement.test.ts",
+  "src/lib/onboarding/operational-generation.test.ts",
+  "src/lib/onboarding/case-derived-sensitive-lifecycle.test.ts",
   "src/lib/onboarding/requirements-retirement.test.ts",
   "src/lib/onboarding/governance.test.ts",
   "src/lib/onboarding/governance-runtime.test.ts",

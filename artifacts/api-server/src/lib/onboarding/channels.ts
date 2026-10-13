@@ -6,7 +6,8 @@ import { ReplitConnectors } from "@replit/connectors-sdk";
 import { candidateEmailDeliveryDecision, candidateEmailMaySend, isRetryableCandidateEmail } from "./channel-routing";
 import { isValidEmail } from "./settings";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { isRetiredControllerCase } from "./controller-retirement";
+import { isRestrictedControllerCase as isRetiredControllerCase, isRestrictedOfflineCase as isSyntheticOfflineCase,
+  evidenceBelongsToOperationalGeneration } from "./operational-eligibility";
 import {
   externalProviderDispatchDenied,
 } from "./provider-policy";
@@ -21,9 +22,8 @@ import {
 } from "../../../blocked-publish-backup-readiness.mjs";
 import {
   SYNTHETIC_OFFLINE_WARNING,
-  isSyntheticOfflineCase,
-  sampleCandidateEmailEligible,
 } from "./synthetic-offline";
+import { operationalCandidateEmailEligible as sampleCandidateEmailEligible } from "./operational-eligibility";
 import { withCaseDispatchGuard } from "./dispatch-guard";
 import { getUatCaseIsolation } from "./uat-isolation";
 import {
@@ -1172,6 +1172,8 @@ async function retryCandidateEmailUnsafe(
     .where(and(eq(onbCommunications.id, communicationId), eq(onbCommunications.caseId, caseId)));
   if (!existing) return { ok: false, code: "not-found", reason: "Communication not found." };
   const msg = existing.communication;
+  if (!evidenceBelongsToOperationalGeneration(existing.candidate, msg.createdAt, msg.id, "communications"))
+    return { ok: false, code: "not-retryable", reason: "Retained source communications cannot be replayed after activation." };
   if (isRetiredControllerCase(existing.candidate)) {
     return { ok: false, code: "not-retryable", reason: "Historical controller delivery is retired; no retry is permitted." };
   }

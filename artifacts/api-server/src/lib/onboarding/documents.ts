@@ -1,9 +1,10 @@
-import { isHistoricalTestRecord } from "./historical-test-record";
+import { isRestrictedHistoricalCase as isHistoricalTestRecord } from "./operational-eligibility";
 
 import { db } from "@workspace/db";
 import { onbCases, onbDocuments } from "@workspace/db/schema";
-import { and, eq, sql } from "drizzle-orm";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { and, eq, ne, notExists, sql } from "drizzle-orm";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase } from "./operational-eligibility";
+import { currentOperationalRecordSql } from "./operational-eligibility";
 import { getUatCaseIsolation } from "./uat-isolation";
 import { sensitiveClassForDocument } from "./sensitive-access";
 import { SensitiveLifecycleConflictError } from "./sensitive-lifecycle";
@@ -64,12 +65,17 @@ export function documentPackFor(c: Pick<DocumentSeedCase, "workerCategory" | "ge
 /** Seed the pack for one case. Idempotent per (caseId, key). Returns only rows
  * actually inserted, so recovery reporting never counts a gated no-op. */
 export async function seedDocumentsForCase(c: DocumentSeedCase): Promise<number> {
-  const pack = documentPackFor(c);
+  return db.transaction(async tx => {
+  const [current] = await tx.select().from(onbCases).where(and(
+    eq(onbCases.id, c.id), eq(onbCases.organizationId, c.organizationId),
+  )).for("share");
+  if (!current) return 0;
+  const pack = documentPackFor(current);
   // Demo realism for already-progressed cases: earlier-stage docs arrive
   // first. Deterministic per case+key (no randomness) so restarts agree.
-  const progressed = c.synthetic === true &&
+  const progressed = c.synthetic === true && !current.operationalActivation &&
     c.lifecycleStage !== "intake" && c.lifecycleStage !== "profile-validated";
-  const inserted = await db
+  const inserted = await tx
     .insert(onbDocuments)
     .values(
       pack.map((p, i) => {
@@ -96,6 +102,7 @@ export async function seedDocumentsForCase(c: DocumentSeedCase): Promise<number>
     .onConflictDoNothing()
     .returning({ id: onbDocuments.id });
   return inserted.length;
+  });
 }
 
 /** Backfill packs for active existing cases that have none (startup, idempotent).
@@ -109,12 +116,12 @@ export async function backfillDocumentPacks(scope?: {
     .select()
     .from(onbCases)
     .where(and(
-      sql`${onbCases.lifecycleStage} <> 'complete'
-        and not exists (
-          select 1 from ${onbDocuments} d
-          where d.organization_id = ${onbCases.organizationId}
-            and d.case_id = ${onbCases.id}
-        )`,
+      ne(onbCases.lifecycleStage, "complete"),
+      notExists(db.select({ id: onbDocuments.id }).from(onbDocuments).where(and(
+        eq(onbDocuments.organizationId, onbCases.organizationId),
+        eq(onbDocuments.caseId, onbCases.id),
+        currentOperationalRecordSql(onbDocuments.organizationId, onbDocuments.caseId, onbDocuments.createdAt),
+      ))),
       ...(scope?.organizationId ? [eq(onbCases.organizationId, scope.organizationId)] : []),
       ...(scope?.caseId ? [eq(onbCases.id, scope.caseId)] : []),
     ));
@@ -177,7 +184,8 @@ export async function listDocuments(caseId: number): Promise<DocumentRow[]> {
   return db
     .select()
     .from(onbDocuments)
-    .where(eq(onbDocuments.caseId, caseId))
+    .where(and(eq(onbDocuments.caseId, caseId),
+      currentOperationalRecordSql(onbDocuments.organizationId, onbDocuments.caseId, onbDocuments.createdAt)))
     .orderBy(onbDocuments.id);
 }
 

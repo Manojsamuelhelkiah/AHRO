@@ -1,4 +1,4 @@
-import { isHistoricalTestRecord } from "./historical-test-record";
+import { isRestrictedHistoricalCase as isHistoricalTestRecord } from "./operational-eligibility";
 
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -10,7 +10,7 @@ import {
 } from "@workspace/db/schema";
 import { sendOutbound } from "./channels";
 import { candidateEmailDeliveryDecision, CandidateEmailUnavailableError } from "./channel-routing";
-import { isSyntheticOfflineCase, isUatRunIsolatedCase } from "./synthetic-offline";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase, isRestrictedUatKeyCase as isUatRunIsolatedCase } from "./operational-eligibility";
 import { isAuthoritativelyUatRunOwnedCase, UAT_RUN_SETTING_PREFIX } from "./uat-isolation";
 import { initializeCaseLogistics } from "./case-logistics";
 import { hashSecret, newSecret } from "./candidate-portal";

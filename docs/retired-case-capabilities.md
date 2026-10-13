@@ -45,7 +45,11 @@ The separately confirmed developer-only offline inventory extension permits
 five complementary fictional slots per current family (ten curated slots per
 family including the original five). It is additive, permanently blocked and
 read-only; older history remains. It restores no creation, reset, progression,
-execution, authority or operational-metric eligibility.
+execution or authority. Authorized fictional offline examples do contribute to
+case totals, status distributions and applicable reporting cohorts, so these
+views reconcile with the case list. Their presence in a cohort does not turn
+simulated or missing evidence into verified business success. Actual UAT-run
+ownership and retained real/controller histories remain isolated.
 
 ## Allowed retained identifiers and text
 

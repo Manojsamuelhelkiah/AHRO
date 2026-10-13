@@ -946,6 +946,27 @@
       "when": 1791936000001,
       "tag": "0112_agent_catalogue",
       "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1791936000002,
+      "tag": "0112_offline_case_preparation",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1791936000003,
+      "tag": "0113_offline_case_activation",
+      "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1791936000004,
+      "tag": "0114_operational_record_boundaries",
+      "breakpoints": true
     }
   ]
 }

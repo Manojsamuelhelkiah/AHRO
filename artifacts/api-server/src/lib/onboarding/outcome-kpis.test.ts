@@ -37,6 +37,26 @@ function baseCase(
 }
 
 describe("onboarding outcome KPI calculations", () => {
+  test("reportable offline examples add to cohorts without turning fictional completion into success", () => {
+    const response = calculateOutcomeKpis({
+      asOf, period: "All",
+      cases: [
+        baseCase(1, "2025-01-01"),
+        baseCase(2, "2025-01-01", {
+          scenarioKey: "historical-fictional-example", syntheticProvenance: "onboarding-demo-fictional",
+          offlineExampleReportable: true, lifecycleStage: "complete",
+        }),
+      ],
+      events: [{
+        caseId: 2, agent: "Sample", title: "Day-1 readiness achieved", detail: "Sample",
+        createdAt: date("2025-01-02"),
+      }],
+    });
+    assert.equal(response.caseCount, 2);
+    const cycle = metric(response, "cycle-time");
+    assert.equal(cycle.eligibleCount, 2);
+    assert.ok((cycle.unknownCount ?? 0) >= 1);
+  });
   test("minimized historical provenance and retired controller records never enter live outcomes", () => {
     const response = calculateOutcomeKpis({
       asOf, period: "All",

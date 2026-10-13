@@ -48,6 +48,8 @@ export type OutcomeCase = {
   gateCApprovalStatus?: string | null;
   offerAcceptanceComplete?: boolean;
   offerAcceptanceCompletedAt?: Date | null;
+  offlineExampleReportable?: boolean;
+  operationalEvidenceStartedAt?: string | null;
 };
 
 export type OutcomeEvent = {
@@ -336,7 +338,7 @@ function minimumSampleMetric(
 }
 
 function caseIsEligible(c: OutcomeCase): boolean {
-  return !isHistoricalTestRecord(c) && NEW_HIRE_TYPES.has(c.hireType ?? "");
+  return (!isHistoricalTestRecord(c) || c.offlineExampleReportable === true) && NEW_HIRE_TYPES.has(c.hireType ?? "");
 }
 
 function eventTime(event: OutcomeEvent): number | null {
@@ -367,7 +369,7 @@ function cycleDuration(
     acceptanceTime === null ||
     c.offerAcceptanceComplete === false ||
     acceptanceTime > asOfTime ||
-    (c.scenarioKey !== null && c.scenarioKey !== undefined) ||
+    (c.scenarioKey !== null && c.scenarioKey !== undefined && !c.operationalEvidenceStartedAt) ||
     c.lifecycleStage !== "complete" ||
     c.gateCApprovalStatus !== "approved"
   ) {
@@ -573,14 +575,22 @@ export function calculateOutcomeKpis(
             (hireType === undefined || c.hireType === hireType)
           );
         })
-        .filter((c) => !isHistoricalTestRecord(c))
+        .filter((c) => !isHistoricalTestRecord(c) || c.offlineExampleReportable === true)
       : [];
   const eligible = cohort.filter(caseIsEligible);
-  const events = input.events ?? [];
-  const checks = input.bgvChecks ?? [];
+  const evidenceCurrent = (caseId: number | null, at: Date) => {
+    const c = cohort.find(row => row.id === caseId);
+    if (!c) return false;
+    if (!isHistoricalTestRecord(c)) return true;
+    return Boolean(c.operationalEvidenceStartedAt &&
+      Number.isFinite(Date.parse(c.operationalEvidenceStartedAt)) &&
+      finiteTime(at) !== null && at.getTime() >= Date.parse(c.operationalEvidenceStartedAt));
+  };
+  const events = (input.events ?? []).filter(row => evidenceCurrent(row.caseId, row.createdAt));
+  const checks = (input.bgvChecks ?? []).filter(row => evidenceCurrent(row.caseId, row.requestedAt));
   const emails = input.bgvEmails ?? [];
-  const surveys = input.surveyResponses;
-  const employment = input.employmentEvidence;
+  const surveys = input.surveyResponses?.filter(row => evidenceCurrent(row.caseId, row.submittedAt));
+  const employment = input.employmentEvidence?.filter(row => evidenceCurrent(row.caseId, row.observedAt));
 
   const cycleValues = eligible
     .map((c) => cycleDuration(c, events, asOfTime))

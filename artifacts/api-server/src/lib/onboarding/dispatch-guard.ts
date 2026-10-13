@@ -2,10 +2,12 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, onbCases, onbEffectJournal } from "@workspace/db";
-import { isSyntheticOfflineCase, isUatRunIsolatedCase } from "./synthetic-offline";
-import { isRetiredControllerCase } from "./controller-retirement";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase, isRestrictedUatKeyCase as isUatRunIsolatedCase,
+  isRestrictedControllerCase as isRetiredControllerCase, isRestrictedHistoricalCase as isHistoricalTestRecord,
+  operationalEligibilityInTransaction, activationRecord } from "./operational-eligibility";
 import { getUatCaseIsolation } from "./uat-isolation";
-import { isHistoricalTestRecord } from "./historical-test-record";
+import { evaluateCaseDerivedLifecycleGateInTransaction, jurisdictionForWorkforceContext } from "./sensitive-lifecycle";
+import { hasHumanPermissions } from "../human-permissions";
 import { isSeparationOrLegacyExit } from "./separation-isolation";
 
 type DispatchGuardContext = {
@@ -108,6 +110,21 @@ export async function withCaseDispatchGuard<T>(
         eq(onbCases.organizationId, inherited.organizationId),
       ));
     if (!caseRow) return undefined;
+    const current = await db.transaction(async tx => {
+      const result = await operationalEligibilityInTransaction(tx, caseRow, { requireStarted: true });
+      if (result.allowed && activationRecord(caseRow)) {
+        const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+          organizationId: caseRow.organizationId, jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+        });
+        const permission = await hasHumanPermissions(tx, {
+          organizationId: caseRow.organizationId, caseId: caseRow.id,
+          actorUserId: caseRow.operationalActivation!.activatedByUserId, requiredKeys: ["tool.external.dispatch"],
+        });
+        if (!gate.allowed || !permission) return { allowed: false, reason: "Current collection and external-dispatch permissions are required." };
+      }
+      return result;
+    });
+    if (!current.allowed) return undefined;
     if (isHistoricalTestRecord(caseRow) || isSeparationOrLegacyExit(caseRow)) return undefined;
     if ((await getUatCaseIsolation(caseRow)).isolated ||
       isSyntheticOfflineCase(caseRow)) {
@@ -149,6 +166,18 @@ export async function withCaseDispatchGuard<T>(
       ))
       .for("key share");
     if (!caseRow) return { kind: "missing" as const };
+    const eligibility = await operationalEligibilityInTransaction(tx, caseRow, { requireStarted: true });
+    if (!eligibility.allowed) return { kind: "missing" as const };
+    const activation = activationRecord(caseRow);
+    if (activation) {
+      const collection = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
+        organizationId: caseRow.organizationId, jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),
+      });
+      if (!collection.allowed || !await hasHumanPermissions(tx, {
+        organizationId: caseRow.organizationId, caseId: caseRow.id,
+        actorUserId: activation.activatedByUserId, requiredKeys: ["tool.external.dispatch"],
+      })) return { kind: "missing" as const };
+    }
     if (isHistoricalTestRecord(caseRow) || isSeparationOrLegacyExit(caseRow)) return { kind: "missing" as const };
     if (isUatRunIsolatedCase(caseRow) ||
       isSyntheticOfflineCase(caseRow)) {

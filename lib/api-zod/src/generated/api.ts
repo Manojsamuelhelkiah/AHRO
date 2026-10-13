@@ -9,6 +9,93 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Read preparation prerequisites without admitting operational effects
+ */
+export const GetOfflineCasePreparationParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const GetOfflineCasePreparationResponse = zod.object({
+  "caseId": zod.number(),
+  "eligible": zod.boolean(),
+  "canEdit": zod.boolean(),
+  "canReadData": zod.boolean(),
+  "canActivate": zod.boolean(),
+  "canReconfirm": zod.boolean(),
+  "canStart": zod.boolean().optional(),
+  "workflowStarted": zod.boolean().optional(),
+  "sourceName": zod.string().nullish(),
+  "sourceEmail": zod.string().nullish(),
+  "requirementsFingerprint": zod.string().nullable(),
+  "workflowBlocker": zod.string().nullable(),
+  "activationGeneration": zod.string().nullable(),
+  "revision": zod.number(),
+  "family": zod.string().nullable(),
+  "state": zod.enum(['unprepared', 'preparing', 'restricted-history', 'activated', 'activated-blocked']),
+  "sourceLabel": zod.string(),
+  "evidenceStatus": zod.enum(['unverified']),
+  "fields": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['text', 'date', 'email', 'country', 'choice']),
+  "required": zod.boolean(),
+  "description": zod.string(),
+  "values": zod.array(zod.string()).optional()
+})),
+  "data": zod.record(zod.string(), zod.string()),
+  "blockers": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Save revision-fenced real request input separately from fictional history
+ */
+export const SaveOfflineCasePreparationParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const saveOfflineCasePreparationBodyDataMaxOne = 240;
+
+
+
+export const SaveOfflineCasePreparationBody = zod.object({
+  "expectedRevision": zod.number(),
+  "data": zod.record(zod.string(), zod.string().max(saveOfflineCasePreparationBodyDataMaxOne))
+})
+
+export const SaveOfflineCasePreparationResponse = zod.object({
+  "caseId": zod.number(),
+  "eligible": zod.boolean(),
+  "canEdit": zod.boolean(),
+  "canReadData": zod.boolean(),
+  "canActivate": zod.boolean(),
+  "canReconfirm": zod.boolean(),
+  "canStart": zod.boolean().optional(),
+  "workflowStarted": zod.boolean().optional(),
+  "sourceName": zod.string().nullish(),
+  "sourceEmail": zod.string().nullish(),
+  "requirementsFingerprint": zod.string().nullable(),
+  "workflowBlocker": zod.string().nullable(),
+  "activationGeneration": zod.string().nullable(),
+  "revision": zod.number(),
+  "family": zod.string().nullable(),
+  "state": zod.enum(['unprepared', 'preparing', 'restricted-history', 'activated', 'activated-blocked']),
+  "sourceLabel": zod.string(),
+  "evidenceStatus": zod.enum(['unverified']),
+  "fields": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['text', 'date', 'email', 'country', 'choice']),
+  "required": zod.boolean(),
+  "description": zod.string(),
+  "values": zod.array(zod.string()).optional()
+})),
+  "data": zod.record(zod.string(), zod.string()),
+  "blockers": zod.array(zod.string())
+})
+
+
+/**
  * @summary Inspect versioned agent roles and permitted client setup metadata
  */
 export const GetAgentCatalogueResponse = zod.object({
@@ -109,6 +196,155 @@ export const RegisterCatalogueAgentResponse = zod.object({
   "version": zod.number(),
   "state": zod.enum(['registered', 'principal-unavailable', 'owner-unavailable', 'review-required']).optional()
 })
+})
+
+
+/**
+ * @summary Explicit named-user activation; starts no work and sends nothing
+ */
+export const ActivateOfflineCaseParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+
+export const activateOfflineCaseBodyRequirementsFingerprintRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const ActivateOfflineCaseBody = zod.object({
+  "expectedRevision": zod.number().min(1),
+  "requirementsFingerprint": zod.string().regex(activateOfflineCaseBodyRequirementsFingerprintRegExp),
+  "confirmIdentity": zod.literal(true),
+  "excludeHistoricalEvidence": zod.literal(true)
+})
+
+export const ActivateOfflineCaseResponse = zod.object({
+  "caseId": zod.number(),
+  "eligible": zod.boolean(),
+  "canEdit": zod.boolean(),
+  "canReadData": zod.boolean(),
+  "canActivate": zod.boolean(),
+  "canReconfirm": zod.boolean(),
+  "canStart": zod.boolean().optional(),
+  "workflowStarted": zod.boolean().optional(),
+  "sourceName": zod.string().nullish(),
+  "sourceEmail": zod.string().nullish(),
+  "requirementsFingerprint": zod.string().nullable(),
+  "workflowBlocker": zod.string().nullable(),
+  "activationGeneration": zod.string().nullable(),
+  "revision": zod.number(),
+  "family": zod.string().nullable(),
+  "state": zod.enum(['unprepared', 'preparing', 'restricted-history', 'activated', 'activated-blocked']),
+  "sourceLabel": zod.string(),
+  "evidenceStatus": zod.enum(['unverified']),
+  "fields": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['text', 'date', 'email', 'country', 'choice']),
+  "required": zod.boolean(),
+  "description": zod.string(),
+  "values": zod.array(zod.string()).optional()
+})),
+  "data": zod.record(zod.string(), zod.string()),
+  "blockers": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Renew current named-user identity and policy review without starting work
+ */
+export const ReconfirmOfflineCaseActivationParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+
+export const reconfirmOfflineCaseActivationBodyRequirementsFingerprintRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const ReconfirmOfflineCaseActivationBody = zod.object({
+  "expectedRevision": zod.number().min(1),
+  "requirementsFingerprint": zod.string().regex(reconfirmOfflineCaseActivationBodyRequirementsFingerprintRegExp),
+  "confirmIdentity": zod.literal(true),
+  "excludeHistoricalEvidence": zod.literal(true)
+})
+
+export const ReconfirmOfflineCaseActivationResponse = zod.object({
+  "caseId": zod.number(),
+  "eligible": zod.boolean(),
+  "canEdit": zod.boolean(),
+  "canReadData": zod.boolean(),
+  "canActivate": zod.boolean(),
+  "canReconfirm": zod.boolean(),
+  "canStart": zod.boolean().optional(),
+  "workflowStarted": zod.boolean().optional(),
+  "sourceName": zod.string().nullish(),
+  "sourceEmail": zod.string().nullish(),
+  "requirementsFingerprint": zod.string().nullable(),
+  "workflowBlocker": zod.string().nullable(),
+  "activationGeneration": zod.string().nullable(),
+  "revision": zod.number(),
+  "family": zod.string().nullable(),
+  "state": zod.enum(['unprepared', 'preparing', 'restricted-history', 'activated', 'activated-blocked']),
+  "sourceLabel": zod.string(),
+  "evidenceStatus": zod.enum(['unverified']),
+  "fields": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['text', 'date', 'email', 'country', 'choice']),
+  "required": zod.boolean(),
+  "description": zod.string(),
+  "values": zod.array(zod.string()).optional()
+})),
+  "data": zod.record(zod.string(), zod.string()),
+  "blockers": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Explicitly start the supported operational workflow after activation
+ */
+export const StartOfflineCaseWorkflowParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+
+export const startOfflineCaseWorkflowBodyRequirementsFingerprintRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const StartOfflineCaseWorkflowBody = zod.object({
+  "expectedRevision": zod.number().min(1),
+  "requirementsFingerprint": zod.string().regex(startOfflineCaseWorkflowBodyRequirementsFingerprintRegExp),
+  "confirmStart": zod.literal(true)
+})
+
+export const StartOfflineCaseWorkflowResponse = zod.object({
+  "caseId": zod.number(),
+  "eligible": zod.boolean(),
+  "canEdit": zod.boolean(),
+  "canReadData": zod.boolean(),
+  "canActivate": zod.boolean(),
+  "canReconfirm": zod.boolean(),
+  "canStart": zod.boolean().optional(),
+  "workflowStarted": zod.boolean().optional(),
+  "sourceName": zod.string().nullish(),
+  "sourceEmail": zod.string().nullish(),
+  "requirementsFingerprint": zod.string().nullable(),
+  "workflowBlocker": zod.string().nullable(),
+  "activationGeneration": zod.string().nullable(),
+  "revision": zod.number(),
+  "family": zod.string().nullable(),
+  "state": zod.enum(['unprepared', 'preparing', 'restricted-history', 'activated', 'activated-blocked']),
+  "sourceLabel": zod.string(),
+  "evidenceStatus": zod.enum(['unverified']),
+  "fields": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['text', 'date', 'email', 'country', 'choice']),
+  "required": zod.boolean(),
+  "description": zod.string(),
+  "values": zod.array(zod.string()).optional()
+})),
+  "data": zod.record(zod.string(), zod.string()),
+  "blockers": zod.array(zod.string())
 })
 
 
@@ -12067,6 +12303,10 @@ export const RunOnboardingScenarioResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "operationalActivated": zod.boolean().optional().describe('Retained named-user activation; current permission and policy checks still govern work'),
+  "reportingCaseEligible": zod.boolean().optional().describe('Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history'),
+  "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
+  "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
@@ -12305,6 +12545,10 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "operationalActivated": zod.boolean().optional().describe('Retained named-user activation; current permission and policy checks still govern work'),
+  "reportingCaseEligible": zod.boolean().optional().describe('Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history'),
+  "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
+  "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
@@ -12636,6 +12880,10 @@ export const CreateOnboardingCaseResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "operationalActivated": zod.boolean().optional().describe('Retained named-user activation; current permission and policy checks still govern work'),
+  "reportingCaseEligible": zod.boolean().optional().describe('Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history'),
+  "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
+  "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
@@ -12878,6 +13126,10 @@ export const GetOnboardingCaseResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "operationalActivated": zod.boolean().optional().describe('Retained named-user activation; current permission and policy checks still govern work'),
+  "reportingCaseEligible": zod.boolean().optional().describe('Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history'),
+  "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
+  "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
@@ -13212,6 +13464,10 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "operationalActivated": zod.boolean().optional().describe('Retained named-user activation; current permission and policy checks still govern work'),
+  "reportingCaseEligible": zod.boolean().optional().describe('Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history'),
+  "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
+  "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
@@ -13471,6 +13727,10 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "operationalActivated": zod.boolean().optional().describe('Retained named-user activation; current permission and policy checks still govern work'),
+  "reportingCaseEligible": zod.boolean().optional().describe('Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history'),
+  "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
+  "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
@@ -16413,6 +16673,10 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "operationalActivated": zod.boolean().optional().describe('Retained named-user activation; current permission and policy checks still govern work'),
+  "reportingCaseEligible": zod.boolean().optional().describe('Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history'),
+  "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
+  "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
@@ -16691,6 +16955,10 @@ export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "operationalActivated": zod.boolean().optional().describe('Retained named-user activation; current permission and policy checks still govern work'),
+  "reportingCaseEligible": zod.boolean().optional().describe('Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history'),
+  "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
+  "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),
@@ -17011,6 +17279,10 @@ export const CorrectOnboardingWorkforceContextResponse = zod.object({
   "skillCriticality": zod.string().nullable().describe('standard | scarce | client-critical'),
   "scenarioKey": zod.string().nullable().describe('Demo scenario this case came from, if any'),
   "offlineSample": zod.boolean().describe('Server-derived marker for a provider-isolated offline Demo sample'),
+  "operationalActivated": zod.boolean().optional().describe('Retained named-user activation; current permission and policy checks still govern work'),
+  "reportingCaseEligible": zod.boolean().optional().describe('Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history'),
+  "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
+  "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
   "planSummary": zod.string().nullable().describe('LLM-generated onboarding plan narrative'),
   "checklistTemplateVersion": zod.number().min(1),

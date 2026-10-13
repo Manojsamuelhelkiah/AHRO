@@ -26,7 +26,7 @@ import {
   type ConnectorMutation,
 } from "./connector-adapters";
 import { trackCaseSystems } from "./system-watcher";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase } from "./operational-eligibility";
 import { withCaseDispatchGuard } from "./dispatch-guard";
 import { evaluateWorkforceRuntimePrerequisites } from "./operational-requests";
 import { workforceRuntimeEnabled } from "./workforce-step-runtime";
@@ -74,6 +74,7 @@ export type WorkstreamConnectorCase = Pick<
   notes?: string | null;
   syntheticProvenance?: CaseRow["syntheticProvenance"];
   scenarioKey?: string | null;
+  operationalActivation?: CaseRow["operationalActivation"];
   checklistSnapshot?: OnbChecklistTemplateItem[];
   readiness?: OnbReadinessItemRow[];
   orchestrationStatus?: string;
@@ -574,7 +575,7 @@ export async function dispatchCaseConnectorMutation(input: {
       },
       deniedBlockers: blockersFor(input.c, input.mutation),
       now,
-      syntheticOffline: isSyntheticOfflineCase({
+      syntheticOffline: !input.c.operationalActivation && isSyntheticOfflineCase({
         workerName: input.c.workerName ?? "",
         workerEmail: input.c.workerEmail,
         workerPhone: input.c.workerPhone ?? null,
@@ -703,7 +704,7 @@ export async function dispatchWorkstreamConnectorMutations(
   c: WorkstreamConnectorCase,
   dependencies?: WorkstreamConnectorDependencies,
 ): Promise<WorkstreamDispatchOutcome> {
-  const syntheticOffline = isSyntheticOfflineCase({
+  const syntheticOffline = !c.operationalActivation && isSyntheticOfflineCase({
     workerName: c.workerName ?? "",
     workerEmail: c.workerEmail,
     workerPhone: c.workerPhone ?? null,

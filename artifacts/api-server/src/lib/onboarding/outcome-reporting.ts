@@ -16,7 +16,8 @@ import type {
   OutcomeSurveyResponse,
 } from "./outcome-kpis";
 import { hasCurrentAuthorityScope, roleMayExerciseScope } from "./decision-authority";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase, activationRecord,
+  operationalEligibilityInTransaction, evidenceBelongsToOperationalGeneration } from "./operational-eligibility";
 import type { OnboardingDbTransaction } from "./settings";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
@@ -65,9 +66,11 @@ async function reportingCase(
     eq(onbCases.id, caseId),
   )).for("update");
   if (!c) invalid("Case not found.");
-  if (isSyntheticOfflineCase(c) || c.scenarioKey) {
-    invalid("Synthetic, demo, and offline cases cannot produce outcome evidence.");
+  if (isSyntheticOfflineCase(c) || (c.scenarioKey && !activationRecord(c))) {
+    invalid("A restricted historical case cannot produce measured outcome evidence. Current named-user activation is required for an eligible fictional example.");
   }
+  const operational = await operationalEligibilityInTransaction(tx, c);
+  if (!operational.allowed) invalid(operational.reason || "Current operational activation is required.");
   await assertCaseDerivedLifecycleWriteAllowedInTransaction(tx, { organizationId, caseId });
   return c;
 }
@@ -372,6 +375,13 @@ export async function loadOutcomeReportingEvidence(
       inArray(onbOutcomeEvidenceAuthorityReceipts.id, receiptIds),
     ));
   const casesById = new Map(cases.map((c) => [c.id, c]));
+  const belongs = (row: typeof surveys[number] | typeof employment[number]) => {
+    const c = casesById.get(row.caseId);
+    return Boolean(c && evidenceBelongsToOperationalGeneration(c, row.createdAt, row.id,
+      "surveyKind" in row ? "surveyResponses" : "employmentEvidence"));
+  };
+  for (let i = surveys.length - 1; i >= 0; i--) if (!belongs(surveys[i]!)) surveys.splice(i, 1);
+  for (let i = employment.length - 1; i >= 0; i--) if (!belongs(employment[i]!)) employment.splice(i, 1);
   const receiptsById = new Map(receipts.map((receipt) => [receipt.id, receipt]));
   const humanVerified = (row: typeof surveys[number] | typeof employment[number]) =>
     persistedHumanAuthorityIsValid(

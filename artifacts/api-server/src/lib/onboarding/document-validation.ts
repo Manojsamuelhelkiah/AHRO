@@ -39,6 +39,7 @@ import {
   withCaseDerivedLifecycleWrite,
 } from "./sensitive-lifecycle";
 import { getUatCaseIsolation, ordinaryCaseSql } from "./uat-isolation";
+import { currentOperationalRecordSql } from "./operational-eligibility";
 
 export type ValidationReason = { code: string; message: string; evidence?: string };
 
@@ -58,8 +59,8 @@ export async function reconcileDocumentationReadiness(organizationId: string, ca
   // function changes only the documentation item, rewriting that envelope
   // must not restore text minimized by lifecycle deletion.
   await withCaseDerivedLifecycleWrite({ organizationId, caseId }, async (tx, c) => {
-    const required = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId), eq(onbDocuments.required, true)));
-    const verified = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId), eq(onbDocuments.required, true), eq(onbDocuments.status, "verified"), documentMalwareGateSql()));
+    const required = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId), eq(onbDocuments.required, true), currentOperationalRecordSql(onbDocuments.organizationId, onbDocuments.caseId, onbDocuments.createdAt)));
+    const verified = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId), eq(onbDocuments.required, true), eq(onbDocuments.status, "verified"), documentMalwareGateSql(), currentOperationalRecordSql(onbDocuments.organizationId, onbDocuments.caseId, onbDocuments.createdAt)));
     const bgvChecks = await tx.select().from(onbSystemChecks).where(and(
       eq(onbSystemChecks.organizationId, organizationId),
       eq(onbSystemChecks.caseId, caseId),
@@ -278,7 +279,7 @@ export async function runDocumentValidationTick(provider?: AuthoritativeDocument
   const uploads = await db.select().from(onbCandidateUploads).where(and(cleanGate, or(
     eq(onbCandidateUploads.validationState, "queued"),
     and(eq(onbCandidateUploads.validationState, "processing"), or(isNull(onbCandidateUploads.validationClaimUntil), lt(onbCandidateUploads.validationClaimUntil, now))),
-  ), ordinaryCaseSql(onbCandidateUploads.organizationId, onbCandidateUploads.caseId))).limit(25);
+  ), ordinaryCaseSql(onbCandidateUploads.organizationId, onbCandidateUploads.caseId, onbCandidateUploads.createdAt))).limit(25);
   for (const upload of uploads) {
     if ((await getUatCaseIsolation({ organizationId: upload.organizationId, id: upload.caseId })).isolated) continue;
     // This claim changes only lease/status/timestamps and never copies an
@@ -292,7 +293,7 @@ export async function runDocumentValidationTick(provider?: AuthoritativeDocument
       eq(onbCandidateUploads.id, upload.id),
       // A run ledger can be persisted between bounded selection and claim.
       // Do not churn a UAT validation lease in that race.
-      ordinaryCaseSql(onbCandidateUploads.organizationId, onbCandidateUploads.caseId),
+      ordinaryCaseSql(onbCandidateUploads.organizationId, onbCandidateUploads.caseId, onbCandidateUploads.createdAt),
       or(
         eq(onbCandidateUploads.validationState, "queued"),
         and(

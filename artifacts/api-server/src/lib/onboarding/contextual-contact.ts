@@ -9,6 +9,7 @@
  */
 import { and, desc, eq, gte, like } from "drizzle-orm";
 import { db } from "@workspace/db";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase } from "./operational-eligibility";
 import {
   onbCases,
   onbCommunications,
@@ -37,7 +38,6 @@ import { hrAlertAddress } from "./inbound-email";
 import { isValidEmail } from "./settings";
 import { calculateReadinessSlaActionTiming } from "./readiness-sla";
 import {
-  isSyntheticOfflineCase,
   SYNTHETIC_OFFLINE_WARNING,
 } from "./synthetic-offline";
 import { withCaseDerivedLifecycleWrite } from "./sensitive-lifecycle";

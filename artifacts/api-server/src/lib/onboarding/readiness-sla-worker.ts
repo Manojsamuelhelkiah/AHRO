@@ -28,10 +28,10 @@ import { approvalRef, approvalVersion, reopenApprovalInTransaction } from "./app
 import type { OnboardingDbTransaction } from "./settings";
 import { isValidEmail } from "./settings";
 import { sendAdministrativeEmail } from "./channels";
-import { isSyntheticOfflineCase } from "./synthetic-offline";
-import { isHistoricalTestRecord } from "./historical-test-record";
+import { isRestrictedOfflineCase as isSyntheticOfflineCase, isRestrictedHistoricalCase as isHistoricalTestRecord,
+  operationalWorkflowHasStarted,
+  isRestrictedControllerCase as isRetiredControllerCase } from "./operational-eligibility";
 import { getUatCaseIsolation } from "./uat-isolation";
-import { isRetiredControllerCase } from "./controller-retirement";
 import {
   assertCaseDerivedLifecycleWriteAllowedInTransaction,
   jurisdictionForWorkforceContext,
@@ -831,7 +831,9 @@ export async function runReadinessSlaTick(options: TickOptions = {}): Promise<Ti
   // historical completed cases without a snapshot, so they are never silently
   // enrolled by this sweep.
   const cases = (await db.select().from(onbCases))
-    .filter((caseRow) => !isHistoricalTestRecord(caseRow) && !isSyntheticOfflineCase(caseRow) && !isRetiredControllerCase(caseRow) && !isSeparationOrLegacyExit(caseRow));
+    .filter((caseRow) => (!caseRow.operationalActivation || operationalWorkflowHasStarted(caseRow)) &&
+      !isHistoricalTestRecord(caseRow) && !isSyntheticOfflineCase(caseRow) &&
+      !isRetiredControllerCase(caseRow) && !isSeparationOrLegacyExit(caseRow));
   const result: TickResult = {
     cases: cases.length,
     quarantined: 0,

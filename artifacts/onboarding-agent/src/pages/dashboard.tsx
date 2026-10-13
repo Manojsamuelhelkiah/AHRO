@@ -59,11 +59,14 @@ export function DashboardPage() {
     // Only computable when approvals history (status=all) has loaded.
     let autonomousPct: number | null = null;
     let autonomousSplit: { autonomous: number; assisted: number } | null = null;
-    if (completed.length > 0 && approvalsQ.isSuccess) {
+    // Fictional completed stages are still counted as statuses, never as a
+    // verified autonomous resolution or measured business success.
+    const measurable = completed.filter(c => !c.offlineSample);
+    if (measurable.length > 0 && approvalsQ.isSuccess) {
       const caseIdsWithApproval = new Set(approvals.map((a) => a.caseId));
-      const autonomous = completed.filter((c) => !caseIdsWithApproval.has(c.id)).length;
-      autonomousPct = Math.round((autonomous / completed.length) * 100);
-      autonomousSplit = { autonomous, assisted: completed.length - autonomous };
+      const autonomous = measurable.filter((c) => !caseIdsWithApproval.has(c.id)).length;
+      autonomousPct = Math.round((autonomous / measurable.length) * 100);
+      autonomousSplit = { autonomous, assisted: measurable.length - autonomous };
     }
 
     return { active, completed, blocked, humanReview, atRisk, autonomousPct, autonomousSplit };
@@ -112,7 +115,7 @@ export function DashboardPage() {
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <PageHeader
         title="HRO Control Tower"
-        subtitle="Real-time visibility across autonomous HR operations, exceptions, and human interventions."
+        subtitle="Case totals include authorized online and offline examples. Historical examples are not verified business outcomes."
       />
 
       {/* Operations briefing */}

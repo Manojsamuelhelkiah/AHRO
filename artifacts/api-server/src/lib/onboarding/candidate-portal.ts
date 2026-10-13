@@ -17,6 +17,8 @@ import {
   getCandidateLinkRetentionDays,
 } from "./settings";
 import { appendProtectedAudit, appendProtectedAuditInTransaction } from "./protected-audit";
+import { currentOperationalRecordSql, evidenceBelongsToOperationalGeneration,
+  operationalEligibilityInTransaction } from "./operational-eligibility";
 import {
   evaluateSensitiveLifecycleGate,
   jurisdictionForWorkforceContext,
@@ -110,6 +112,8 @@ export async function candidateContext(req: Request) {
     eq(onbCandidateLinks.id, onbCandidateSessions.linkId),
   ).where(and(
     eq(onbCandidateSessions.idHash, hashSecret(secret)),
+    currentOperationalRecordSql(onbCandidateSessions.organizationId, onbCandidateSessions.caseId, onbCandidateSessions.createdAt),
+    currentOperationalRecordSql(onbCandidateLinks.organizationId, onbCandidateLinks.caseId, onbCandidateLinks.createdAt),
     gt(onbCandidateSessions.expiresAt, new Date()),
     gt(onbCandidateLinks.expiresAt, new Date()),
     isNull(onbCandidateLinks.revokedAt),
@@ -137,12 +141,12 @@ export async function exchangeToken(token: string) {
       isNull(onbCandidateLinks.revokedAt),
     ));
     if (!currentLink) return undefined;
-    const [caseRow] = await db.select({
-      id: onbCases.id, workforceContext: onbCases.workforceContext,
-    }).from(onbCases).where(and(
+    const [caseRow] = await db.select().from(onbCases).where(and(
       eq(onbCases.id, currentLink.caseId), eq(onbCases.organizationId, currentLink.organizationId),
     ));
     if (!caseRow) return undefined;
+    if (!evidenceBelongsToOperationalGeneration(caseRow, currentLink.createdAt) ||
+      !(await db.transaction(tx => operationalEligibilityInTransaction(tx, caseRow))).allowed) return undefined;
     const lifecycle = await evaluateSensitiveLifecycleGate({
       organizationId: currentLink.organizationId,
       jurisdiction: jurisdictionForWorkforceContext(caseRow.workforceContext),

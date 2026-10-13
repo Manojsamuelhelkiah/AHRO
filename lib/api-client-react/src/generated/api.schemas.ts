@@ -5,6 +5,92 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type OfflinePreparationInputData = {[key: string]: string};
+
+export interface OfflinePreparationInput {
+  expectedRevision: number;
+  data: OfflinePreparationInputData;
+}
+
+export type OfflinePreparationFieldKind = typeof OfflinePreparationFieldKind[keyof typeof OfflinePreparationFieldKind];
+
+
+export const OfflinePreparationFieldKind = {
+  text: 'text',
+  date: 'date',
+  email: 'email',
+  country: 'country',
+  choice: 'choice',
+} as const;
+
+export interface OfflinePreparationField {
+  key: string;
+  label: string;
+  kind: OfflinePreparationFieldKind;
+  required: boolean;
+  description: string;
+  values?: string[];
+}
+
+export type OfflinePreparationViewState = typeof OfflinePreparationViewState[keyof typeof OfflinePreparationViewState];
+
+
+export const OfflinePreparationViewState = {
+  unprepared: 'unprepared',
+  preparing: 'preparing',
+  'restricted-history': 'restricted-history',
+  activated: 'activated',
+  'activated-blocked': 'activated-blocked',
+} as const;
+
+export type OfflinePreparationViewEvidenceStatus = typeof OfflinePreparationViewEvidenceStatus[keyof typeof OfflinePreparationViewEvidenceStatus];
+
+
+export const OfflinePreparationViewEvidenceStatus = {
+  unverified: 'unverified',
+} as const;
+
+export type OfflinePreparationViewData = {[key: string]: string};
+
+export interface OfflinePreparationView {
+  caseId: number;
+  eligible: boolean;
+  canEdit: boolean;
+  canReadData: boolean;
+  canActivate: boolean;
+  canReconfirm: boolean;
+  canStart?: boolean;
+  workflowStarted?: boolean;
+  /** @nullable */
+  sourceName?: string | null;
+  /** @nullable */
+  sourceEmail?: string | null;
+  /** @nullable */
+  requirementsFingerprint: string | null;
+  /** @nullable */
+  workflowBlocker: string | null;
+  /** @nullable */
+  activationGeneration: string | null;
+  revision: number;
+  /** @nullable */
+  family: string | null;
+  state: OfflinePreparationViewState;
+  sourceLabel: string;
+  evidenceStatus: OfflinePreparationViewEvidenceStatus;
+  fields: OfflinePreparationField[];
+  data: OfflinePreparationViewData;
+  blockers: string[];
+}
+
+export interface OfflineActivationInput {
+  /** @minimum 1 */
+  expectedRevision: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  requirementsFingerprint: string;
+  confirmIdentity: true;
+  excludeHistoricalEvidence: true;
+}
+
 export interface CatalogueAgentRegistrationInput {
   /** @minLength 1 */
   organizationId: string;
@@ -6230,6 +6316,20 @@ export interface OnbCase {
   scenarioKey: string | null;
   /** Server-derived marker for a provider-isolated offline Demo sample */
   offlineSample: boolean;
+  /** Retained named-user activation; current permission and policy checks still govern work */
+  operationalActivated?: boolean;
+  /** Authorized ordinary or verified fictional example; excludes actual UAT ownership and restricted real history */
+  reportingCaseEligible?: boolean;
+  /**
+     * Current operational generation boundary, separate from original source creation
+     * @nullable
+     */
+  operationalStartedAt?: string | null;
+  /**
+     * Original fictional source, not current employee identity or evidence
+     * @nullable
+     */
+  operationalSourceLabel?: string | null;
   /** Case-scoped identity projection is synthetic and does not represent sensitive-record authority */
   fictionalOfflineIdentity: boolean;
   /**
@@ -11159,6 +11259,14 @@ export const RetiredCapabilityResponseCode = {
 export type RetiredCapabilityResponse = {
   code: RetiredCapabilityResponseCode;
   message: string;
+};
+
+export type StartOfflineCaseWorkflowBody = {
+  /** @minimum 1 */
+  expectedRevision: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  requirementsFingerprint: string;
+  confirmStart: true;
 };
 
 export type GetHroEmailRotationParams = {

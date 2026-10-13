@@ -2,6 +2,8 @@ import { isSyntheticOfflineCase } from "./synthetic-offline";
 import type { OnbSyntheticProvenance } from "@workspace/db/schema";
 import { originalDemoFullCoverageScenarioKey } from "./demo-full-coverage";
 import { getScenario } from "./scenarios";
+import { isRetiredControllerCase } from "./controller-retirement";
+import { CURATED_OFFLINE_EXAMPLES } from "./offline-example-extension";
 
 /**
  * Fictional read projection only; never used as execution or authority eligibility.
@@ -34,4 +36,18 @@ export function isFictionalOfflineExampleCase(row: {
     row.workerPhone === null &&
     row.candidateEmailAuthorizedAt === null &&
     row.candidateEmailAuthorizedBy === null;
+}
+
+/** Reporting inclusion never removes the independent controller-history fence. */
+export function isReportableFictionalOfflineExampleCase(
+  row: Parameters<typeof isFictionalOfflineExampleCase>[0] &
+    Parameters<typeof isRetiredControllerCase>[0],
+) {
+  const legacyKey = originalDemoFullCoverageScenarioKey(row.scenarioKey);
+  const knownInventory = Boolean(legacyKey && getScenario(legacyKey)) ||
+    CURATED_OFFLINE_EXAMPLES.some(example => example.key === row.scenarioKey);
+  // Inventory rows also carry the generic retirement flag. It is not proof of
+  // controller ownership; preserve the independent provenance/state checks.
+  return knownInventory && !isRetiredControllerCase({ ...row, controllerRetired: false }) &&
+    isFictionalOfflineExampleCase(row);
 }

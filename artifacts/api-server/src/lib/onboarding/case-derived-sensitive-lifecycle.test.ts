@@ -20,7 +20,9 @@ import {
   onbSettings,
   onbSystemChecks,
   organizationsTable,
+  organizationMembershipsTable, accessNamedGrants,
 } from "@workspace/db";
+import { recordHumanPermissionDecision } from "../human-permissions";
 import { objectStorageClient } from "../objectStorage";
 import { appendProtectedAuditInTransaction } from "./protected-audit";
 import {
@@ -33,12 +35,24 @@ import {
 
 const organizationId = `case-envelope-lifecycle-${randomUUID()}`;
 const old = new Date(Date.now() - 3 * 86_400_000);
+let policyDecisionId: number;
 
 before(async () => {
   await db.insert(organizationsTable).values({
     id: organizationId, name: "Case envelope lifecycle tests", slug: organizationId,
     joinCodeHash: `hash-${organizationId}`, createdByUserId: "test-creator",
   });
+  await db.insert(organizationMembershipsTable).values({ organizationId, clerkUserId: "privacy-reviewer", role: "member" });
+  await db.insert(accessNamedGrants).values({
+    organizationId, principalType: "human", principalId: "privacy-reviewer", scope: "tenant",
+    resourceType: "tool", resourceKey: "tool.policy.manage", source: "named", effect: "allow",
+    status: "active", createdByUserId: "independent-access-owner",
+    approvedByUserId: "independent-access-owner", approvedAt: new Date(),
+  });
+  policyDecisionId = (await db.transaction(tx => recordHumanPermissionDecision(tx, {
+    organizationId, actorUserId: "privacy-reviewer", requiredKeys: ["tool.policy.manage"],
+    reviewedRevision: 1, decision: "Approve the isolated fixture lifecycle policies",
+  }))).id;
 });
 
 after(async () => {
@@ -57,8 +71,8 @@ test("a real sensitive collection gate rejects an exact policy when mixed-envelo
     organizationId, dataClass: "candidate-document", jurisdiction: "GB", revision: 1,
     purpose: "Document intake", lawfulBasis: "Approved basis", retentionDays: 30,
     providerSharingApproved: false, policyReference: "candidate-document-only",
-    approvalReference: "candidate-document-only", approvedByUserId: "test-privacy-authority",
-    approvedAuthorityAssignmentId: 1,
+    approvalReference: "candidate-document-only", approvedByUserId: "privacy-reviewer",
+    approvedAuthorityAssignmentId: policyDecisionId,
   });
   const gate = await evaluateSensitiveLifecycleGate({
     organizationId, jurisdiction: "GB", dataClass: "candidate-document", disclosure: false,
@@ -157,7 +171,7 @@ test("an all-class fenced case envelope minimises medical and BGV originals whil
       purpose: `Approved ${dataClass} lifecycle`, lawfulBasis: "Reviewed basis",
       providerSharingApproved: false, permittedProviders: [], policyReference: `policy-${dataClass}`,
       approvalReference: `approval-${dataClass}`, approvedByUserId: "privacy-reviewer",
-      approvedAuthorityAssignmentId: 1,
+      approvedAuthorityAssignmentId: policyDecisionId,
     })),
   ).returning();
   const revisions = Object.fromEntries(policies.map((policy) => [
