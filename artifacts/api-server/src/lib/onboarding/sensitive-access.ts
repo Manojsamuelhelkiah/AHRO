@@ -186,10 +186,27 @@ async function sensitiveAccessFromEffective(
   if (!input.actorUserId) return NO_SENSITIVE_ACCESS;
   // The effective evaluator verifies case ownership before its admin branch.
   // ALS contains only a live, provider-verified request bound to this tenant.
-  // This exception is for client-record reads, never professional authority.
-  const administrativeRead = isPlatformSuperAdmin(input.actorUserId, input.organizationId) &&
+  // A verified administrative session may read and edit client records.
+  // Public demo identity alone never supplies that privilege; independent
+  // privacy, evidence, retirement and execution gates remain in their callers.
+  const administrativeAccess = isPlatformSuperAdmin(input.actorUserId, input.organizationId) &&
     effectiveAccess.allows.includes("flow.case.read");
   const sharedDemo = await isSharedDemoPrincipalInTransaction(tx, input.actorUserId);
+  const result = projectSensitiveCaseAccess(effectiveAccess, sharedDemo, administrativeAccess);
+  // The verified session must still be live after asynchronous identity checks.
+  if (administrativeAccess && !isPlatformSuperAdmin(input.actorUserId, input.organizationId)) {
+    return NO_SENSITIVE_ACCESS;
+  }
+  return result;
+}
+
+/** Field-permission projection only; administrativeAccess must come from the
+ * live tenant-bound server session, never from a browser role or profile label. */
+export function projectSensitiveCaseAccess(
+  effectiveAccess: Pick<EffectiveAccess, "allows">,
+  sharedDemo: boolean,
+  administrativeAccess: boolean,
+): SensitiveAccess {
   const result = {
     identity: false,
     medical: false,
@@ -205,15 +222,10 @@ async function sensitiveAccessFromEffective(
   for (const classification of Object.keys(SENSITIVE_SCOPE_BY_CLASS) as SensitiveRecordClass[]) {
     if (!effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].read) &&
       !effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit)) continue;
-    result[classification] = (!sharedDemo || administrativeRead) &&
+    result[classification] = (!sharedDemo || administrativeAccess) &&
       effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].read);
-    result.edit[classification] = !sharedDemo &&
+    result.edit[classification] = (!sharedDemo || administrativeAccess) &&
       effectiveAccess.allows.includes(SENSITIVE_ACCESS_KEY_BY_CLASS[classification].edit);
-  }
-  // Do not carry a read exception past its request lifetime or grant expiry
-  // while the independent authority queries above were in flight.
-  if (administrativeRead && !isPlatformSuperAdmin(input.actorUserId, input.organizationId)) {
-    for (const classification of ALL_SENSITIVE_RECORD_CLASSES) result[classification] = false;
   }
   return result;
 }

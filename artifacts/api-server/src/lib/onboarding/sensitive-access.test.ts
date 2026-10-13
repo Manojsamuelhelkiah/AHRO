@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   NO_SENSITIVE_ACCESS,
+  projectSensitiveCaseAccess,
   SENSITIVE_ACCESS_KEY_BY_CLASS,
   classifySensitiveText,
   hasOpaqueNarrativeAccess,
@@ -13,6 +14,23 @@ import {
   sensitiveClassForDocument,
   trustedSensitiveClassForDocument,
 } from "./sensitive-access";
+
+test("verified administrators sharing a demo identity retain exact read and edit field permissions", () => {
+  const allows = Object.values(SENSITIVE_ACCESS_KEY_BY_CLASS).flatMap(keys => [keys.read, keys.edit]);
+  const administrator = projectSensitiveCaseAccess({ allows }, true, true);
+  for (const classification of ["identity", "medical", "payroll", "bgv"] as const) {
+    assert.equal(administrator[classification], true);
+    assert.equal(administrator.edit?.[classification], true);
+  }
+  assert.deepEqual(projectSensitiveCaseAccess({ allows }, true, false), NO_SENSITIVE_ACCESS,
+    "The same public demo identity without verified administrative privilege must stay restricted");
+  const readOnly = projectSensitiveCaseAccess({ allows: ["data.identity.read"] }, true, true);
+  assert.equal(readOnly.identity, true);
+  assert.equal(readOnly.edit?.identity, false, "Admin projection must not invent missing exact permissions");
+  assert.equal(readOnly.medical, false);
+  assert.deepEqual(projectSensitiveCaseAccess({ allows: [] }, true, true), NO_SENSITIVE_ACCESS,
+    "A missing or cross-tenant case cannot acquire permissions through projection");
+});
 
 test("classifies medical, payroll, BGV, and identity records from server metadata", () => {
   assert.deepEqual(classifySensitiveText("Occupational health medical clearance"), ["medical"]);

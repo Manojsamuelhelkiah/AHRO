@@ -273,13 +273,16 @@ export function CaseDetailPage() {
           </div>
         </div>
       )}
-      {hasRestrictedCaseActions && (
+      {hasRestrictedCaseActions && !c.controllerRetired && (
         <div role="status" className="mb-5 rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-sm text-[var(--status-amber-fg)]">
           Some case actions are restricted by your current permissions. Edit, profile, and notes controls are shown only when their corresponding access is available.
         </div>
       )}
 
       <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
+      {c.controllerRetired && c.fictionalOfflineIdentity && <div role="status" className="mb-6 rounded-md border p-4 text-sm">
+        This sample is an inactive, retained record. Profile, checklist and evidence-note edits require an active case. Retained records remain read-only even for administrators; this is a case-state restriction.
+      </div>}
       {c.controllerRetired && !c.fictionalOfflineIdentity && <div role="status" className="mb-6 rounded-md border p-4 text-sm">
         This case is retained historical evidence. Operations and outreach are retired; delivery outcomes and private records remain subject to current access and retention rules.
       </div>}

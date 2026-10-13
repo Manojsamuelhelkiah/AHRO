@@ -201,7 +201,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
   return (
     <div className="mb-10">
       <h2 className="text-[var(--text-lg)] font-bold text-[var(--text-primary)] mb-4">Case Readiness</h2>
-      {(!canEditProfile || !canEditNotes || !canEditSensitiveEvidence) && (
+      {!c.controllerRetired && (!canEditProfile || !canEditNotes || !canEditSensitiveEvidence) && (
         <div className="mb-4">
           <RestrictedActionNotice>
             {!canEditProfile && !canEditNotes

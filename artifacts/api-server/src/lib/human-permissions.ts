@@ -3,6 +3,7 @@ import { onbSettings, organizationMembershipsTable, DEMO_ORGANIZATION_ID, humanP
 import { resolveEffectiveAccessInTransaction, type AccessGovernanceKey } from "./access-governance";
 import { demoPrincipalSettingKey, parseRegisteredDemoProfile } from "./demo-principal";
 import type { OnboardingDbTransaction } from "./onboarding/settings";
+import { isPlatformSuperAdmin } from "./private-platform-admin";
 
 export type HumanPermissionReceipt = {
   schema: "human-permission/v1";
@@ -32,6 +33,16 @@ export async function hasHumanPermissions(tx: OnboardingDbTransaction, input: {
   requiredKeys: readonly AccessGovernanceKey[]; ownerAdminRequired?: boolean;
 }): Promise<boolean> {
   if (!input.actorUserId || !input.requiredKeys.length) return false;
+  // The password/MFA-verified administrator can share the demo principal id.
+  // Evaluate its current request privilege before applying public-demo rules.
+  if (isPlatformSuperAdmin(input.actorUserId, input.organizationId)) {
+    const effective = await resolveEffectiveAccessInTransaction(tx, {
+      organizationId: input.organizationId, principalType: "human", principalId: input.actorUserId,
+      caseId: input.caseId, purpose: "platform-administrator-decision",
+    });
+    return isPlatformSuperAdmin(input.actorUserId, input.organizationId) &&
+      input.requiredKeys.every(key => effective.allows.includes(key));
+  }
   if (await isSharedDemoPrincipalInTransaction(tx, input.actorUserId)) return false;
   const [member] = await tx.select({ role: organizationMembershipsTable.role }).from(organizationMembershipsTable).where(and(
     eq(organizationMembershipsTable.organizationId, input.organizationId),
