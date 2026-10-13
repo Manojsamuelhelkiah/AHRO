@@ -31,6 +31,42 @@ export function isFictionalOfflineExample(c: { fictionalOfflineIdentity?: boolea
   return c.fictionalOfflineIdentity === true && c.offlineSample === true;
 }
 
+type SamplePresentationContext = { id: number; fictionalOfflineIdentity?: boolean; offlineSample?: boolean };
+
+export function sampleCaseReference(c: SamplePresentationContext): string | null {
+  return isFictionalOfflineExample(c) ? `S${c.id}` : null;
+}
+
+export function caseListReference(c: SamplePresentationContext & { createdAt?: string | null }): string {
+  return sampleCaseReference(c) ?? `HRO-${c.createdAt ? new Date(c.createdAt).getFullYear() : new Date().getFullYear()}-${String(c.id).padStart(5, '0')}`;
+}
+
+export function caseWorkerName(c: SamplePresentationContext & { workerName: string }): string {
+  return isFictionalOfflineExample(c) ? c.workerName.replace(/^Example — /, '') : c.workerName;
+}
+
+export function caseSummary(c: { fictionalOfflineIdentity?: boolean; offlineSample?: boolean; planSummary?: string | null }): string {
+  const summary = c.planSummary ?? '';
+  return isFictionalOfflineExample(c)
+    ? summary.replace(/Offline example only; all evidence and human decisions remain pending\.$/, 'All evidence and human decisions remain pending.')
+    : summary;
+}
+
+/** Transform only reserved placeholder fields, never arbitrary submitted prose. */
+export function sampleIntakeFields(data: Record<string, string>, c?: SamplePresentationContext): [string, string][] {
+  if (!c || !isFictionalOfflineExample(c)) return Object.entries(data);
+  return Object.entries(data).flatMap(([key, value]): [string, string][] => {
+    if (key === 'request_id' && /^(UAT-DEMO-|FICTIONAL-)/.test(value)) return [];
+    if (key === 'worker_name') return [[key, caseWorkerName({ ...c, workerName: value })]];
+    if ((key.endsWith('_reference') || key === 'employee_id' || key === 'previous_employee_id')
+      && /^FICTIONAL-[A-Z0-9-]+(?: \/ FICTIONAL-[A-Z0-9-]+)*$/.test(value)) {
+      if (value === 'FICTIONAL-REF-A / FICTIONAL-REF-B') return [[key, 'Conflicting references A and B — neither verified']];
+      return [];
+    }
+    return [[key, value]];
+  });
+}
+
 export function casesForList<T extends { controllerRetired?: boolean; fictionalOfflineIdentity?: boolean; offlineSample?: boolean }>(rows: readonly T[], historyOnly: boolean): T[] {
   return rows.filter(row => historyOnly ? row.controllerRetired : !row.controllerRetired || isFictionalOfflineExample(row));
 }

@@ -38,7 +38,7 @@ import { PortalControls } from './detail/portal-controls';
 import { EarlyTenurePanel } from './detail/early-tenure-panel';
 import { getApprovalRefetchInterval } from '../../lib/approval-actions';
 import { SimulationPanel } from './detail/simulation-panel';
-import { isDemoCoverageCase } from './case-presentation';
+import { isDemoCoverageCase, isFictionalOfflineExample, sampleCaseReference, caseSummary } from './case-presentation';
 import { HroIntakeRequestPanel } from '../../components/hro-intake-request-panel';
 import { CaseAccessProvider, RestrictedActionNotice, type CaseAccessPermissions } from './detail/case-access';
 
@@ -249,8 +249,9 @@ export function CaseDetailPage() {
       <div className="mx-auto max-w-5xl space-y-5 px-4 md:px-8">
         <Link href="/cases" className="inline-flex min-h-10 items-center text-sm text-[var(--primary)]">Back to cases</Link>
         <div><h1 className="text-2xl font-semibold text-[var(--text-primary)]">{c.requestType || 'Service request'}</h1>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">Case #{caseId} · Held for specialist review · No external action authorized</p></div>
-        {c.batchIntake ? <HroIntakeRequestPanel request={c.batchIntake} /> :
+          <p className="mt-1 text-sm text-[var(--text-muted)]">{sampleCaseReference(c) ?? `Case #${caseId}`} · Held for specialist review · No external action authorized</p>
+          {isFictionalOfflineExample(c) && <p className="mt-2 text-xs">Offline — read-only; no outreach or business completion.</p>}</div>
+        {c.batchIntake ? <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} /> :
           <RestrictedActionNotice>Submitted fields require current profile, notes and sensitive-record read authority. They have not been removed from the case.</RestrictedActionNotice>}
         {permissions.access.notesRead && <ActivityTab events={events || []} />}
       </div>
@@ -284,16 +285,16 @@ export function CaseDetailPage() {
       </div>}
       {!offlineSample && <EmployeeVaultPanel caseId={caseId} />}
 
-      {c.batchIntake && <HroIntakeRequestPanel request={c.batchIntake} />}
+      {c.batchIntake && <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} />}
       {c.fictionalOfflineIdentity && permissions.access.notesRead && c.planSummary && (
         <section aria-label="Example request and pending review" className="my-4 rounded-lg border p-4 text-sm">
           <h3 className="mb-2 font-semibold">Request and unresolved review needs</h3>
-          <p className="break-words">{c.planSummary}</p>
+          <p className="break-words">{caseSummary(c)}</p>
         </section>
       )}
       {offlineSample ? (
-        <div role="status" className="mb-6 rounded-lg border p-4 text-sm">
-          {c.fictionalOfflineIdentity ? 'Example · Offline — read-only and permanently non-operational.' : 'Historical test record — read-only and permanently non-operational.'}
+        !isFictionalOfflineExample(c) && <div role="status" className="mb-6 rounded-lg border p-4 text-sm">
+          Historical test record — read-only and permanently non-operational.
           Retained events and private evidence are not business activity, approval authority, or proof of readiness.
         </div>
       ) : (

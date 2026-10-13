@@ -24,6 +24,7 @@ import { StatusBadgeText } from './components';
 import { OperationalRequestsSection } from './OperationalRequestsSection';
 import { BgvNotificationsSection } from './BgvNotificationsSection';
 import { RestrictedActionNotice, useCaseAccess } from './case-access';
+import { caseSummary } from '../case-presentation';
 
 export function TasksTab({ c }: { c: any }) {
   return (
@@ -34,7 +35,7 @@ export function TasksTab({ c }: { c: any }) {
         </CardHeader>
         <CardContent className="pt-4">
           <p className="text-[var(--text-sm)] text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
-            {c.planSummary || "Plan generation pending..."}
+            {caseSummary(c) || "Plan generation pending..."}
           </p>
         </CardContent>
       </Card>

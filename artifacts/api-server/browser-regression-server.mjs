@@ -18,9 +18,11 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import { and, eq, inArray } from "drizzle-orm";
 import { createIsolatedTestDatabase } from "./isolated-test-database.mjs";
+import { installBrowserIdentityReader } from "./browser-regression-identities.mjs";
+import { clerkClient } from "@clerk/express";
 
-if (process.env.ONBOARDING_E2E_TEST !== "true") {
-  throw new Error("browser-regression-server.mjs is test-only; set ONBOARDING_E2E_TEST=true");
+if (process.env.ONBOARDING_E2E_TEST !== "true" || process.env.NODE_ENV !== "test") {
+  throw new Error("browser-regression-server.mjs requires NODE_ENV=test and ONBOARDING_E2E_TEST=true");
 }
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is required for the durable browser regression");
@@ -141,6 +143,11 @@ let demoPrincipalSettingKey;
 let router;
 let errorHandler;
 let setOnboardingConnectorProxyForTests;
+const ownedIdentities = new Map([
+  [administrator, { firstName: "Demo", lastName: "Administrator", email: "demo.admin@example.com" }],
+  [reviewer, { firstName: "Demo", lastName: "Reviewer", email: "demo.reviewer@example.com" }],
+]);
+installBrowserIdentityReader(clerkClient, ownedIdentities);
 try {
   ({ runWithProviderDeny } = await import("./src/lib/onboarding/provider-policy.ts"));
   ({ setOnboardingConnectorProxyForTests } = await import("./src/lib/onboarding/channels.ts"));
@@ -170,11 +177,16 @@ async function ensureFixture() {
   if (!organization) {
     await db.insert(organizationsTable).values({
       id: DEMO_ORGANIZATION_ID,
-      name: "Development Demo",
+      name: "Demo Organization",
       slug: "development-demo",
       joinCodeHash: `browser-regression-${suffix}`,
       createdByUserId: administrator,
     });
+  } else {
+    // This schema belongs exclusively to this harness; migrations may seed an
+    // older display name. Keep the fixture consistent with its browser checks.
+    await db.update(organizationsTable).set({ name: "Demo Organization" })
+      .where(eq(organizationsTable.id, DEMO_ORGANIZATION_ID));
   }
 
   await db.insert(organizationMembershipsTable).values([
@@ -328,6 +340,11 @@ app.use(cookieParser());
 app.use(express.json());
 const { seedOffboardingBrowserFixture } = await import("./offboarding-browser-fixture.mjs");
 const offboardingFixture = await seedOffboardingBrowserFixture(dbPackage, suffix);
+for (const [id, label] of [
+  [offboardingFixture.actor, "Operator"], [offboardingFixture.legal, "Legal"], [offboardingFixture.viewer, "Viewer"],
+]) {
+  ownedIdentities.set(id, { firstName: "Separation", lastName: `Test ${label}`, email: `${label.toLowerCase()}@example.invalid` });
+}
 const { withControlledEmailIntakeProvider, receiveIntakeMessage } = await import("./src/lib/hro-email-ingestion.ts");
 const { HRO_EMAIL_TEMPLATES, emailExample } = await import("./src/lib/hro-email-registry.ts");
 const controlledMailbox = `email-intake-${suffix}@example.invalid`;
@@ -543,8 +560,8 @@ if (process.env.UAT_E2E_TEST === "true") {
   await installUatBrowserAdapter(app, { dbPackage, sessions, userId: reviewer });
 }
 app.use("/api", router);
-app.use((error, _req, _res, next) => {
-  console.error("Isolated browser request failed:", error.name, error.message);
+app.use((error, req, _res, next) => {
+  console.error("Isolated browser request failed:", req.method, req.path, error.name, error.message);
   next(error);
 });
 app.use(errorHandler);

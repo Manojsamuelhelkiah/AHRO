@@ -106,7 +106,7 @@ export function AttentionPanel({ approval, caseId, offlineSample = false }: any)
           <CheckCircle2 className={cn("w-5 h-5", offlineSample ? "text-[var(--text-muted)]" : "text-[var(--status-green)]")} />
         </div>
         <h3 className="text-[var(--text-sm)] font-bold text-[var(--text-primary)]">{offlineSample ? 'No live decisions' : 'No decisions pending'}</h3>
-        <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">{offlineSample ? 'Example · Offline — no execution or approval authority.' : 'Automated execution is proceeding.'}</p>
+        <p className="text-[var(--text-xs)] text-[var(--text-muted)] mt-1">{offlineSample ? 'Offline — no execution or approval authority.' : 'Automated execution is proceeding.'}</p>
       </div>
     );
   }

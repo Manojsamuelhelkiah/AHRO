@@ -60,3 +60,15 @@ scope would also discard a separately entered provider-deny scope.
 **How to apply:** Admit dependencies before switching proof modes and capture
 the controlled provider and deny fence together. Do not weaken production
 dependency admission or rely on browser headers to recreate either scope.
+
+Fictional browser principals must resolve from owned test identity fixtures,
+not from the real identity provider. Such fixtures must not attest verified
+email, MFA enrollment, or private administrator approval.
+
+**Why:** Ordinary signed-in screens can read eligibility or display identity
+even when a fake session was accepted. Sending the fictional principal to the
+real provider causes missing-user failures and violates test isolation.
+
+**How to apply:** Keep identity reads behind the isolated test process boundary,
+allow only its owned principals, reject unknown identities, and leave production
+authentication and professional authority checks unchanged.

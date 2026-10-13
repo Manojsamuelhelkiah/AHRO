@@ -50,3 +50,15 @@ and intersect approval history with that operational population.
 
 **Why:** A Cases-list visibility change can bypass the backend outcome filters
 when other screens derive operational statistics directly from the list API.
+
+**Sample label boundary:** Sample case references are display labels, not verified
+employee identities, evidence references, or authority. Simplifying names and
+labels does not authorize changing stored provenance, dates, or execution fences.
+
+**Why:** The product owner requested simpler sample identification while explicitly
+preserving read-only/no-outreach/no-business-completion restrictions and unresolved
+review needs.
+
+**How to apply:** Hide redundant generated sample identifiers only in confirmed
+fictional offline presentation. Preserve reference conflicts, missing-reference
+warnings and pending verification; never substitute the case number for evidence.

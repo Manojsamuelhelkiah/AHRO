@@ -24,6 +24,9 @@ import {
   caseTypeOf as presentedCaseTypeOf,
   casesForList,
   isFictionalOfflineExample,
+  caseListReference as caseIdOf,
+  caseWorkerName,
+  caseSummary,
   type CaseTypeFilter,
 } from './case-presentation';
 
@@ -42,11 +45,6 @@ export function caseTypeOf(c: OnbCase): Exclude<CaseTypeFilter, 'All Cases'> {
 
 export function caseTitleOf(c: OnbCase): string {
   return presentedCaseTitleOf(c);
-}
-
-function caseIdOf(c: OnbCase): string {
-  const year = c.createdAt ? new Date(c.createdAt).getFullYear() : new Date().getFullYear();
-  return `HRO-${year}-${String(c.id).padStart(5, '0')}`;
 }
 
 export function statusOf(c: Pick<OnbCase, 'lifecycleStage' | 'orchestrationStatus'>): HroStatus {
@@ -282,7 +280,7 @@ export function CasesPage() {
     const q = query.trim().toLowerCase();
     if (q) {
       rows = rows.filter((c) =>
-        [c.workerName, c.workerEmail, caseTitleOf(c), caseIdOf(c), String(c.id), c.role, c.geography, isFictionalOfflineExample(c) ? c.planSummary : null]
+        [caseWorkerName(c), c.workerEmail, caseTitleOf(c), caseIdOf(c), String(c.id), c.role, c.geography, isFictionalOfflineExample(c) ? caseSummary(c) : null]
           .some((v) => (v || '').toLowerCase().includes(q)),
       );
     }
@@ -612,7 +610,7 @@ export function CasesPage() {
                       className="group transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]"
                       style={{ borderBottom: '1px solid var(--border)' }}
                       tabIndex={0}
-                      aria-label={`Open case ${caseIdOf(c)} — ${caseTitleOf(c)} for ${c.workerName}`}
+                      aria-label={`Open case ${caseIdOf(c)} — ${caseTitleOf(c)} for ${caseWorkerName(c)}`}
                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--primary-light)')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                       onKeyDown={(e) => {
@@ -630,13 +628,13 @@ export function CasesPage() {
                       <td style={{ padding: '10px 8px' }}>
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="shrink-0 whitespace-nowrap" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</span>
-                          <span className="min-w-0 truncate" title={[caseTitleOf(c), isFictionalOfflineExample(c) ? c.planSummary : null].filter(Boolean).join(' — ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
-                          {isFictionalOfflineExample(c) && <span title="Fictional example · Offline and read-only" className="shrink-0 text-[10px] font-semibold text-[var(--text-muted)]">Offline</span>}
+                          <span className="min-w-0 truncate" title={[caseTitleOf(c), isFictionalOfflineExample(c) ? caseSummary(c) : null].filter(Boolean).join(' — ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
+                          {isFictionalOfflineExample(c) && <span title="Offline and read-only" className="shrink-0 text-[10px] font-semibold text-[var(--text-muted)]">Offline</span>}
                           {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} title="Email source history" aria-label={`Email source history for ${caseIdOf(c)}`} className="shrink-0 text-xs underline">Email</Link>}
                         </div>
                       </td>
                       <td style={{ padding: '10px 8px' }}>
-                        <div className="truncate" title={[c.workerName, c.workerEmail, workforceLabel(c).replace(/-/g, ' '), c.workforceContext?.siteExposure === true ? 'Site exposure' : c.workforceContext?.siteExposure === false ? 'No site exposure' : null, c.workforceContext?.safetyCritical === true ? 'Safety-critical' : c.workforceContext?.safetyCritical === false ? 'Not safety-critical' : null].filter(Boolean).join(' · ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{c.workerName}</div>
+                        <div className="truncate" title={[caseWorkerName(c), c.workerEmail, workforceLabel(c).replace(/-/g, ' '), c.workforceContext?.siteExposure === true ? 'Site exposure' : c.workforceContext?.siteExposure === false ? 'No site exposure' : null, c.workforceContext?.safetyCritical === true ? 'Safety-critical' : c.workforceContext?.safetyCritical === false ? 'Not safety-critical' : null].filter(Boolean).join(' · ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{caseWorkerName(c)}</div>
                       </td>
                       <td style={{ padding: '10px 8px' }}>
                         <div className="truncate" title={caseTypeOf(c)}><CaseTypeBadge type={caseTypeOf(c)} /></div>
@@ -695,10 +693,10 @@ export function CasesPage() {
                     <span className="min-w-0 truncate" title={caseTitleOf(c)} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
                     <HroStatusBadge status={status} />
                   </div>
-                  {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Example · Offline</span>}
-                  {isFictionalOfflineExample(c) && c.planSummary && <p className="mt-1 line-clamp-1 text-xs text-[var(--text-muted)]">{c.planSummary}</p>}
+                  {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Offline</span>}
+                  {isFictionalOfflineExample(c) && c.planSummary && <p title={caseSummary(c)} className="mt-1 line-clamp-1 text-xs text-[var(--text-muted)]">{caseSummary(c)}</p>}
                   <div className="flex items-center justify-between gap-2 mt-1">
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{c.workerName}</span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{caseWorkerName(c)}</span>
                     <CaseTypeBadge type={caseTypeOf(c)} />
                   </div>
                   <div className="flex items-center justify-between gap-2 mt-1">

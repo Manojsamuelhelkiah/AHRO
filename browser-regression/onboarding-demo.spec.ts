@@ -102,7 +102,7 @@ for (const viewport of VIEWPORTS) {
     await expect(page.getByText('Page 2 · up to 30 attempts')).toBeVisible();
     await page.getByRole('button', { name: 'Refresh latest' }).click();
     await expect(page.getByText('Page 1 · up to 30 attempts')).toBeVisible();
-    await page.locator('summary').click();
+    await page.getByRole('main').locator('summary').click();
     const related = page.getByRole('link', { name: /view related attempts/ });
     await expect(related).toHaveAttribute('href', `/execution-history?contextView=operator&contextCorrelation=${correlation}`);
     await related.click();
@@ -111,9 +111,9 @@ for (const viewport of VIEWPORTS) {
     await expect(page.getByLabel('Workflow', { exact: true })).toHaveValue('documents');
     await page.goForward();
     await expect(page.getByText('Correlation filter:', { exact: false })).toBeVisible();
-    await page.locator('summary').click();
+    await page.getByRole('main').locator('summary').click();
     for (const control of [page.getByLabel('History view'), page.getByLabel('Workflow', { exact: true }), page.getByLabel('Status', { exact: true }),
-      page.getByRole('button', { name: 'Newer attempts' }), page.getByRole('button', { name: 'Older attempts' }), page.locator('details')]) {
+      page.getByRole('button', { name: 'Newer attempts' }), page.getByRole('button', { name: 'Older attempts' }), page.getByRole('main').locator('details')]) {
       const box = await control.boundingBox();
       expect(box!.x).toBeGreaterThanOrEqual(0);
       expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
@@ -122,7 +122,7 @@ for (const viewport of VIEWPORTS) {
     mode = 'denied';
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
     await expect(page.getByRole('alert').filter({ hasText: 'Execution history is unavailable' })).toBeVisible();
-    await expect(page.locator('details')).toHaveCount(0);
+    await expect(page.getByRole('main').locator('details')).toHaveCount(0);
     mode = 'empty';
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
     await expect(page.getByText('No execution attempts match this view and its filters.')).toBeVisible();

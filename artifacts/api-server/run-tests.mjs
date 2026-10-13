@@ -99,6 +99,7 @@ const result = requestedBgvOnly ? { status: 0 } : spawnSync(
       path.join(dir, "start-production.test.mjs"),
       path.join(dir, "verify-tenant-safeguards.test.mjs"),
       path.join(dir, "publish-safeguard-alert.test.mjs"),
+      path.join(dir, "browser-regression-identities.test.mjs"),
     ]),
     ...globSync("dist-test/**/*.test.mjs", { cwd: dir }).filter((f) => !f.endsWith("/bgv-notifications.test.mjs")).map((f) =>
       path.join(dir, f),
