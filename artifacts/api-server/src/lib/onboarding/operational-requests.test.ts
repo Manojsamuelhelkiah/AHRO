@@ -1,4 +1,4 @@
-import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
+import { deleteTestOrganizations, requireOwnedOrganizationTestSchema } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
@@ -307,6 +307,7 @@ async function call(
 }
 
 before(async () => {
+  await requireOwnedOrganizationTestSchema();
   await db.insert(organizationsTable).values([
     { id: orgA, name: "Operational A", slug: orgA, joinCodeHash: `hash-${orgA}`, createdByUserId: user },
     { id: orgB, name: "Operational B", slug: orgB, joinCodeHash: `hash-${orgB}`, createdByUserId: user },

@@ -8,6 +8,9 @@ import { AsyncResource } from "node:async_hooks";
 export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions }) {
   if (process.env.ONBOARDING_E2E_TEST !== "true" || process.env.ADMIN_READ_E2E_TEST !== "true" ||
       process.env.NODE_ENV === "production") throw new Error("Isolated admin harness only.");
+  const scope = (await dbPackage.pool.query("SELECT current_schema() s, current_schemas(false)::text[] scopes")).rows[0];
+  if (!/^browser_regression_[0-9]+_[a-f0-9]+$/.test(scope.s) || scope.scopes.length !== 1)
+    throw new Error("Admin fixture requires its owned disposable schema, without a shared fallback");
   const { db, organizationsTable, organizationMembershipsTable, onbCases, onbDocuments,
     onbCommunications, accessNamedGrants, employeeVaultProducts } = dbPackage;
   const { createDevelopmentAdminContext } = await import("./src/lib/development-super-admin.ts");

@@ -1,5 +1,15 @@
 import { inArray, type SQL } from "drizzle-orm";
-import { db, organizationsTable, hroContextAnchors, hroContextTransactions, hroContextSteps, hroContextRetentionPolicies, hroContextRetentionState } from "@workspace/db";
+import { db, pool, organizationsTable, hroContextAnchors, hroContextTransactions, hroContextSteps, hroContextRetentionPolicies, hroContextRetentionState } from "@workspace/db";
+
+/** Prevent a directly invoked/bundled workspace suite from bypassing its runner. */
+export async function requireOwnedOrganizationTestSchema(): Promise<void> {
+  const { rows } = await pool.query("SELECT current_schema() s, current_schemas(false)::text[] scopes");
+  const scope = rows[0];
+  if (!/^workspace_regression_[0-9]+_[a-f0-9]+$/.test(scope?.s ?? "") ||
+      !Array.isArray(scope.scopes) || scope.scopes.length !== 1) {
+    throw new Error("Workspace regression requires the owned isolated run-tests.mjs harness");
+  }
+}
 
 /**
  * Test-only fixture teardown. Production organization deletion remains
@@ -15,6 +25,9 @@ export async function deleteTestOrganizations(
       .from(organizationsTable).where(predicate).for("update");
     const ids = organizations.map(organization => organization.id);
     if (!ids.length) return;
+     if (ids.some(id => id === "demo" || id === "platform-audit" || id === "org_654eb2bb-23cb-489a-9cc3-50faeddcfd3c")) {
+       throw new Error("Test teardown cannot remove a protected workspace");
+     }
     // Keep bootstrap children and the parent deletion under the same FK lock.
     if (cleanup) await cleanup(tx, ids);
     await tx.delete(hroContextRetentionState).where(inArray(hroContextRetentionState.organizationId, ids));

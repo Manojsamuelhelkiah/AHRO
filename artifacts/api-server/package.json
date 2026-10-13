@@ -13,6 +13,8 @@
     "test": "pnpm run test:policy-quality && pnpm run test:post-merge && node ./run-tests.mjs",
     "test:policy-quality": "node ./test-policy-quality.mjs",
     "test:post-merge": "bash ../../scripts/post-merge.test.sh",
+    "test:workspace-cleanup": "NODE_ENV=test node --test workspace-cleanup.test.mjs",
+    "workspaces:inventory": "node clean-disposable-workspaces.mjs --dry-run",
     "db:reconcile": "node ./test-db-setup.mjs",
     "db:migrate:reviewed": "node ./run-reviewed-migration.mjs",
     "authority:governance:approve": "node ./approve-authority-governance.mjs",

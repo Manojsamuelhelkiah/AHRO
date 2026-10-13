@@ -6,4 +6,5 @@
 /.cache/ms-playwright/
 /test-results/
 /playwright-report/
+/generated-artifacts/
 **/dist-test-admin/

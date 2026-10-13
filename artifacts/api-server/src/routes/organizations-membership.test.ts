@@ -1,4 +1,4 @@
-import { deleteTestOrganizations } from "../test-support/organization-fixtures";
+import { deleteTestOrganizations, requireOwnedOrganizationTestSchema } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -44,6 +44,7 @@ function hashJoinCode(value: string): string {
 }
 
 before(async () => {
+  await requireOwnedOrganizationTestSchema();
   await db.insert(organizationsTable).values({
     id: organizationId,
     name: "Membership lifecycle test",

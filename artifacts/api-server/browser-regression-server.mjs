@@ -13,11 +13,11 @@
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { AsyncLocalStorage } from "node:async_hooks";
 import express from "express";
 import cookieParser from "cookie-parser";
 import { and, eq, inArray } from "drizzle-orm";
+import { createIsolatedTestDatabase } from "./isolated-test-database.mjs";
 
 if (process.env.ONBOARDING_E2E_TEST !== "true") {
   throw new Error("browser-regression-server.mjs is test-only; set ONBOARDING_E2E_TEST=true");
@@ -29,7 +29,8 @@ if (!process.env.DATABASE_URL) {
 const port = Number(process.env.PORT || 4178);
 assert(Number.isInteger(port) && port > 0);
 const suffix = `${process.pid}-${randomUUID()}`;
-const isolatedSchema = `browser_regression_${process.pid}_${randomUUID().replaceAll("-", "")}`;
+let isolatedSchema;
+let ownedDatabase;
 const originalDatabaseUrl = process.env.DATABASE_URL;
 const administrator = `browser-e2e-admin-${suffix}`;
 const reviewer = `browser-e2e-reviewer-${suffix}`;
@@ -38,70 +39,16 @@ const issuedTickets = new Map();
 const sessions = new Map();
 const ownedPolicyRevisions = new Set();
 let server;
-let rootPool;
 let dbPackage;
 let schemaCreated = false;
 let shuttingDown = false;
 
-function quoteIdentifier(value) {
-  return `"${value.replaceAll('"', '""')}"`;
-}
-
-function scopedDatabaseUrl(connectionString, schema) {
-  const url = new URL(connectionString);
-  // Do not include public as a fallback. Some historical migrations contain
-  // unqualified DROP INDEX statements; if the disposable schema does not yet
-  // have that index, PostgreSQL would otherwise resolve and remove the shared
-  // development index from public.
-  url.searchParams.set(
-    "options",
-    `-c search_path=${quoteIdentifier(schema)}`,
-  );
-  return url.toString();
-}
-
 async function initializeIsolatedDatabase() {
-  const { Pool } = await import("pg");
-  rootPool = new Pool({ connectionString: originalDatabaseUrl });
-  await rootPool.query(`CREATE SCHEMA ${quoteIdentifier(isolatedSchema)}`);
+  ownedDatabase = await createIsolatedTestDatabase(originalDatabaseUrl, "browser_regression");
+  isolatedSchema = ownedDatabase.schema;
   schemaCreated = true;
-
-  // pgcrypto is database-scoped and may already be installed in public.
-  // Keep the migration search_path isolated while exposing only the digest
-  // overload used by the checked-in custody migration through a local shim.
-  // This avoids reintroducing public as a fallback just for an extension
-  // function.
-  const pgcrypto = await rootPool.query(`
-    SELECT namespace_record.nspname AS schema_name
-    FROM pg_extension extension_record
-    JOIN pg_namespace namespace_record
-      ON namespace_record.oid = extension_record.extnamespace
-    WHERE extension_record.extname = 'pgcrypto'
-  `);
-  const pgcryptoSchema = pgcrypto.rows[0]?.schema_name;
-  if (pgcryptoSchema) {
-    await rootPool.query(`
-      CREATE FUNCTION ${quoteIdentifier(isolatedSchema)}."digest"(text, text)
-      RETURNS bytea
-      LANGUAGE sql
-      IMMUTABLE
-      STRICT
-      AS $browser_regression$
-        SELECT ${quoteIdentifier(pgcryptoSchema)}."digest"($1, $2)
-      $browser_regression$
-    `);
-  }
-
-  process.env.DATABASE_URL = scopedDatabaseUrl(originalDatabaseUrl, isolatedSchema);
+  process.env.DATABASE_URL = ownedDatabase.connectionString;
   dbPackage = await import("@workspace/db");
-  const { migrate } = await import("drizzle-orm/node-postgres/migrator");
-  await migrate(dbPackage.db, {
-    migrationsFolder: path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "../../lib/db/drizzle",
-    ),
-    migrationsSchema: isolatedSchema,
-  });
 
   const relationCheck = await dbPackage.pool.query(`
     SELECT
@@ -146,18 +93,14 @@ async function closeDatabasePools() {
 }
 
 async function dropOwnedSchema() {
-  if (!schemaCreated || !rootPool) return;
-  await rootPool.query(`DROP SCHEMA IF EXISTS ${quoteIdentifier(isolatedSchema)} CASCADE`);
+  if (!schemaCreated || !ownedDatabase) return;
+  await ownedDatabase.dispose();
   schemaCreated = false;
 }
 
 async function abandonStartup() {
   await closeDatabasePools();
-  if (rootPool) {
-    await dropOwnedSchema().catch(() => {});
-    await rootPool.end().catch(() => {});
-    rootPool = undefined;
-  }
+  await dropOwnedSchema();
 }
 
 try {
@@ -166,6 +109,15 @@ try {
   await abandonStartup();
   throw error;
 }
+
+// Install before later fixture imports/adapter setup can fail. A startup
+// exception must not strand a migrated schema (including its workspace rows).
+process.once("uncaughtException", async error => {
+  console.error("Isolated browser startup failed:", error);
+  try { await abandonStartup(); } finally { process.exit(1); }
+});
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
 
 const {
   DEMO_ORGANIZATION_ID,
@@ -388,6 +340,12 @@ const intakeProvider = { get: async path => {
   assert.equal(path, "/gmail/v1/users/me/profile", "No real inbox may be fetched in browser tests");
   return { ok: true, json: async () => ({ emailAddress: controlledMailbox }) };
 }};
+// Admit the test dependency while this process is still in test mode.
+// The admin-proof adapter later models development/production semantics.
+// Bind both scopes together: capturing only the provider would discard the
+// request's separate provider-deny ALS fence when restoring the snapshot.
+const enterControlledRequest = runWithProviderDeny(() =>
+  withControlledEmailIntakeProvider(intakeProvider, () => AsyncLocalStorage.bind(next => next())));
 await db.insert(accessNamedGrants).values(["data.case.notes.read", "data.case.notes.edit"].map(resourceKey => ({
   organizationId: offboardingFixture.org, principalType: "human", principalId: offboardingFixture.actor,
   resourceKey, scope: "tenant", resourceType: "field", effect: "allow", source: "named", status: "active",
@@ -476,7 +434,7 @@ app.use((req, _res, next) => {
   const session = cookieValue(req, "browser_e2e_session");
   const userId = session ? sessions.get(session) : null;
   if (userId) req.authUserId = userId;
-  runWithProviderDeny(() => withControlledEmailIntakeProvider(intakeProvider, () => next()));
+  enterControlledRequest(next);
 });
 
 // The browser regression is allowed to inspect owned fixture state, but only
@@ -566,6 +524,10 @@ if (process.env.UAT_E2E_TEST === "true") {
   await installUatBrowserAdapter(app, { dbPackage, sessions, userId: reviewer });
 }
 app.use("/api", router);
+app.use((error, _req, _res, next) => {
+  console.error("Isolated browser request failed:", error.name, error.message);
+  next(error);
+});
 app.use(errorHandler);
 
 try {
@@ -593,13 +555,6 @@ async function shutdown() {
   } finally {
     await closeDatabasePools();
     await dropOwnedSchema();
-    if (rootPool) {
-      await rootPool.end();
-      rootPool = undefined;
-    }
   }
   process.exit(exitCode);
 }
-
-process.once("SIGINT", shutdown);
-process.once("SIGTERM", shutdown);

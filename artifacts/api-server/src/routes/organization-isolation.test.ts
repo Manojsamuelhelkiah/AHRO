@@ -1,4 +1,4 @@
-import { deleteTestOrganizations } from "../test-support/organization-fixtures";
+import { deleteTestOrganizations, requireOwnedOrganizationTestSchema } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
@@ -238,6 +238,7 @@ async function grantOpaqueNarrativeAuthority(caseId: number) {
 }
 
 before(async () => {
+  await requireOwnedOrganizationTestSchema();
   await db.insert(organizationsTable).values([
     {
       id: orgA,

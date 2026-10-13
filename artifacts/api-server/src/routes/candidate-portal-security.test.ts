@@ -1,4 +1,4 @@
-import { deleteTestOrganizations } from "../test-support/organization-fixtures";
+import { deleteTestOrganizations, requireOwnedOrganizationTestSchema } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { request as httpRequest, type Server } from "node:http";
@@ -201,6 +201,7 @@ function oversizedUpload(secret: string): Promise<number> {
 }
 
 before(async () => {
+  await requireOwnedOrganizationTestSchema();
   await db.insert(organizationsTable).values([
     { id: orgA, name: "Candidate Security A", slug: orgA, joinCodeHash: `hash-${orgA}`, createdByUserId: userId },
     { id: orgB, name: "Candidate Security B", slug: orgB, joinCodeHash: `hash-${orgB}`, createdByUserId: userId },
@@ -532,7 +533,7 @@ test("bearer portal links and opaque logistics require live full case-scoped aut
   assert.equal(ordinaryLogisticsWrite.status, 403);
 });
 
-test("sample portal email uses full live authority without authorizing any non-email workflow", async () => {
+test("retired sample portal email stays offline even with live authority and a deliverable-looking address", async () => {
   const [original] = await db.select().from(onbCases).where(eq(onbCases.id, caseA2));
   let calls = 0;
   setOnboardingConnectorProxyForTests(async () => {
@@ -554,11 +555,10 @@ test("sample portal email uses full live authority without authorizing any non-e
       organizationId: orgA, caseId: caseA2, issuedBy: userId, publicBase: baseUrl,
       sendEmail: true, idempotencyKey: key,
     });
-    assert.ok(result?.portalUrl);
-    assert.equal(calls, 1);
+    assert.equal(result, undefined);
+    assert.equal(calls, 0);
     const [message] = await db.select().from(onbCommunications).where(eq(onbCommunications.idempotencyKey, key));
-    assert.equal(message.status, "sent");
-    assert.doesNotMatch(message.body, /#token=/);
+    assert.equal(message, undefined);
     const [current] = await db.select().from(onbCases).where(eq(onbCases.id, caseA2));
     assert.equal(isSyntheticOfflineCase(current), true);
     assert.equal(current.offerAcceptanceComplete, original.offerAcceptanceComplete);

@@ -32,3 +32,25 @@ Browser layout assertions must tolerate nodes being replaced during successful m
 **Why:** Locator scrolling can fail on a detached node even when the refreshed replacement is visible and valid. Retrying the mutation itself could mask duplicate delivery.
 
 **How to apply:** Retry only reacquired scrolling and bounding-box assertions for a bounded interval, then perform one click and retain the exact request-count assertion.
+
+An isolated search path is not sufficient when historical migration SQL
+contains explicitly shared-schema foreign-key references.
+
+**Why:** Disposable browser schemas once kept foreign keys to everyday
+organization/case tables despite having no shared search-path fallback.
+Those references can couple test startup or teardown to real client records.
+
+**How to apply:** Rewrite shared-qualified references only in disposable replay
+copies, never historical migration files, and assert that every test FK stays
+inside its owned schema. Fail closed rather than reintroducing shared fallback.
+
+Controlled provider admission and administrator proof simulation can require
+different process modes in the same isolated browser harness.
+
+**Why:** A mailbox fixture admitted only in test mode failed once the admin
+adapter modeled development/production semantics. Capturing only its provider
+scope would also discard a separately entered provider-deny scope.
+
+**How to apply:** Admit dependencies before switching proof modes and capture
+the controlled provider and deny fence together. Do not weaken production
+dependency admission or rely on browser headers to recreate either scope.

@@ -7,8 +7,10 @@ import {
   organizationsTable,
 } from "@workspace/db";
 import { ensureDemoOrganization } from "./organizations";
+import { requireOwnedOrganizationTestSchema } from "../test-support/organization-fixtures";
 
 test("demo organization request bootstrap is idempotent", async () => {
+  await requireOwnedOrganizationTestSchema();
   await ensureDemoOrganization();
   await ensureDemoOrganization();
 

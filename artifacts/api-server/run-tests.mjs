@@ -1,6 +1,7 @@
 // Bundles the TS test files with esbuild and runs them with node's test runner.
 import { build } from "esbuild";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
+import { createIsolatedTestDatabase } from "./isolated-test-database.mjs";
 import { globSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { builtinModules } from "node:module";
@@ -10,19 +11,47 @@ import { prepareDatabaseBackedTests } from "./test-db-setup.mjs";
 const dir = path.dirname(fileURLToPath(import.meta.url));
 rmSync(path.join(dir, "dist-test"), { recursive: true, force: true });
 const requestedTestFile = process.env.TEST_FILE?.trim();
+// Only suites proven to create workspace leftovers, plus workspace bootstrap/
+// membership regressions. Broad API-suite isolation is a separate deliverable.
+const ownedWorkspaceSuites = new Set([
+  "src/routes/candidate-portal-security.test.ts",
+  "src/lib/onboarding/operational-requests.test.ts",
+  "src/routes/organization-isolation.test.ts",
+  "src/routes/organizations-membership.test.ts",
+  "src/routes/organizations.test.ts",
+]);
+if (ownedWorkspaceSuites.has(requestedTestFile) && !process.argv.includes("--isolated-child")) {
+  const owned = await createIsolatedTestDatabase(process.env.DATABASE_URL);
+  let child;
+  process.once("SIGTERM", () => child?.kill("SIGTERM"));
+  process.once("SIGINT", () => child?.kill("SIGINT"));
+  let status = 1;
+  try {
+    child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--isolated-child"], {
+      stdio: "inherit", env: { ...process.env, DATABASE_URL: owned.connectionString },
+    });
+    status = await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", code => resolve(code ?? 1));
+    });
+  } finally {
+    await owned.dispose();
+  }
+  process.exit(status);
+}
 const allEntryPoints = globSync("src/**/*.test.ts", { cwd: dir }).map((f) =>
   path.join(dir, f),
 );
 const entryPoints = requestedTestFile
   ? allEntryPoints.filter((file) => path.relative(dir, file) === requestedTestFile)
-  : allEntryPoints;
+  : allEntryPoints.filter(file => !ownedWorkspaceSuites.has(path.relative(dir, file)));
 
 if (entryPoints.length === 0) {
   console.error("No test files found");
   process.exit(1);
 }
 
-await prepareDatabaseBackedTests();
+if (!process.argv.includes("--isolated-child")) await prepareDatabaseBackedTests();
 
 await build({
   entryPoints,
@@ -73,4 +102,13 @@ const bgvResult = !requestedTestFile || requestedBgvOnly
     stdio: "inherit", env: { ...process.env, NODE_ENV: "development", ONBOARDING_AUTOMATED_TEST: "true" },
   })
   : { status: 0 };
-process.exit((result.status ?? 1) || (bgvResult.status ?? 1));
+let workspaceStatus = 0;
+if (!requestedTestFile) {
+  for (const file of ownedWorkspaceSuites) {
+    const run = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], {
+      stdio: "inherit", env: { ...process.env, NODE_ENV: "test", TEST_FILE: file },
+    });
+    workspaceStatus ||= run.status ?? 1;
+  }
+}
+process.exit((result.status ?? 1) || (bgvResult.status ?? 1) || workspaceStatus);
