@@ -9,7 +9,7 @@ import {
 import type { HroEmailReadiness, HroEmailRoute, HroEmailTriage } from '@workspace/api-client-react';
 import { Card, Button, Input, Label, PageHeader } from '@/components/ui-shared';
 import { Mail, ShieldAlert, Lock } from 'lucide-react';
-import { CopyButton, ErrorNote, Pill, Skeleton, fmtDate, inputCls, statusTone, useEmailScope } from './common';
+import { CopyButton, ErrorNote, Pill, Skeleton, fmtDate, inputCls, statusTone, useEmailScope, emailAccessRefresh, useClearDeniedEmailData } from './common';
 import { ReviewTurnaround } from './turnaround';
 import { MarkerRotation } from './rotation';
 
@@ -114,7 +114,8 @@ function ConfigForm({ headers, scope, routes }: { headers: Record<string, string
 
 function Triage({ data, headers, scope }: { data: HroEmailReadiness; headers: Record<string, string>; scope: string }) {
   const qc = useQueryClient();
-  const q = useListHroEmailTriage({ request: { headers }, query: { queryKey: [...getListHroEmailTriageQueryKey(), scope] } });
+  const q = useListHroEmailTriage({ request: { headers }, query: { queryKey: [...getListHroEmailTriageQueryKey(), scope],
+    retry: false, refetchOnWindowFocus: emailAccessRefresh, refetchOnMount: emailAccessRefresh } });
   const [target, setTarget] = useState<{ id: string; action: 'assign' | 'reject' } | null>(null);
   const [routeId, setRouteId] = useState('');
   const [reference, setReference] = useState('');
@@ -175,11 +176,14 @@ function Triage({ data, headers, scope }: { data: HroEmailReadiness; headers: Re
 
 export function EmailIntakePage() {
   const { scope, headers, org } = useEmailScope();
-  const intake = useGetHroEmailIntake({ request: { headers }, query: { queryKey: [...getGetHroEmailIntakeQueryKey(), scope], enabled: Boolean(org), retry: false, refetchInterval: 60_000 } });
+  const intake = useGetHroEmailIntake({ request: { headers }, query: { queryKey: [...getGetHroEmailIntakeQueryKey(), scope], enabled: Boolean(org), retry: false,
+    refetchInterval: q => emailAccessRefresh(q) ? 60_000 : false, refetchOnWindowFocus: emailAccessRefresh, refetchOnMount: emailAccessRefresh } });
+  useClearDeniedEmailData(intake.error, intake.isSuccess && intake.data?.canReview === false);
   const [before, setBefore] = useState<string | undefined>();
   const [previous, setPrevious] = useState<Array<string | undefined>>([]);
   useEffect(() => { setBefore(undefined); setPrevious([]); }, [scope]);
-  const reqs = useListHroEmailRequests(before ? { before } : undefined, { request: { headers }, query: { queryKey: [...getListHroEmailRequestsQueryKey(), scope, before], enabled: Boolean(org) && intake.data?.canReview === true, retry: false, refetchInterval: 15_000, staleTime: 0 } });
+  const reqs = useListHroEmailRequests(before ? { before } : undefined, { request: { headers }, query: { queryKey: [...getListHroEmailRequestsQueryKey(), scope, before], enabled: Boolean(org) && !intake.isError && intake.data?.canReview === true, retry: false,
+    refetchInterval: q => emailAccessRefresh(q) ? 15_000 : false, refetchOnWindowFocus: emailAccessRefresh, refetchOnMount: emailAccessRefresh, staleTime: 0 } });
   const d = intake.data;
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-12">

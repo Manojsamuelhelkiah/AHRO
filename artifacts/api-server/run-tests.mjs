@@ -22,6 +22,7 @@ const ownedWorkspaceSuites = new Set([
   "src/lib/onboarding/client-operations-settings.test.ts",
   "src/routes/user-group-super-admin.test.ts",
   "src/lib/hro-email-intake.test.ts",
+  "src/routes/email-intake-access.test.ts",
   "src/lib/onboarding/decision-authority.test.ts",
   "src/lib/onboarding/approval-versioning.test.ts",
   "src/routes/onboarding-gate-routes.test.ts",

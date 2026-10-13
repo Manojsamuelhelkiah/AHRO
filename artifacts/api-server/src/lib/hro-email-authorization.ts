@@ -1,7 +1,23 @@
 import type { SeparationReceipt } from "@workspace/db";
 import type { Tx } from "./offboarding/authority";
 import { SeparationError } from "./offboarding/model";
-import { hasHumanPermissions, permissionReceiptStillCurrent, type HumanPermissionReceipt } from "./human-permissions";
+import { hasHumanPermissions, isSharedDemoPrincipalInTransaction, permissionReceiptStillCurrent, type HumanPermissionReceipt } from "./human-permissions";
+
+export class EmailIntakeAccessError extends SeparationError {
+  constructor(public readonly code: "EMAIL_INTAKE_DEMO_RESTRICTED" | "EMAIL_INTAKE_ACCESS_REQUIRED") {
+    super(code === "EMAIL_INTAKE_DEMO_RESTRICTED"
+      ? "Public Demo access cannot open Email Intake. Sign in with verified Super Admin credentials; account initials are identity only."
+      : "Current case-flow and profile read permissions are required in the selected client.", 403);
+  }
+}
+
+/** Readiness is a tenant read, not a separation operation or route approval. */
+export async function requireEmailIntakeRead(tx: Tx, organizationId: string, actorUserId: string) {
+  if (await hasHumanPermissions(tx, { organizationId, actorUserId,
+    requiredKeys: ["flow.case.read", "data.case.profile.read"] })) return;
+  throw new EmailIntakeAccessError(await isSharedDemoPrincipalInTransaction(tx, actorUserId)
+    ? "EMAIL_INTAKE_DEMO_RESTRICTED" : "EMAIL_INTAKE_ACCESS_REQUIRED");
+}
 
 const ROUTE_KEYS = ["flow.case.edit", "data.case.profile.edit"] as const;
 

@@ -9,7 +9,7 @@ import {
 import type { HroEmailRequest, HroEmailTemplate } from '@workspace/api-client-react';
 import { Card, Button, PageHeader } from '@/components/ui-shared';
 import { ArrowLeft, Lock } from 'lucide-react';
-import { ErrorNote, Pill, Skeleton, fmtDate, inputCls, statusTone, useEmailScope } from './common';
+import { ErrorNote, Pill, Skeleton, fmtDate, inputCls, statusTone, useEmailScope, emailAccessRefresh, useClearDeniedEmailData } from './common';
 
 const CONTROL = ['template_id', 'template_version', 'request_id'];
 
@@ -25,7 +25,8 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
   const [confirmReject, setConfirmReject] = useState(false);
   const review = useReviewHroEmailRequest({ request: { headers } });
   const convert = useConvertHroEmailRequest({ request: { headers } });
-  const source = useGetHroEmailPrivateSource(current.id, { query: { queryKey: ['hro-email-private-source', scope, current.id], enabled: canReview }, request: { headers } });
+  const source = useGetHroEmailPrivateSource(current.id, { query: { queryKey: ['hro-email-private-source', scope, current.id], enabled: canReview,
+    retry: false, refetchOnWindowFocus: emailAccessRefresh, refetchOnMount: emailAccessRefresh }, request: { headers } });
 
   const tpl = templates.find((t) => t.template.id === templateId)?.template;
   const allowed = useMemo(() => [...new Set([...CONTROL, ...(tpl?.columns.map((c) => c.key) ?? [])])], [tpl]);
@@ -115,7 +116,7 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
         <Card className="space-y-2 p-4">
           <h2 className="text-base font-semibold">Confidential source history</h2>
           <p className="text-xs text-[var(--text-muted)]">Untrusted mail is not approved evidence. Private source content is available only under current client access, collection policy and a clean malware scan.</p>
-          {source.data?.state === 'clean' ? <div className="space-y-2 text-sm"><p className="break-words">{source.data.subject}</p><pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded border border-[var(--border)] p-2 text-xs">{source.data.body}</pre></div> :
+          {!source.isError && source.data?.state === 'clean' ? <div className="space-y-2 text-sm"><p className="break-words">{source.data.subject}</p><pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded border border-[var(--border)] p-2 text-xs">{source.data.body}</pre></div> :
             <p role="status" className="text-sm">Private source unavailable or quarantined ({source.data?.state ?? 'checking'}). Use approved secure collection for sensitive facts.</p>}
           {source.isError && <ErrorNote error={source.error} />}
         </Card>
@@ -154,9 +155,12 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
 export function EmailRequestDetailPage() {
   const { requestId = '' } = useParams<{ requestId: string }>();
   const { scope, headers, org } = useEmailScope();
-  const intake = useGetHroEmailIntake({ request: { headers }, query: { queryKey: [...getGetHroEmailIntakeQueryKey(), scope], enabled: Boolean(org), retry: false } });
-  const canReview = intake.data?.canReview === true;
-  const req = useGetHroEmailRequest(requestId, { request: { headers }, query: { queryKey: [...getGetHroEmailRequestQueryKey(requestId), scope], enabled: Boolean(org) && canReview, retry: false } });
+  const intake = useGetHroEmailIntake({ request: { headers }, query: { queryKey: [...getGetHroEmailIntakeQueryKey(), scope], enabled: Boolean(org), retry: false,
+    refetchInterval: q => emailAccessRefresh(q) ? 60_000 : false, refetchOnWindowFocus: emailAccessRefresh, refetchOnMount: emailAccessRefresh } });
+  useClearDeniedEmailData(intake.error, intake.isSuccess && intake.data?.canReview === false);
+  const canReview = !intake.isError && intake.data?.canReview === true;
+  const req = useGetHroEmailRequest(requestId, { request: { headers }, query: { queryKey: [...getGetHroEmailRequestQueryKey(requestId), scope], enabled: Boolean(org) && canReview, retry: false,
+    refetchOnWindowFocus: emailAccessRefresh, refetchOnMount: emailAccessRefresh } });
   const [resetKey, setResetKey] = useState(scope);
   useEffect(() => { setResetKey(scope); }, [scope]);
   return (

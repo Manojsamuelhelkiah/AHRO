@@ -5,7 +5,7 @@ import {
   getGetHroEmailRotationQueryKey, getGetHroEmailIntakeQueryKey, getListHroEmailRequestsQueryKey,
 } from '@workspace/api-client-react';
 import { Button, Input, Label } from '@/components/ui-shared';
-import { ErrorNote, fmtDate, Pill, Skeleton } from './common';
+import { ErrorNote, fmtDate, Pill, Skeleton, emailAccessRefresh } from './common';
 
 /** A metadata-only surface: never load the queue's private request or source endpoints. */
 export function MarkerRotation({ routeId, headers, scope }: { routeId: string; headers: Record<string, string>; scope: string }) {
@@ -19,7 +19,8 @@ export function MarkerRotation({ routeId, headers, scope }: { routeId: string; h
   const q = useGetHroEmailRotation(routeId, before ? { before } : undefined, {
     request: { headers }, query: {
       queryKey: [...getGetHroEmailRotationQueryKey(routeId), scope, before],
-      enabled: open, retry: false, refetchInterval: 15_000, staleTime: 0,
+      enabled: open, retry: false, refetchInterval: q => emailAccessRefresh(q) ? 15_000 : false,
+      refetchOnWindowFocus: emailAccessRefresh, refetchOnMount: emailAccessRefresh, staleTime: 0,
     },
   });
   const stage = useStageHroEmailRotation({ request: { headers } });

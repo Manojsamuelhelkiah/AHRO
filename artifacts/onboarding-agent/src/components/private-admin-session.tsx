@@ -61,7 +61,7 @@ export function PrivateAdminSession() {
   }
   // Accessible before tenant setup, and after a privilege expires/revokes.
   return (
-    <aside className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs" aria-label="Private administrator session">
+    <aside id="private-admin-session" className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs" aria-label="Private administrator session">
       <div className="flex flex-wrap items-center gap-3">
         <span>{eligible ? "Eligible for private administrator access · verify to activate a 15-minute session · independent safeguards apply" : "Platform access requires private approval of your verified MFA account."}</span>
         {eligible && <button type="button" onClick={() => void start()} disabled={busy}

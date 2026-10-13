@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, hroEmailRequests, hroEmailScan, hroMailboxIngress, onbCases, onbEvents, onbJobProfiles } from "@workspace/db";
 import { access, confidentialRead, type Tx } from "./offboarding/authority";
-import { requireEmailRouteAdministrator, emailRouteReceiptCurrent as currentReceipt, emailRouteReceipt as receipt } from "./hro-email-authorization";
+import { requireEmailIntakeRead, requireEmailRouteAdministrator, emailRouteReceiptCurrent as currentReceipt, emailRouteReceipt as receipt } from "./hro-email-authorization";
 import { SeparationError, object, text } from "./offboarding/model";
 import { audit, createSeparationInTransaction } from "./offboarding/service";
 import { connectedIntakeMailbox, emailHasOtherOwnership, type EmailProvider } from "./hro-email-ingestion";
@@ -39,13 +39,16 @@ export async function requireReview(tx: Tx, org: string, actor: string, write: b
     if (!grants.allows.includes("data.case.notes.edit")) throw new SeparationError("Explicit case-notes edit access is required for email request review.", 403);
   }
 }
-export async function emailIntakeReadiness(org: string, actor: string) {
-  const mailboxAddress = await connectedIntakeMailbox();
+export async function emailIntakeReadiness(org: string, actor: string, provider?: EmailProvider) {
+  // Reject restricted sessions before any connected-provider lookup. Recheck
+  // after that asynchronous boundary; a slow provider cannot preserve expiry.
+  await db.transaction(tx => requireEmailIntakeRead(tx, org, actor));
+  const mailboxAddress = await connectedIntakeMailbox(provider);
   const monitor = await getInboundEmailMonitorStatus(org);
   // Raw provider error strings must not cross into this surface.
   monitor.lastError = monitor.lastError ? "Inbox monitoring failed. Check connected provider access and heartbeat." : null;
   return db.transaction(async tx => {
-    await access(tx, org, actor, false);
+    await requireEmailIntakeRead(tx, org, actor);
     let canConfigure = false, canReview = false;
     try {
       await requireEmailRouteAdministrator(tx, org, actor);
@@ -62,7 +65,7 @@ export async function emailIntakeReadiness(org: string, actor: string) {
     let liveRoute = false;
     for (const route of routes) if (route.enabled === 1 && route.mailboxAddress === mailboxAddress &&
       route.activatedAt && await currentReceipt(tx, org, route.approval, "")) liveRoute = true;
-    return {
+    const result = {
       mailboxAddress, ready: Boolean(liveRoute && scan?.lastSuccessAt && Date.now() - scan.lastSuccessAt.getTime() < 180_000 && !scan.lastError),
       routes: canConfigure ? routes.map(emailRouteView) : routes.filter(r => r.enabled === 1).map(emailRouteView),
       templates: HRO_EMAIL_TEMPLATES.map(template => ({ template, example: emailExample(template) })),
@@ -73,8 +76,10 @@ export async function emailIntakeReadiness(org: string, actor: string) {
       backlog: counts?.backlog ?? 0, blocked: counts?.blocked ?? 0, paginationPending: Boolean(scan?.pageToken),
       turnaround: await emailReviewTurnaround(tx, org),
       attachmentPolicy: "Bounded source content is retained in private storage only after current collection-policy checks. Attachments remain quarantined and are never accepted as evidence by intake. Unavailable or unsafe malware scans block source access and evidence use. Use separately approved secure collection for bank, medical and identity values.",
-      canConfigure, canReview, canTriage: isPlatformSuperAdmin(actor),
+      canConfigure, canReview, canTriage: isPlatformSuperAdmin(actor, org),
     };
+    await requireEmailIntakeRead(tx, org, actor);
+    return result;
   });
 }
 export async function configureEmailIntake(org: string, actor: string, raw: unknown, provider?: EmailProvider) {

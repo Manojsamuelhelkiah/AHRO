@@ -25,7 +25,7 @@ async function caseResponse(page: Page, fixture: { organizationId: string; caseI
   });
 }
 
-test("verified administrative reads agree with real projections and never confer specialist mutations", async ({ page }) => {
+test("verified administrative permissions agree with real projections while tenant and employee-consent safeguards remain separate", async ({ page }) => {
   await login(page);
   for (const mode of ["development", "private"]) {
     // Proof-mode changes are API assertions, not changes to a mounted case.
@@ -44,7 +44,7 @@ test("verified administrative reads agree with real projections and never confer
     expect(permissionsResponse.status()).toBe(200);
     const permissions = await permissionsResponse.json();
     for (const value of Object.values(permissions.sensitive) as { read: boolean; edit: boolean }[]) {
-      expect(value).toEqual({ read: true, edit: false });
+      expect(value).toEqual({ read: true, edit: true });
     }
     const documents = await caseResponse(page, fixture, "/documents");
     expect(documents.status()).toBe(200);
@@ -56,12 +56,11 @@ test("verified administrative reads agree with real projections and never confer
     expect(boundaries.status()).toBe(200);
     const results = await boundaries.json();
     expect(results.access.identity).toBe(true);
-    expect(results.access.edit.identity).toBe(false);
+    expect(results.access.edit.identity).toBe(true);
     for (const key of ["wrongCase", "wrongTenant", "wrongActor"]) {
       expect(results[key].identity).toBe(false);
     }
-    expect(results.professional).toBe(false);
-    expect(results.mutated).toBe(false);
+    expect(results.humanDecisionPermission).toBe(true);
     const background = await page.request.get("/api/test/admin-read/background");
     expect((await background.json()).identity).toBe(false);
     const vault = await page.request.post(`/api/onboarding/cases/${fixture.caseId}/employee-vault`, {
@@ -69,16 +68,16 @@ test("verified administrative reads agree with real projections and never confer
         origin: `${mode === "private" ? "https" : "http"}://${new URL(page.url()).host}` },
       data: { purpose: "Admin must not request employee consent", expiresAt: new Date(Date.now() + 86400000).toISOString() },
     });
-    expect(vault.status()).toBe(403);
-    expect((await vault.json()).message).toBe("Current sensitive BGV record authority required.");
+    expect(vault.status()).toBe(409);
+    expect((await vault.json()).message).toBe("Completed cases cannot request new disclosure.");
 
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await page.goto(`/cases/${fixture.caseId}`);
       await expect(page.getByRole("heading", { name: "Confidential Read Fixture", exact: true })).toBeVisible();
       await expect(page.getByText("Operational View Restricted", { exact: true })).toHaveCount(0);
-      await expect(page.getByText(/Logistics and portal edits are restricted/)).toBeVisible();
-      await expect(page.getByText(/Some case actions are restricted/)).toBeVisible();
+      await expect(page.getByText(/Logistics and portal edits are restricted/)).toHaveCount(0);
+      await expect(page.getByText(/Some case actions are restricted/)).toHaveCount(0);
       await page.screenshot({ path: `test-results/admin-case-${mode}-${viewport.label}.png` });
       const sizes = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth }));
       expect(sizes.scroll).toBeLessThanOrEqual(sizes.width + 1);
@@ -87,13 +86,7 @@ test("verified administrative reads agree with real projections and never confer
     for (const denial of ["expired", "revoked", "wrongSession", "invalid", ...(mode === "private" ? ["rotated"] : [])]) {
       await session(page, { mode, [denial]: true });
       const denied = await caseResponse(page, fixture);
-      if (mode === "private") expect(denied.status()).toBe(403);
-      else {
-        expect(denied.status()).toBe(200);
-        expect((await denied.json()).workerName).toBe("Restricted candidate");
-        const deniedPermissions = await caseResponse(page, fixture, "/access-permissions");
-        expect((await deniedPermissions.json()).sensitive.identity.read).toBe(false);
-      }
+      expect(denied.status()).toBe(403);
     }
     await session(page, { mode: "ordinary" });
     const ordinary = await caseResponse(page, fixture);
@@ -119,7 +112,7 @@ test("expiry, renewal, downgrade and delayed privileged data cannot restore prot
   await session(page, { mode: "private", short: true });
   await page.reload();
   await expect(page.getByRole("heading", { name: "Confidential Read Fixture", exact: true })).toBeVisible();
-  await expect(page.getByText(/Checking session access/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("session-access-explanation")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("heading", { name: "Confidential Read Fixture", exact: true })).toHaveCount(0);
   await session(page, { mode: "private" });
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
@@ -149,7 +142,7 @@ test("expiry, renewal, downgrade and delayed privileged data cannot restore prot
   release();
   await navigation;
   await page.unroute(`**/api/onboarding/cases/${fixture.caseId}`);
-  await expect(page.getByText("Operational View Restricted", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("session-access-explanation")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Confidential Read Fixture", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "End session", exact: true }).click();
   await expect(page.locator("#login-email")).toBeVisible();

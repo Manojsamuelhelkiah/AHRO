@@ -147,6 +147,7 @@ if (integrationEntryPoints.length > 0) {
                   "}",
                   "export function useUser() { return { ...useContext(UserContext), isLoaded: true }; }",
                   "export function useAuth() { return { userId: useContext(UserContext).userId }; }",
+                  "export function useClerk() { return { signOut: async () => {} }; }",
                 ].join("\n"),
             }),
           );

@@ -145,15 +145,26 @@ return async function enterDevelopmentAdminContext(req: Request, res: Response, 
   if (res.writableEnded || res.destroyed) { next(); return; }
   if (req.developmentSuperAdmin && req.authUserId && isDevelopmentSuperAdmin(req.authUserId)) { next(); return; }
   const proof = readProof(req);
+  // Ordinary sessions remain ordinary, but an attempted administrator proof
+  // must not silently downgrade into unrelated Demo permissions.
+  const attempted = req.headers.cookie?.split(";").some(value => value.trim().startsWith(`${COOKIE}=`));
+  const denied = (code: string, message: string) => { res.setHeader("Cache-Control", "no-store"); res.status(403).json({ code, message }); };
+  if (developmentSuperAdminEnabled() && attempted && (!proof || proof.userId !== req.authUserId)) {
+    denied("ADMIN_GRANT_INVALID", "Super Admin verification expired or changed. Sign in again with Super Admin credentials."); return;
+  }
   if (!proof || proof.userId !== req.authUserId) { next(); return; }
   if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && !sameOrigin(req)) {
     res.status(403).json({ message: "Cross-site Super Admin requests are not allowed." }); return;
   }
   try {
     const sessionId = getAuth(req).sessionId;
-    if (!sessionId || (proof.sessionId && proof.sessionId !== sessionId)) { next(); return; }
+    if (!sessionId || (proof.sessionId && proof.sessionId !== sessionId)) {
+      denied("ADMIN_GRANT_INVALID", "Super Admin verification belongs to a different session. Sign in again."); return;
+    }
     const session = await services.getSession(sessionId);
-    if (session.userId !== proof.userId || session.status !== "active" || session.createdAt < proof.issuedAt) { next(); return; }
+    if (session.userId !== proof.userId || session.status !== "active" || session.createdAt < proof.issuedAt) {
+      denied("ADMIN_REVOKED", "Super Admin session is no longer valid. Sign in again with Super Admin credentials."); return;
+    }
     if (!proof.sessionId) writeProof(req, res, { ...proof, sessionId });
     req.developmentSuperAdmin = true;
     res.setHeader("X-Platform-Admin-Expires-At", String(proof.expiresAt));

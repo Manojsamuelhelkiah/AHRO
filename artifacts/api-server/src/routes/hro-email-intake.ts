@@ -16,12 +16,14 @@ import { bindApprovalEmail } from "../lib/onboarding/approval-email-binding";
 import { db } from "@workspace/db";
 import { resolveEffectiveAccessInTransaction } from "../lib/access-governance";
 import { isSharedDemoPrincipalInTransaction } from "../lib/human-permissions";
+import { EmailIntakeAccessError } from "../lib/hro-email-authorization";
 const router: IRouter = Router();
 const handle = (fn: (r: Request, s: Response) => Promise<unknown>) => async (r: Request, s: Response) => {
   s.setHeader("Cache-Control", "no-store");
   try { await fn(r, s); }
   catch (e) {
-    if (e instanceof SeparationError) s.status(e.status).json({ message: e.message });
+    if (e instanceof EmailIntakeAccessError) s.status(e.status).json({ message: e.message, code: e.code });
+    else if (e instanceof SeparationError) s.status(e.status).json({ message: e.message });
     else {
       logger.error({ component: "hro-email-intake" }, "Email intake request failed; private details withheld");
       s.status(503).json({ message: "Email intake could not apply this request. Reload and retry; no external work was started." });

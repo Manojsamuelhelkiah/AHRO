@@ -94,6 +94,7 @@ return async function enterPlatformAdminContext(req: Request, res: Response, nex
   if (req.privatePlatformAdmin && req.authUserId && isPlatformSuperAdmin(req.authUserId)) { next(); return; }
   const cookie = req.headers?.cookie?.split(";").map(v => v.trim()).find(v => v.startsWith(`${ADMIN_COOKIE}=`));
   if (!cookie) { await enterDevelopmentAdminContext(req, res, next); return; }
+   res.setHeader("Cache-Control", "no-store");
   let grant: Grant | null = null;
   try { grant = verifyAdminGrant(decodeURIComponent(cookie.slice(ADMIN_COOKIE.length + 1)), process.env.SESSION_SECRET); } catch { /* reject */ }
   if (!grant || grant.userId !== req.authUserId || grant.environment !== process.env.NODE_ENV) {

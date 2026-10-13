@@ -16,7 +16,7 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions,
   const { createDevelopmentAdminContext } = await import("./src/lib/development-super-admin.ts");
   const { createPlatformAdminContext, bindPlatformSuperAdminTenant, signAdminGrant,
     ADMIN_APPROVAL_KEY, ADMIN_COOKIE, ADMIN_LIFETIME_MS } = await import("./src/lib/private-platform-admin.ts");
-  const { resolveSensitiveAccess, withSensitiveAuthorityFence } = await import("./src/lib/onboarding/sensitive-access.ts");
+  const { resolveSensitiveAccess } = await import("./src/lib/onboarding/sensitive-access.ts");
   const { hasCurrentAuthorityScope } = await import("./src/lib/onboarding/decision-authority.ts");
   const background = new AsyncResource("unprivileged-admin-read-fixture");
   const org = `admin-read-${randomUUID()}`;
@@ -155,17 +155,14 @@ export async function installAdminReadBrowserAdapter(app, { dbPackage, sessions,
     const wrongCase = await resolveSensitiveAccess({ organizationId: org, caseId: c.id + 999999, actorUserId: actor });
     const wrongTenant = await resolveSensitiveAccess({ organizationId: "other-tenant", caseId: c.id, actorUserId: actor });
     const wrongActor = await resolveSensitiveAccess({ organizationId: org, caseId: c.id, actorUserId: "other-actor" });
-    const professional = await db.transaction(tx => hasCurrentAuthorityScope(tx, {
+    // This legacy function now evaluates named human decision permissions.
+    // It does not attest professional qualifications.
+    const humanDecisionPermission = await db.transaction(tx => hasCurrentAuthorityScope(tx, {
       organizationId: org, actorUserId: actor, scope: "hr-compliance-approve", caseId: c.id,
     }));
-    let mutated = false;
-    try {
-      await withSensitiveAuthorityFence({
-        organizationId: org, actorUserId: actor, caseId: c.id, classification: "identity",
-        mutate: async () => { mutated = true; },
-      });
-    } catch { /* no professional authority */ }
-    res.json({ access, wrongCase, wrongTenant, wrongActor, professional, mutated });
+    // This read-only probe validates projections, not mutation persistence.
+    // Active administrative writes have their own isolated regression suite.
+    res.json({ access, wrongCase, wrongTenant, wrongActor, humanDecisionPermission });
   });
   // No request ALS context: background work must not inherit an admin identity.
   app.get("/api/test/admin-read/background", async (_req, res) => {

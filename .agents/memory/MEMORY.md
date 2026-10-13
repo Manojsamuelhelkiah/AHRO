@@ -80,6 +80,7 @@
 - [Reviewer notification boundaries](reviewer-notification-boundaries.md) — private in-app drift alerts first; external delivery needs separate verified binding and never grants model spending.
 - [Separate UAT admission](uat-admission-boundary.md) — reuse existing accounts but require fresh UAT authentication; neither demo tickets nor login grant domain authority.
 - [Administrator case access](administrator-viewing-agreement.md) — verified Super Admin gets case reads and administrative edits; retained-record state and employee-owned consent remain separate.
+- [Administrator session observation](administrator-session-observation.md) — missing headers are not expiry; late negative responses from prior sessions must not invalidate renewed access.
 - [Offboarding specification boundary](offboarding-specification-boundary.md) — the user will supply closure section 4.6 later; operational preparation must not imply finalization.
 - [Permanent case-test retirement](product-feature-retirement.md) — retired launch/evaluation actions must not return; preserve history, offline fences, genuine operations and commercial modeling.
 - [Controlled offline inventory](offline-inventory-exception.md) — additive Demo-only examples are a narrow one-off exception, not restored creation, reset, execution or authority.

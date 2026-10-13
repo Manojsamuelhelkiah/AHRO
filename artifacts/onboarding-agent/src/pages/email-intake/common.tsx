@@ -1,6 +1,9 @@
 import { useUser } from '@clerk/react';
 import { getPinnedOrganizationIdForPage } from '@workspace/api-client-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { accessDenied } from '@/lib/session-access';
+import { SessionAccessNotice } from '@/components/session-access-notice';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui-shared';
 
@@ -23,12 +26,27 @@ export function safeError(e: unknown): string {
 }
 
 export function ErrorNote({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  if (accessDenied(error)) return <SessionAccessNotice error={error} />;
   return (
     <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--status-red)] bg-[var(--status-red-bg)] p-3 text-sm text-[var(--status-red-fg)]">
       <span>{safeError(error)}</span>
       {onRetry && <Button size="sm" variant="outline" onClick={onRetry}>Retry</Button>}
     </div>
   );
+}
+
+export const emailAccessRefresh = (query: { state: { error: unknown } }) => !accessDenied(query.state.error);
+
+/** A readiness denial unmounts editors and removes every cached private view. */
+export function useClearDeniedEmailData(error: unknown, reviewAccessLost = false) {
+  const client = useQueryClient();
+  useEffect(() => {
+    if (!accessDenied(error) && !reviewAccessLost) return;
+    const filters = { predicate: (query: { queryKey: readonly unknown[] }) =>
+      typeof query.queryKey[0] === 'string' && (query.queryKey[0].startsWith('/api/onboarding/email-intake/') ||
+        query.queryKey[0] === 'hro-email-private-source') };
+    void client.cancelQueries(filters).then(() => client.removeQueries(filters));
+  }, [error, reviewAccessLost, client]);
 }
 
 export function Skeleton({ n = 3 }: { n?: number }) {

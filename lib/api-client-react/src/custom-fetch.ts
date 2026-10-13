@@ -426,6 +426,11 @@ export async function customFetch<T = unknown>(
   const requestInfo = { method, url: resolveUrl(input) };
 
   const response = await fetch(input, { ...init, method, headers });
+  // A denial from an older session must not tear down a newly verified one.
+  // Fence error responses before notifying session observers, just like data.
+  if (generation !== protectedResponseGeneration) {
+    throw new DOMException("Protected session changed during the request.", "AbortError");
+  }
   responseObserver?.(response);
 
   if (!response.ok) {
