@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm";
 import {
   db,
+  transactionHandoffRevisions,
   pool,
   onbActionCenterActions,
   onbApprovals,
@@ -1586,6 +1587,7 @@ async function newestCaseDerivedSourceAtInTransaction(
     }
   }
   const timestamps = await Promise.all([
+    newest(transactionHandoffRevisions, transactionHandoffRevisions.createdAt, and(eq(transactionHandoffRevisions.organizationId, organizationId), eq(transactionHandoffRevisions.caseId, caseId))),
     newest(onbEvents, onbEvents.createdAt, and(eq(onbEvents.organizationId, organizationId), eq(onbEvents.caseId, caseId))),
     newest(onbApprovals, onbApprovals.createdAt, and(eq(onbApprovals.organizationId, organizationId), eq(onbApprovals.caseId, caseId))),
     newest(onbDocuments, onbDocuments.updatedAt, and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId))),
@@ -1778,6 +1780,12 @@ async function processCaseDerivedEnvelopeDeletionJob(
     }).where(and(eq(onbCases.organizationId, job.organizationId), eq(onbCases.id, job.caseId)));
     await tx.update(onbEvents).set({ title: "[minimized]", detail: "[minimized]" })
       .where(and(eq(onbEvents.organizationId, job.organizationId), eq(onbEvents.caseId, job.caseId)));
+    // Both current annotations and their private revision history share the
+    // all-class envelope's policy, hold, newest-source clock and deletion fence.
+    await tx.delete(transactionHandoffRevisions).where(and(
+      eq(transactionHandoffRevisions.organizationId, job.organizationId),
+      eq(transactionHandoffRevisions.caseId, job.caseId),
+    ));
     await tx.update(onbApprovals).set({
       recommendation: "[minimized]", rationale: "[minimized]", recordsEvidence: null,
       comment: null, resumeAction: null, decidedBy: null, requestedByUserId: null,

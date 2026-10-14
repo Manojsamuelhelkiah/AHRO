@@ -5,6 +5,110 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type TransactionContextSourceSection = typeof TransactionContextSourceSection[keyof typeof TransactionContextSourceSection];
+
+
+export const TransactionContextSourceSection = {
+  'original-request': 'original-request',
+  facts: 'facts',
+  decisions: 'decisions',
+  blockers: 'blockers',
+  questions: 'questions',
+  completed: 'completed',
+  pending: 'pending',
+  handoff: 'handoff',
+} as const;
+
+export type TransactionContextSourceProvenance = typeof TransactionContextSourceProvenance[keyof typeof TransactionContextSourceProvenance];
+
+
+export const TransactionContextSourceProvenance = {
+  'operational-record': 'operational-record',
+  'scenario-managed': 'scenario-managed',
+  'human-annotation': 'human-annotation',
+} as const;
+
+export type TransactionContextSourceTab = typeof TransactionContextSourceTab[keyof typeof TransactionContextSourceTab];
+
+
+export const TransactionContextSourceTab = {
+  overview: 'overview',
+  approvals: 'approvals',
+  documents: 'documents',
+  activity: 'activity',
+  context: 'context',
+} as const;
+
+export interface TransactionContextSource {
+  id: string;
+  section: TransactionContextSourceSection;
+  label: string;
+  text: string;
+  revision: string;
+  provenance: TransactionContextSourceProvenance;
+  tab: TransactionContextSourceTab;
+  /** @nullable */
+  occurredAt: string | null;
+}
+
+export type TransactionHandoffRevisionKind = typeof TransactionHandoffRevisionKind[keyof typeof TransactionHandoffRevisionKind];
+
+
+export const TransactionHandoffRevisionKind = {
+  question: 'question',
+  'next-work': 'next-work',
+  explanation: 'explanation',
+} as const;
+
+export interface TransactionHandoffRevision {
+  kind: TransactionHandoffRevisionKind;
+  body: string;
+  revision: number;
+  author: string;
+  createdAt: string;
+  sourceRevision: string;
+}
+
+export type TransactionWorkingContextSchemaVersion = typeof TransactionWorkingContextSchemaVersion[keyof typeof TransactionWorkingContextSchemaVersion];
+
+
+export const TransactionWorkingContextSchemaVersion = {
+  'transaction-context/v1': 'transaction-context/v1',
+} as const;
+
+export interface TransactionWorkingContext {
+  schemaVersion: TransactionWorkingContextSchemaVersion;
+  workflow: string;
+  transactionId: string;
+  caseId: number;
+  sourceRevision: string;
+  asOf: string;
+  summaryVersion: number;
+  summary: string[];
+  sources: TransactionContextSource[];
+  annotations: TransactionHandoffRevision[];
+  limitations: string[];
+  canAnnotate: boolean;
+}
+
+export type TransactionHandoffInputKind = typeof TransactionHandoffInputKind[keyof typeof TransactionHandoffInputKind];
+
+
+export const TransactionHandoffInputKind = {
+  question: 'question',
+  'next-work': 'next-work',
+  explanation: 'explanation',
+} as const;
+
+export interface TransactionHandoffInput {
+  kind: TransactionHandoffInputKind;
+  /** @maxLength 2000 */
+  body: string;
+  expectedRevision: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  sourceRevision: string;
+}
+
 export type OfflinePreparationInputData = {[key: string]: string};
 
 export interface OfflinePreparationInput {
@@ -3685,6 +3789,7 @@ export const AccessGovernanceKey = {
   'flowdocument-reviewread': 'flow.document-review.read',
   'flowdocument-reviewedit': 'flow.document-review.edit',
   toolcaseread: 'tool.case.read',
+  toolcontextread: 'tool.context.read',
   toolcaseedit: 'tool.case.edit',
   tooldocumentsread: 'tool.documents.read',
   tooldocumentsedit: 'tool.documents.edit',
@@ -4055,6 +4160,7 @@ export interface AgentInvocationInput {
 export interface AgentInvocationToolResult {
   caseId: number;
   lifecycleStage: string;
+  context?: TransactionWorkingContext;
 }
 
 export interface AgentInvocationResponse {

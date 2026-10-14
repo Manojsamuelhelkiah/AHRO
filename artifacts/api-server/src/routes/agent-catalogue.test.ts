@@ -167,7 +167,7 @@ test("isolated client catalogue setup: live administration, idempotency, conflic
     const catalogue = read.body as AgentCatalogue;
     assert.equal(catalogue.clientName, "Catalogue client");
     assert.equal(catalogue.canManage, true);
-    assert.deepEqual(catalogue.runtimeCapabilities, ["tool.case.read"]);
+    assert.deepEqual(catalogue.runtimeCapabilities, ["tool.case.read", "tool.context.read"]);
     assert.ok(catalogue.principals.every(row => row.id !== foreignId));
     assert.equal(catalogue.customMappings.length, 1);
     assert.equal(catalogue.customMappings[0].reviewStatus, "review-required");

@@ -16,6 +16,8 @@ import { logger } from "../lib/logger";
 import { caseAnalysisRestriction } from "../lib/onboarding/case-analysis-eligibility";
 import { isReadOnlyCaseExplanationRequest } from "../lib/retired-case-capabilities";
 import { defaultCompletion } from "../lib/onboarding/case-explainability";
+import { collectSharedExplanationEvidence } from "../lib/transaction-context/consumers";
+import { TransactionContextError } from "../lib/transaction-context/onboarding";
 
 const MAX_IN_FLIGHT_PER_USER = 2;
 const MAX_REQUESTS_PER_MINUTE = 20;
@@ -92,7 +94,7 @@ export function createOnboardingCaseExplainabilityRouter(
   deps: CaseExplainabilityRouterDeps = {},
 ): IRouter {
   const lookup = deps.findCase ?? findExplainableCase;
-  const collect = deps.collectEvidence ?? collectCaseExplainabilityEvidence;
+  const collect = deps.collectEvidence;
   const resolveAccess = deps.resolveAccess ?? (async (organizationId, userId, caseId) =>
     resolveEffectiveAccess({
       organizationId,
@@ -165,8 +167,14 @@ export function createOnboardingCaseExplainabilityRouter(
             await (deps.analysisRestriction ?? caseAnalysisRestriction)(current)) {
             throw new ExplainabilityUnavailableError(undefined, { stage: "generation", code: "case_analysis_scope_changed" });
           }
+          if (!collect && evidence?.contextRevision) {
+            const fresh = await collectSharedExplanationEvidence({ organizationId, caseId: id, userId }, explainableCase);
+            if (fresh.contextRevision !== evidence.contextRevision)
+              throw new ExplainabilityUnavailableError(undefined, { stage: "generation", code: "case_analysis_scope_changed" });
+          }
         };
-        const evidence = await collect(organizationId, id, explainableCase);
+        const evidence = collect ? await collect(organizationId, id, explainableCase) :
+          await collectSharedExplanationEvidence({ organizationId, caseId: id, userId }, explainableCase);
         if (!evidence) {
           res.status(404).json({ message: "Case not found" });
           return;
@@ -206,11 +214,19 @@ export function createOnboardingCaseExplainabilityRouter(
           res.status(503).json({ message: MODEL_ERRORS, retryable: true });
           return;
         }
+        if (error instanceof TransactionContextError) {
+          res.status(error.status).json({ message: "Shared case context is unavailable under current access or record restrictions.", retryable: false });
+          return;
+        }
         next(error);
       } finally {
         releaseRequestSlot(slotKey);
       }
     } catch (error) {
+      if (error instanceof TransactionContextError) {
+        res.status(error.status).json({ message: "Shared case context is unavailable under current access or record restrictions.", retryable: false });
+        return;
+      }
       if (isValidationError(error)) {
         res.status(400).json({ message: "Invalid case explanation request." });
         return;

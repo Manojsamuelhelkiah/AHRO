@@ -72,6 +72,7 @@
 - [Versioned local drafts](versioned-local-drafts.md) — migrate only scoped drafts; map unambiguous legacy values and force explicit choices for unsupported ones.
 - [Countryless lifecycle quarantine](countryless-lifecycle-quarantine.md) — missing jurisdiction stays fail-closed, but workers persist one fixed remediation marker instead of failing every tick.
 - [Unified HRO context](unified-context-boundaries.md) — all-HRO scope; continuity metadata is not authority, evidence storage, or a second workflow engine.
+- [Transaction working-context boundaries](transaction-working-context-boundaries.md) — keep business projections separate from metadata history; untrusted handoffs are not model evidence or authority.
 - [Context retention boundaries](context-retention-boundaries.md) — opaque subjects require conservative tenant holds; stale unfinished work must not be inferred abandoned for pruning.
 - [Browser regression runtime](browser-regression-runtime.md) — UI tester and workspace Playwright have independent browser/recorder installations; setup failures do not justify skipped validation.
 - [Query plan test boundaries](query-plan-test-boundaries.md) — structural ordering-index probes must not depend on planner preferences for tiny tenant fixtures.

@@ -36,6 +36,7 @@ import { SyntheticJourneySummary, SyntheticJourneyStages, SyntheticJourneyCommun
 import { FrontlineTab } from './detail/frontline-tab';
 import { DocumentsTab } from './detail/documents-tab';
 import { ExplainabilityTab, clearCaseAnalysisMemory } from './detail/explainability-tab';
+import { TransactionContextTab } from './detail/transaction-context-tab';
 import { PortalControls } from './detail/portal-controls';
 import { EarlyTenurePanel } from './detail/early-tenure-panel';
 import { getApprovalRefetchInterval } from '../../lib/approval-actions';
@@ -52,7 +53,7 @@ export function CaseDetailPage() {
     const requested = typeof window === "undefined"
       ? null
       : new URLSearchParams(window.location.search).get("tab")?.toLowerCase();
-    return requested === "communications" ? "Communications" : requested === "early-tenure" ? "Early tenure" : "Overview";
+    return requested === "context" ? "Transaction context" : requested === "communications" ? "Communications" : requested === "early-tenure" ? "Early tenure" : "Overview";
   });
 
   const { data: c, isLoading, error: caseError } = useGetOnboardingCase(caseId, {
@@ -358,6 +359,8 @@ export function CaseDetailPage() {
         {activeTab === 'Audit' && (permissions.access.notesRead
           ? <AuditTab events={events || []} approvals={approvals} records={records || []} />
           : <RestrictedActionNotice>Audit notes are restricted by your current permissions.</RestrictedActionNotice>)}
+        {activeTab === 'Transaction context' && <TransactionContextTab caseId={caseId} setTab={setActiveTab}
+          availableTabs={['Overview', 'Tasks', 'Documents', ...(permissions.access.notesRead ? ['Activity', 'Communications', 'Audit'] : [])]} />}
         {activeTab === 'Ask AI' && (canAnalyze
           ? <ExplainabilityTab key={`${getPinnedOrganizationIdForPage() || 'anon'}-${user?.id || 'anon'}-${caseId}`} caseId={caseId} userId={user?.id} />
           : <RestrictedActionNotice>Ask AI requires current case and sensitive-field read permissions. Review only the case records available to your account.</RestrictedActionNotice>)}

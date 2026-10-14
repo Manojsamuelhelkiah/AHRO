@@ -34,6 +34,8 @@ export type ExplainabilitySource = {
 };
 
 export type CaseExplainabilityEvidence = {
+  /** Shared transaction projection revision; never an authority receipt. */
+  contextRevision?: string;
   caseId: number;
   asOf: string;
   sources: ExplainabilitySource[];

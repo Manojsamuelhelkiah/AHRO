@@ -11,13 +11,16 @@ import {
 } from "./access-governance";
 import { appendProtectedAuditInTransaction, protectedAuditCaseReference } from "./onboarding/protected-audit";
 import type { OnboardingDbTransaction } from "./onboarding/settings";
+import { projectOnboardingContext } from "./transaction-context/onboarding";
+import type { TransactionWorkingContext } from "./transaction-context/projection";
 
 type InvocationTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export const AGENT_TOOL_CATALOG = ACCESS_GOVERNANCE_CATALOG.tools;
-export const EXECUTABLE_AGENT_TOOL_KEYS = ["tool.case.read"] as const;
+export const EXECUTABLE_AGENT_TOOL_KEYS = ["tool.case.read", "tool.context.read"] as const;
 const TOOL_REQUIRED_SCOPE: Record<ExecutableAgentToolKey, readonly string[]> = {
   "tool.case.read": ["tool.case.read", "data.case.readiness.read"],
+  "tool.context.read": ["tool.context.read", "flow.case.read"],
 };
 export type ExecutableAgentToolKey = (typeof EXECUTABLE_AGENT_TOOL_KEYS)[number];
 
@@ -100,7 +103,7 @@ export type InvokeAgentToolResult =
   | {
     outcome: "success";
     auditId: number;
-    result: { caseId: number; lifecycleStage: string };
+    result: { caseId: number; lifecycleStage: string; context?: TransactionWorkingContext };
   }
   | { outcome: "denied"; auditId: number; reasonCode: InvocationDenialCode }
   | { outcome: "failure"; auditId: number };
@@ -114,7 +117,7 @@ function auditableToolKey(value: string): string {
 }
 
 function actionForTool(toolKey: string): string {
-  return toolKey === "tool.case.read" ? "case.metadata.read" : "tool.not-executed";
+  return toolKey === "tool.context.read" ? "case.context.read" : toolKey === "tool.case.read" ? "case.metadata.read" : "tool.not-executed";
 }
 
 async function appendInvocationAudit(
@@ -314,6 +317,10 @@ async function invokeAgentToolInContext(input: InvokeAgentToolInput): Promise<In
         eq(onbCases.id, input.caseId),
       )).limit(1);
       if (!record) throw new Error("Authorized case disappeared during invocation.");
+      const context = input.toolKey === "tool.context.read" ? await projectOnboardingContext(tx, {
+        organizationId: input.organizationId, caseId: input.caseId,
+        userId: input.initiatingUserId, agentId: input.agentId,
+      }) : undefined;
       const { withHroContext, recordHroContextStep } = await import("./hro-context/manager");
       await withHroContext({
         organizationId: input.organizationId, subjectType: "case", subjectId: String(record.id),
@@ -349,6 +356,7 @@ async function invokeAgentToolInContext(input: InvokeAgentToolInput): Promise<In
         result: {
           caseId: record.id,
           lifecycleStage: record.lifecycleStage,
+          ...(context ? { context } : {}),
         },
       };
     });

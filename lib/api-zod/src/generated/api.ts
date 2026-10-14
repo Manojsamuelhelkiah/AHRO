@@ -8,6 +8,90 @@
 import * as zod from 'zod';
 
 
+export const GetTransactionContextParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const GetTransactionContextResponse = zod.object({
+  "schemaVersion": zod.enum(['transaction-context/v1']),
+  "workflow": zod.string(),
+  "transactionId": zod.string(),
+  "caseId": zod.number(),
+  "sourceRevision": zod.string(),
+  "asOf": zod.string(),
+  "summaryVersion": zod.number(),
+  "summary": zod.array(zod.string()),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "section": zod.enum(['original-request', 'facts', 'decisions', 'blockers', 'questions', 'completed', 'pending', 'handoff']),
+  "label": zod.string(),
+  "text": zod.string(),
+  "revision": zod.string(),
+  "provenance": zod.enum(['operational-record', 'scenario-managed', 'human-annotation']),
+  "tab": zod.enum(['overview', 'approvals', 'documents', 'activity', 'context']),
+  "occurredAt": zod.string().nullable()
+})),
+  "annotations": zod.array(zod.object({
+  "kind": zod.enum(['question', 'next-work', 'explanation']),
+  "body": zod.string(),
+  "revision": zod.number(),
+  "author": zod.string(),
+  "createdAt": zod.string(),
+  "sourceRevision": zod.string()
+})),
+  "limitations": zod.array(zod.string()),
+  "canAnnotate": zod.boolean()
+})
+
+
+export const SaveTransactionHandoffParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const saveTransactionHandoffBodyBodyMax = 2000;
+
+export const saveTransactionHandoffBodySourceRevisionRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const SaveTransactionHandoffBody = zod.object({
+  "kind": zod.enum(['question', 'next-work', 'explanation']),
+  "body": zod.string().max(saveTransactionHandoffBodyBodyMax),
+  "expectedRevision": zod.number(),
+  "sourceRevision": zod.string().regex(saveTransactionHandoffBodySourceRevisionRegExp)
+})
+
+export const SaveTransactionHandoffResponse = zod.object({
+  "schemaVersion": zod.enum(['transaction-context/v1']),
+  "workflow": zod.string(),
+  "transactionId": zod.string(),
+  "caseId": zod.number(),
+  "sourceRevision": zod.string(),
+  "asOf": zod.string(),
+  "summaryVersion": zod.number(),
+  "summary": zod.array(zod.string()),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "section": zod.enum(['original-request', 'facts', 'decisions', 'blockers', 'questions', 'completed', 'pending', 'handoff']),
+  "label": zod.string(),
+  "text": zod.string(),
+  "revision": zod.string(),
+  "provenance": zod.enum(['operational-record', 'scenario-managed', 'human-annotation']),
+  "tab": zod.enum(['overview', 'approvals', 'documents', 'activity', 'context']),
+  "occurredAt": zod.string().nullable()
+})),
+  "annotations": zod.array(zod.object({
+  "kind": zod.enum(['question', 'next-work', 'explanation']),
+  "body": zod.string(),
+  "revision": zod.number(),
+  "author": zod.string(),
+  "createdAt": zod.string(),
+  "sourceRevision": zod.string()
+})),
+  "limitations": zod.array(zod.string()),
+  "canAnnotate": zod.boolean()
+})
+
+
 /**
  * @summary Read preparation prerequisites without admitting operational effects
  */
@@ -4168,7 +4252,7 @@ export const getOrganizationAccessGovernanceResponseHistoryMax = 250;
 
 export const GetOrganizationAccessGovernanceResponse = zod.object({
   "catalog": zod.array(zod.object({
-  "key": zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide']),
+  "key": zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.context.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide']),
   "label": zod.string(),
   "sensitivity": zod.enum(['medium', 'high']),
   "kind": zod.enum(['field', 'flow', 'tool'])
@@ -4211,7 +4295,7 @@ export const GetOrganizationAccessGovernanceResponse = zod.object({
   "ownerUserId": zod.string(),
   "status": zod.enum(['active', 'retired']),
   "version": zod.number(),
-  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])),
+  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.context.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])),
   "approvalStatus": zod.enum(['blocked', 'pending', 'approved'])
 })),
   "grants": zod.array(zod.object({
@@ -4274,7 +4358,7 @@ export const PreviewOrganizationPrincipalAccessQueryParams = zod.object({
 })
 
 export const PreviewOrganizationPrincipalAccessResponse = zod.object({
-  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])),
+  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.context.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])),
   "reasons": zod.record(zod.string(), zod.array(zod.string()))
 })
 
@@ -4525,7 +4609,7 @@ export const ApproveAccessUserGroupSecurityGroupResponse = zod.object({
 export const CreateAccessSecurityGroupBody = zod.object({
   "name": zod.string().min(1),
   "ownerUserId": zod.string().min(1).optional(),
-  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide']))
+  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.context.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide']))
 })
 
 export const CreateAccessSecurityGroupResponse = zod.object({
@@ -4535,7 +4619,7 @@ export const CreateAccessSecurityGroupResponse = zod.object({
   "ownerUserId": zod.string(),
   "status": zod.enum(['active', 'retired']),
   "version": zod.number(),
-  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])),
+  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.context.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])),
   "approvalStatus": zod.enum(['blocked', 'pending', 'approved'])
 })
 })
@@ -4557,7 +4641,7 @@ export const UpdateAccessSecurityGroupBody = zod.object({
   "name": zod.string().min(1).optional(),
   "ownerUserId": zod.string().min(1).optional(),
   "status": zod.literal("retired").optional(),
-  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])).optional(),
+  "allows": zod.array(zod.enum(['data.identity.read', 'data.identity.edit', 'data.medical.read', 'data.medical.edit', 'data.payroll.read', 'data.payroll.edit', 'data.bgv.read', 'data.bgv.edit', 'data.case.profile.read', 'data.case.profile.edit', 'data.case.readiness.read', 'data.case.readiness.edit', 'data.case.notes.read', 'data.case.notes.edit', 'data.documents.read', 'data.documents.edit', 'data.audit.read', 'flow.case.read', 'flow.case.edit', 'flow.onboarding.read', 'flow.onboarding.edit', 'flow.document-review.read', 'flow.document-review.edit', 'tool.case.read', 'tool.context.read', 'tool.case.edit', 'tool.documents.read', 'tool.documents.edit', 'tool.notification.send', 'tool.workflow.run', 'tool.external.dispatch', 'tool.policy.manage', 'tool.approval.decide'])).optional(),
   "expectedVersion": zod.number()
 })
 
@@ -4656,7 +4740,37 @@ export const InvokeRegisteredAgentToolResponse = zod.object({
   "auditId": zod.number(),
   "result": zod.object({
   "caseId": zod.number(),
-  "lifecycleStage": zod.string()
+  "lifecycleStage": zod.string(),
+  "context": zod.object({
+  "schemaVersion": zod.enum(['transaction-context/v1']),
+  "workflow": zod.string(),
+  "transactionId": zod.string(),
+  "caseId": zod.number(),
+  "sourceRevision": zod.string(),
+  "asOf": zod.string(),
+  "summaryVersion": zod.number(),
+  "summary": zod.array(zod.string()),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "section": zod.enum(['original-request', 'facts', 'decisions', 'blockers', 'questions', 'completed', 'pending', 'handoff']),
+  "label": zod.string(),
+  "text": zod.string(),
+  "revision": zod.string(),
+  "provenance": zod.enum(['operational-record', 'scenario-managed', 'human-annotation']),
+  "tab": zod.enum(['overview', 'approvals', 'documents', 'activity', 'context']),
+  "occurredAt": zod.string().nullable()
+})),
+  "annotations": zod.array(zod.object({
+  "kind": zod.enum(['question', 'next-work', 'explanation']),
+  "body": zod.string(),
+  "revision": zod.number(),
+  "author": zod.string(),
+  "createdAt": zod.string(),
+  "sourceRevision": zod.string()
+})),
+  "limitations": zod.array(zod.string()),
+  "canAnnotate": zod.boolean()
+}).optional()
 })
 })
 

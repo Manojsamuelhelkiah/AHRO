@@ -231,13 +231,15 @@ export function CaseTabs({ activeTab, setTab, offlineSample = false }: { activeT
   const access = useCaseAccess();
   const tabs = ['Overview', ...(offlineSample ? [] : ['Early tenure']), 'Tasks', 'Frontline', 'Documents',
     ...(access?.access.notesRead ? ['Activity', 'Communications', 'Audit'] : []),
+    ...(access?.access.flowRead ? ['Transaction context'] : []),
     'Ask AI'];
   return (
-    <div className="flex flex-wrap border-b border-[var(--border)] mb-6">
+    <div role="group" aria-label="Case sections" className="flex flex-wrap border-b border-[var(--border)] mb-6">
       {tabs.map(t => (
         <button
           key={t}
           onClick={() => setTab(t)}
+          aria-current={activeTab === t ? 'page' : undefined}
           className={cn(
             "px-4 py-3 text-[var(--text-sm)] font-semibold whitespace-nowrap border-b-2 transition-colors",
             activeTab === t 

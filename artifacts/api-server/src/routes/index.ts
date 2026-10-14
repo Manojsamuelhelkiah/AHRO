@@ -26,6 +26,7 @@ import onboardingTaIntakeRouter from "./onboarding-ta-intake";
 import onboardingSlaRouter from "./onboarding-sla";
 import onboardingContactRouter from "./onboarding-contact";
 import onboardingCaseExplainabilityRouter from "./onboarding-case-explainability";
+import transactionContextRouter from "./transaction-context";
 import onboardingEarlyTenureRouter from "./onboarding-early-tenure";
 import onboardingStandardOperationsRouter from "./onboarding-standard-operations";
 import onboardingStandardProvidersRouter from "./onboarding-standard-providers";
@@ -114,6 +115,7 @@ router.use(caseRetirementFence);
 // Read-only analysis precedes mutation-only separation/service-request gates.
 // The explanation router owns its current read/disclosure checks.
 router.use(onboardingCaseExplainabilityRouter);
+router.use(transactionContextRouter);
 // Service requests have no onboarding execution adapter; deletion keeps its
 // existing hold-aware path. Separation closure remains specification-blocked.
 router.use("/onboarding/cases/:caseId", async (req, res, next) => {

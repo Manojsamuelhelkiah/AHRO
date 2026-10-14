@@ -37,7 +37,10 @@ export async function installAdminEditFixture(app, { dbPackage, sessions, org, a
     providerSharingApproved: false, permittedProviders: [],
     policyReference: "isolated-edit-policy", approvalReference: "isolated-edit-review",
     approvedByUserId: policyReviewer, approvedAuthorityAssignmentId: receipt.id, isCurrent: true,
-  })));
+  }))).onConflictDoNothing({
+    target: [onbSensitiveLifecyclePolicies.organizationId, onbSensitiveLifecyclePolicies.dataClass,
+      onbSensitiveLifecyclePolicies.jurisdiction, onbSensitiveLifecyclePolicies.revision],
+  });
   const itemId = "admin-manual-item";
   const base = {
     organizationId: org, workerEmail: "admin-edit-case@example.invalid", workerPhone: "+15550000001",

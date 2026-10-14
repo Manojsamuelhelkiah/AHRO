@@ -61,7 +61,7 @@ export const ACCESS_GOVERNANCE_CATALOG = {
     "flow.document-review.read", "flow.document-review.edit",
   ],
   tools: [
-    "tool.case.read", "tool.case.edit",
+    "tool.case.read", "tool.case.edit", "tool.context.read",
     "tool.documents.read", "tool.documents.edit",
     "tool.notification.send", "tool.workflow.run",
     "tool.external.dispatch", "tool.policy.manage",

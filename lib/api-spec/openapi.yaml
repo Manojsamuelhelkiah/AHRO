@@ -43,6 +43,37 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /onboarding/cases/{caseId}/transaction-context:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer } }
+    get:
+      operationId: getTransactionContext
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Current permission-filtered projection, never execution authority
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransactionWorkingContext" }
+        "403": { description: Current case access required }
+        "404": { description: Case unavailable }
+    put:
+      operationId: saveTransactionHandoff
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransactionHandoffInput" }
+      responses:
+        "200":
+          description: Saved confidential annotation revision; no assignment or execution
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransactionWorkingContext" }
+        "400": { description: Invalid bounded annotation }
+        "403": { description: Current all-class note edit permissions required }
+        "409": { description: "Changed sources, newer annotation, or collection policy block" }
   /onboarding/cases/{caseId}/operational-preparation:
     parameters:
       - { name: caseId, in: path, required: true, schema: { type: integer } }
@@ -7030,6 +7061,56 @@ components:
         type: integer
         minimum: 1
   schemas:
+    TransactionContextSource:
+      type: object
+      additionalProperties: false
+      required: [id, section, label, text, revision, provenance, tab, occurredAt]
+      properties:
+        id: { type: string }
+        section: { type: string, enum: [original-request, facts, decisions, blockers, questions, completed, pending, handoff] }
+        label: { type: string }
+        text: { type: string }
+        revision: { type: string }
+        provenance: { type: string, enum: [operational-record, scenario-managed, human-annotation] }
+        tab: { type: string, enum: [overview, approvals, documents, activity, context] }
+        occurredAt: { type: [string, "null"] }
+    TransactionHandoffRevision:
+      type: object
+      additionalProperties: false
+      required: [kind, body, revision, author, createdAt, sourceRevision]
+      properties:
+        kind: { type: string, enum: [question, next-work, explanation] }
+        body: { type: string }
+        revision: { type: integer }
+        author: { type: string }
+        createdAt: { type: string }
+        sourceRevision: { type: string }
+    TransactionWorkingContext:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, workflow, transactionId, caseId, sourceRevision, asOf, summaryVersion, summary, sources, annotations, limitations, canAnnotate]
+      properties:
+        schemaVersion: { type: string, enum: ["transaction-context/v1"] }
+        workflow: { type: string }
+        transactionId: { type: string }
+        caseId: { type: integer }
+        sourceRevision: { type: string }
+        asOf: { type: string }
+        summaryVersion: { type: integer }
+        summary: { type: array, items: { type: string } }
+        sources: { type: array, items: { $ref: "#/components/schemas/TransactionContextSource" } }
+        annotations: { type: array, items: { $ref: "#/components/schemas/TransactionHandoffRevision" } }
+        limitations: { type: array, items: { type: string } }
+        canAnnotate: { type: boolean }
+    TransactionHandoffInput:
+      type: object
+      additionalProperties: false
+      required: [kind, body, expectedRevision, sourceRevision]
+      properties:
+        kind: { type: string, enum: [question, next-work, explanation] }
+        body: { type: string, maxLength: 2000 }
+        expectedRevision: { type: integer }
+        sourceRevision: { type: string, pattern: "^[a-f0-9]{64}$" }
     OfflinePreparationInput:
       type: object
       additionalProperties: false
@@ -9652,6 +9733,7 @@ components:
         - flow.document-review.read
         - flow.document-review.edit
         - tool.case.read
+        - tool.context.read
         - tool.case.edit
         - tool.documents.read
         - tool.documents.edit
@@ -10024,6 +10106,7 @@ components:
       properties:
         caseId: { type: integer }
         lifecycleStage: { type: string }
+        context: { $ref: "#/components/schemas/TransactionWorkingContext" }
       required: [caseId, lifecycleStage]
     AgentInvocationResponse:
       type: object

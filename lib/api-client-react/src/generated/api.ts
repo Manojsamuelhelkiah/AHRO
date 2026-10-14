@@ -358,6 +358,8 @@ import type {
   StartOnboardingVoiceCall200,
   StartOnboardingVoiceCallBody,
   SystemInfo,
+  TransactionHandoffInput,
+  TransactionWorkingContext,
   UatAdmission,
   UatSignInChallenge,
   UpdateOnbSettings,
@@ -434,6 +436,143 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetTransactionContextUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/transaction-context`
+}
+
+export const getTransactionContext = async (caseId: number, options?: RequestInit): Promise<TransactionWorkingContext> => {
+
+  return customFetch<TransactionWorkingContext>(getGetTransactionContextUrl(caseId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTransactionContextQueryKey = (caseId: number,) => {
+    return [
+    `/api/onboarding/cases/${caseId}/transaction-context`
+    ] as const;
+    }
+
+
+export const getGetTransactionContextQueryOptions = <TData = Awaited<ReturnType<typeof getTransactionContext>>, TError = ErrorType<void>>(caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTransactionContext>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTransactionContextQueryKey(caseId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTransactionContext>>> = ({ signal }) => getTransactionContext(caseId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTransactionContext>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTransactionContextQueryResult = NonNullable<Awaited<ReturnType<typeof getTransactionContext>>>
+export type GetTransactionContextQueryError = ErrorType<void>
+
+
+
+export function useGetTransactionContext<TData = Awaited<ReturnType<typeof getTransactionContext>>, TError = ErrorType<void>>(
+ caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTransactionContext>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTransactionContextQueryOptions(caseId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveTransactionHandoffUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/transaction-context`
+}
+
+export const saveTransactionHandoff = async (caseId: number,
+    transactionHandoffInput: TransactionHandoffInput, options?: RequestInit): Promise<TransactionWorkingContext> => {
+
+  return customFetch<TransactionWorkingContext>(getSaveTransactionHandoffUrl(caseId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(transactionHandoffInput)
+  }
+);}
+
+
+
+
+
+export const getSaveTransactionHandoffMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveTransactionHandoff>>, TError,{caseId: number;data: BodyType<TransactionHandoffInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveTransactionHandoff>>, TError,{caseId: number;data: BodyType<TransactionHandoffInput>}, TContext> => {
+
+const mutationKey = ['saveTransactionHandoff'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveTransactionHandoff>>, {caseId: number;data: BodyType<TransactionHandoffInput>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  saveTransactionHandoff(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveTransactionHandoffMutationResult = NonNullable<Awaited<ReturnType<typeof saveTransactionHandoff>>>
+    export type SaveTransactionHandoffMutationBody = BodyType<TransactionHandoffInput>
+    export type SaveTransactionHandoffMutationError = ErrorType<void>
+
+    export const useSaveTransactionHandoff = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveTransactionHandoff>>, TError,{caseId: number;data: BodyType<TransactionHandoffInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveTransactionHandoff>>,
+        TError,
+        {caseId: number;data: BodyType<TransactionHandoffInput>},
+        TContext
+      > => {
+      return useMutation(getSaveTransactionHandoffMutationOptions(options));
+    }
 
 export const getGetOfflineCasePreparationUrl = (caseId: number,) => {
 
