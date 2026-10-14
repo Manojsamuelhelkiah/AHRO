@@ -43,6 +43,39 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /onboarding/action-center/cases/{caseId}/conversation:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    get:
+      operationId: getActionConversation
+      tags: [onboarding]
+      parameters:
+        - { name: before, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: workItemId, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Live-authorized bounded thread; annotations are not case evidence
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActionConversation" }
+        "403": { description: "Current case, notes and sensitive-content access required" }
+    post:
+      operationId: postActionConversation
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ActionConversationInput" }
+      responses:
+        "200":
+          description: Durable idempotent submission; no operational action executed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActionConversationMessage" }
+        "403": { description: Current write or disclosure permissions required }
+        "409": { description: Submission conflict or lifecycle restriction }
+        "429": { description: Conversation model budget exhausted }
   /onboarding/cases/{caseId}/transaction-context:
     parameters:
       - { name: caseId, in: path, required: true, schema: { type: integer } }
@@ -7061,6 +7094,63 @@ components:
         type: integer
         minimum: 1
   schemas:
+    ActionConversationInput:
+      type: object
+      additionalProperties: false
+      required: [submissionId, text, mode]
+      properties:
+        submissionId: { type: string, format: uuid }
+        text: { type: string, minLength: 1, maxLength: 4000 }
+        mode: { type: string, enum: [note, triage] }
+        agentKey: { type: string, maxLength: 120 }
+        workItemId: { type: integer, minimum: 1 }
+    ActionConversationAgent:
+      type: object
+      required: [key, role, registration, capability, eligible, owner]
+      properties:
+        key: { type: string }
+        role: { type: string }
+        registration: { type: string }
+        capability: { type: string }
+        eligible: { type: boolean }
+        owner: { type: string, nullable: true }
+    ActionConversationMessage:
+      type: object
+      required: [id, version, submissionId, author, createdAt, updatedAt, text, mode, state, outcome, reply, explanation, agentKey, workItemId, reviewHref]
+      properties:
+        id: { type: integer }
+        version: { type: integer }
+        submissionId: { type: string }
+        author: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        text: { type: string }
+        mode: { type: string, enum: [note, triage] }
+        state: { type: string, enum: [recorded, pending, completed, failed, uncertain, withheld] }
+        outcome: { type: string, nullable: true, enum: [answer, clarification, proposal, unavailable] }
+        reply: { type: string, nullable: true }
+        explanation:
+          nullable: true
+          allOf:
+            - { $ref: "#/components/schemas/OnbCaseExplanation" }
+        agentKey: { type: string, nullable: true }
+        workItemId: { type: integer, nullable: true }
+        reviewHref: { type: string, nullable: true }
+    ActionConversation:
+      type: object
+      required: [organizationId, caseId, messages, nextBefore, agents, canPost, notice]
+      properties:
+        organizationId: { type: string }
+        caseId: { type: integer }
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/ActionConversationMessage" }
+        nextBefore: { type: integer, nullable: true }
+        agents:
+          type: array
+          items: { $ref: "#/components/schemas/ActionConversationAgent" }
+        canPost: { type: boolean }
+        notice: { type: string }
     TransactionContextSource:
       type: object
       additionalProperties: false

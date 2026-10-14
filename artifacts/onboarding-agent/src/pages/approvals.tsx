@@ -17,6 +17,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Import the newly created tab components
+import { ActionConversationPanel, ConversationCaseOpener } from '@/components/action-conversation';
 import { NeedsAttentionTab, CompletedTab, CommunicationsTab } from './action-center-tabs';
 
 export function ApprovalsPage() {
@@ -25,8 +26,12 @@ export function ApprovalsPage() {
   const searchParams = new URLSearchParams(search);
   const tabParam = searchParams.get('tab');
 
-  const activeTab = tabParam && ['needs-attention', 'approvals', 'communications', 'completed'].includes(tabParam)
+  const activeTab = tabParam && ['needs-attention', 'approvals', 'communications', 'completed', 'conversation'].includes(tabParam)
     ? tabParam : 'needs-attention';
+
+  const posInt = (v: string | null) => (v && /^[1-9]\d*$/.test(v) ? Number(v) : undefined);
+  const conversationCaseId = posInt(searchParams.get('caseId'));
+  const conversationWorkItemId = posInt(searchParams.get('workItemId'));
 
   const setActiveTab = (val: string) => {
     const next = new URLSearchParams(search);
@@ -40,11 +45,12 @@ export function ApprovalsPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="min-w-0 overflow-hidden pb-2">
-          <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-4 mb-4">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5 mb-4">
             <TabsTrigger value="needs-attention">Needs Attention</TabsTrigger>
             <TabsTrigger value="approvals">Approvals</TabsTrigger>
             <TabsTrigger value="communications">Communications</TabsTrigger>
             <TabsTrigger value="completed">Completed</TabsTrigger>
+            <TabsTrigger value="conversation" className="col-span-2 sm:col-span-1">Conversation</TabsTrigger>
           </TabsList>
         </div>
 
@@ -63,6 +69,20 @@ export function ApprovalsPage() {
 
         <TabsContent value="completed">
           <CompletedTab />
+        </TabsContent>
+
+        <TabsContent value="conversation">
+          {conversationCaseId ? (
+            <ActionConversationPanel caseId={conversationCaseId} workItemId={conversationWorkItemId} />
+          ) : (
+            <ConversationCaseOpener onOpen={(id) => {
+              const next = new URLSearchParams(search);
+              next.set('tab', 'conversation');
+              next.set('caseId', String(id));
+              next.delete('workItemId');
+              setLocation(`${location}?${next.toString()}`);
+            }} />
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -375,6 +395,9 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
         <div className="flex items-center gap-4">
           <Link href={`/cases/${approval.caseId}`} style={{ fontSize: 'var(--text-xs)', color: 'var(--primary)', fontWeight: 600 }} className="hover:underline">
             Open Full Case Context →
+          </Link>
+          <Link href={`/approvals?tab=conversation&caseId=${approval.caseId}`} style={{ fontSize: 'var(--text-xs)', color: 'var(--primary)', fontWeight: 600 }} className="hover:underline">
+            Conversation
           </Link>
           <button onClick={() => setHistoryOpen(!historyOpen)} className="text-[var(--text-xs)] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
             {historyOpen ? 'Hide History' : 'Show History'}

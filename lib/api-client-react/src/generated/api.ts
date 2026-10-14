@@ -44,6 +44,9 @@ import type {
   AccessUserGroupSecurityGroupApproval,
   AccessUserGroupSecurityGroupUpdate,
   AccessUserGroupUpdate,
+  ActionConversation,
+  ActionConversationInput,
+  ActionConversationMessage,
   ActualsLogParseResult,
   ActualsOverlayInput,
   ActualsOverlayRecord,
@@ -87,6 +90,7 @@ import type {
   FlowClass,
   FlowOverride,
   FlowOverrideInput,
+  GetActionConversationParams,
   GetCurrentHumanPermissions200,
   GetHroEmailRotationParams,
   GetOnboardingActionCenterParams,
@@ -436,6 +440,155 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetActionConversationUrl = (caseId: number,
+    params?: GetActionConversationParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/onboarding/action-center/cases/${caseId}/conversation?${stringifiedParams}` : `/api/onboarding/action-center/cases/${caseId}/conversation`
+}
+
+export const getActionConversation = async (caseId: number,
+    params?: GetActionConversationParams, options?: RequestInit): Promise<ActionConversation> => {
+
+  return customFetch<ActionConversation>(getGetActionConversationUrl(caseId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetActionConversationQueryKey = (caseId: number,
+    params?: GetActionConversationParams,) => {
+    return [
+    `/api/onboarding/action-center/cases/${caseId}/conversation`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetActionConversationQueryOptions = <TData = Awaited<ReturnType<typeof getActionConversation>>, TError = ErrorType<void>>(caseId: number,
+    params?: GetActionConversationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActionConversation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetActionConversationQueryKey(caseId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getActionConversation>>> = ({ signal }) => getActionConversation(caseId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getActionConversation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetActionConversationQueryResult = NonNullable<Awaited<ReturnType<typeof getActionConversation>>>
+export type GetActionConversationQueryError = ErrorType<void>
+
+
+
+export function useGetActionConversation<TData = Awaited<ReturnType<typeof getActionConversation>>, TError = ErrorType<void>>(
+ caseId: number,
+    params?: GetActionConversationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActionConversation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetActionConversationQueryOptions(caseId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getPostActionConversationUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/action-center/cases/${caseId}/conversation`
+}
+
+export const postActionConversation = async (caseId: number,
+    actionConversationInput: ActionConversationInput, options?: RequestInit): Promise<ActionConversationMessage> => {
+
+  return customFetch<ActionConversationMessage>(getPostActionConversationUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(actionConversationInput)
+  }
+);}
+
+
+
+
+
+export const getPostActionConversationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postActionConversation>>, TError,{caseId: number;data: BodyType<ActionConversationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postActionConversation>>, TError,{caseId: number;data: BodyType<ActionConversationInput>}, TContext> => {
+
+const mutationKey = ['postActionConversation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postActionConversation>>, {caseId: number;data: BodyType<ActionConversationInput>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  postActionConversation(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostActionConversationMutationResult = NonNullable<Awaited<ReturnType<typeof postActionConversation>>>
+    export type PostActionConversationMutationBody = BodyType<ActionConversationInput>
+    export type PostActionConversationMutationError = ErrorType<void>
+
+    export const usePostActionConversation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postActionConversation>>, TError,{caseId: number;data: BodyType<ActionConversationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postActionConversation>>,
+        TError,
+        {caseId: number;data: BodyType<ActionConversationInput>},
+        TContext
+      > => {
+      return useMutation(getPostActionConversationMutationOptions(options));
+    }
 
 export const getGetTransactionContextUrl = (caseId: number,) => {
 

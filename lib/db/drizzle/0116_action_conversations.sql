@@ -1,0 +1,26 @@
+CREATE TABLE action_conversation_messages (
+  id serial PRIMARY KEY,
+  organization_id text NOT NULL,
+  case_id integer NOT NULL,
+  work_item_id integer,
+  version integer NOT NULL DEFAULT 1,
+  submission_id text NOT NULL,
+  request_digest text NOT NULL,
+  author text NOT NULL,
+  text text NOT NULL,
+  mode text NOT NULL CHECK (mode IN ('note','triage')),
+  agent_key text,
+  agent_fingerprint text,
+  state text NOT NULL CHECK (state IN ('recorded','pending','completed','failed','uncertain','withheld')),
+  outcome text,
+  reply text,
+  explanation jsonb,
+  evidence_fingerprint text,
+  review_href text,
+  dispatch_started_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT action_conversation_submission_unique UNIQUE (organization_id, author, submission_id),
+  FOREIGN KEY (organization_id, case_id) REFERENCES onb_cases (organization_id,id) ON DELETE CASCADE
+);
+CREATE INDEX action_conversation_history_idx ON action_conversation_messages (organization_id,case_id,id);

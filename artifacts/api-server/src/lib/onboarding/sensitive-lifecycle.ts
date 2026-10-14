@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm";
 import {
   db,
+  actionConversationMessages,
   transactionHandoffRevisions,
   pool,
   onbActionCenterActions,
@@ -1553,9 +1554,8 @@ async function opaqueEnvelopeHoldApplies(tx: any, organizationId: string, caseId
 /**
  * Retention starts from the newest source representation, not merely from case
  * creation. This is intentionally a complete, conservative inventory of the
- * mutable case-derived stores. There is no persisted AI chat/explanation
- * table in this schema; should one be added it must be included here before
- * its collection gate can be considered supported.
+ * mutable case-derived stores, including non-authoritative conversations
+ * and private handoff revision history.
  */
 async function newestCaseDerivedSourceAtInTransaction(
   tx: any, organizationId: string, caseId: number, workerEmail: string, caseUpdatedAt: Date,
@@ -1587,6 +1587,7 @@ async function newestCaseDerivedSourceAtInTransaction(
     }
   }
   const timestamps = await Promise.all([
+    newest(actionConversationMessages, actionConversationMessages.updatedAt, and(eq(actionConversationMessages.organizationId, organizationId), eq(actionConversationMessages.caseId, caseId))),
     newest(transactionHandoffRevisions, transactionHandoffRevisions.createdAt, and(eq(transactionHandoffRevisions.organizationId, organizationId), eq(transactionHandoffRevisions.caseId, caseId))),
     newest(onbEvents, onbEvents.createdAt, and(eq(onbEvents.organizationId, organizationId), eq(onbEvents.caseId, caseId))),
     newest(onbApprovals, onbApprovals.createdAt, and(eq(onbApprovals.organizationId, organizationId), eq(onbApprovals.caseId, caseId))),
@@ -1780,6 +1781,14 @@ async function processCaseDerivedEnvelopeDeletionJob(
     }).where(and(eq(onbCases.organizationId, job.organizationId), eq(onbCases.id, job.caseId)));
     await tx.update(onbEvents).set({ title: "[minimized]", detail: "[minimized]" })
       .where(and(eq(onbEvents.organizationId, job.organizationId), eq(onbEvents.caseId, job.caseId)));
+    // Keep only opaque submission identity and ordering, never conversation
+    // payload, saved excerpts, selected principals or human author identifiers.
+    await tx.update(actionConversationMessages).set({
+      text: "[minimized]", author: sql`'[minimized]:' || ${actionConversationMessages.id}::text`, reply: null, explanation: null,
+      agentKey: null, agentFingerprint: null, evidenceFingerprint: null,
+      reviewHref: null, state: "withheld", outcome: null,
+      requestDigest: "[minimized]", version: sql`${actionConversationMessages.version} + 1`,
+    }).where(and(eq(actionConversationMessages.organizationId, job.organizationId), eq(actionConversationMessages.caseId, job.caseId)));
     // Both current annotations and their private revision history share the
     // all-class envelope's policy, hold, newest-source clock and deletion fence.
     await tx.delete(transactionHandoffRevisions).where(and(

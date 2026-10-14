@@ -45,6 +45,7 @@ import candidateAdminRouter from "./candidate-admin";
 import onboardingUatTestCenterRouter from "./onboarding-uat-test-center";
 import onboardingFairnessRouter from "./onboarding-fairness";
 import actionCenterRouter from "./action-center";
+import actionConversationsRouter from "./action-conversations";
 import { requireAuth } from "../middlewares/require-auth";
 import { requireTenantContext } from "../middlewares/tenant-context";
 import onboardingAuditRouter from "./onboarding-audit";
@@ -115,6 +116,7 @@ router.use(caseRetirementFence);
 // Read-only analysis precedes mutation-only separation/service-request gates.
 // The explanation router owns its current read/disclosure checks.
 router.use(onboardingCaseExplainabilityRouter);
+router.use(actionConversationsRouter);
 router.use(transactionContextRouter);
 // Service requests have no onboarding execution adapter; deletion keeps its
 // existing hold-aware path. Separation closure remains specification-blocked.

@@ -6,6 +6,7 @@ import { after, before, test } from "node:test";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
+  actionConversationMessages,
   onbApprovals,
   onbApprovalHistory,
   onbAuditEntries,
@@ -100,6 +101,13 @@ test("an all-class fenced case envelope minimises medical and BGV originals whil
     planSummary: "medical support plan", notes: "BGV candidate notes", createdAt: old, updatedAt: old,
   }).returning();
   assert.ok(caseRow);
+  const [conversation] = await db.insert(actionConversationMessages).values({
+    organizationId, caseId: caseRow.id, author: "private-human-author", mode: "triage",
+    submissionId: randomUUID(), requestDigest: "private-digest", text: "Opaque medical and BGV conversation",
+    state: "completed", outcome: "answer", reply: "Private AI narrative",
+    explanation: { sources: [{ excerpt: "Private retained excerpt" }] },
+    agentKey: "private-selected-role", createdAt: old, updatedAt: old,
+  }).returning();
   const [documentRow] = await db.insert(onbDocuments).values({
     organizationId, caseId: caseRow.id, key: "medical-bgv-file",
     label: "Medical and BGV evidence file", category: "identity", note: "medical restriction and BGV details", updatedAt: old,
@@ -212,6 +220,13 @@ test("an all-class fenced case envelope minimises medical and BGV originals whil
   await assert.rejects(queuedWriter, /SENSITIVE_LIFECYCLE_BLOCKED/i);
 
   const [minimizedCase] = await db.select().from(onbCases).where(eq(onbCases.id, caseRow.id));
+  const [minimizedConversation] = await db.select().from(actionConversationMessages).where(eq(actionConversationMessages.id, conversation!.id));
+  assert.equal(minimizedConversation?.text, "[minimized]");
+  assert.equal(minimizedConversation?.explanation, null);
+  assert.equal(minimizedConversation?.reply, null);
+  assert.equal(minimizedConversation?.agentKey, null);
+  assert.equal(minimizedConversation?.state, "withheld");
+  assert.doesNotMatch(minimizedConversation?.author ?? "", /private-human/);
   const [document] = await db.select().from(onbDocuments).where(and(
     eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseRow.id),
   ));

@@ -5,6 +5,169 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type ActionConversationInputMode = typeof ActionConversationInputMode[keyof typeof ActionConversationInputMode];
+
+
+export const ActionConversationInputMode = {
+  note: 'note',
+  triage: 'triage',
+} as const;
+
+export interface ActionConversationInput {
+  submissionId: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  text: string;
+  mode: ActionConversationInputMode;
+  /** @maxLength 120 */
+  agentKey?: string;
+  /** @minimum 1 */
+  workItemId?: number;
+}
+
+export interface ActionConversationAgent {
+  key: string;
+  role: string;
+  registration: string;
+  capability: string;
+  eligible: boolean;
+  owner: string | null;
+}
+
+export type ActionConversationMessageMode = typeof ActionConversationMessageMode[keyof typeof ActionConversationMessageMode];
+
+
+export const ActionConversationMessageMode = {
+  note: 'note',
+  triage: 'triage',
+} as const;
+
+export type ActionConversationMessageState = typeof ActionConversationMessageState[keyof typeof ActionConversationMessageState];
+
+
+export const ActionConversationMessageState = {
+  recorded: 'recorded',
+  pending: 'pending',
+  completed: 'completed',
+  failed: 'failed',
+  uncertain: 'uncertain',
+  withheld: 'withheld',
+} as const;
+
+export type ActionConversationMessageOutcome = typeof ActionConversationMessageOutcome[keyof typeof ActionConversationMessageOutcome] | null;
+
+
+export const ActionConversationMessageOutcome = {
+  answer: 'answer',
+  clarification: 'clarification',
+  proposal: 'proposal',
+  unavailable: 'unavailable',
+} as const;
+
+export type OnbCaseExplanationParagraphKind = typeof OnbCaseExplanationParagraphKind[keyof typeof OnbCaseExplanationParagraphKind];
+
+
+export const OnbCaseExplanationParagraphKind = {
+  supported: 'supported',
+  'not-recorded': 'not-recorded',
+} as const;
+
+export interface OnbCaseExplanationParagraph {
+  /**
+     * @minLength 1
+     * @maxLength 1500
+     */
+  text: string;
+  /**
+     * @maxItems 12
+     * @items.minLength 1
+     * @items.maxLength 160
+     */
+  sourceIds: string[];
+  kind: OnbCaseExplanationParagraphKind;
+}
+
+export type OnbCaseExplanationSourceTab = typeof OnbCaseExplanationSourceTab[keyof typeof OnbCaseExplanationSourceTab];
+
+
+export const OnbCaseExplanationSourceTab = {
+  overview: 'overview',
+  activity: 'activity',
+  communications: 'communications',
+  documents: 'documents',
+  approvals: 'approvals',
+} as const;
+
+export interface OnbCaseExplanationSource {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  kind: string;
+  /**
+     * @minLength 1
+     * @maxLength 240
+     */
+  title: string;
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  excerpt: string;
+  /** @nullable */
+  occurredAt: string | null;
+  tab: OnbCaseExplanationSourceTab;
+}
+
+export interface OnbCaseExplanation {
+  asOf: string;
+  /**
+     * @minItems 1
+     * @maxItems 12
+     */
+  paragraphs: OnbCaseExplanationParagraph[];
+  /** @maxItems 100 */
+  sources: OnbCaseExplanationSource[];
+  /** @items.maxLength 500 */
+  limitations: string[];
+  truncated: boolean;
+}
+
+export interface ActionConversationMessage {
+  id: number;
+  version: number;
+  submissionId: string;
+  author: string;
+  createdAt: string;
+  updatedAt: string;
+  text: string;
+  mode: ActionConversationMessageMode;
+  state: ActionConversationMessageState;
+  outcome: ActionConversationMessageOutcome;
+  reply: string | null;
+  explanation: OnbCaseExplanation | null;
+  agentKey: string | null;
+  workItemId: number | null;
+  reviewHref: string | null;
+}
+
+export interface ActionConversation {
+  organizationId: string;
+  caseId: number;
+  messages: ActionConversationMessage[];
+  nextBefore: number | null;
+  agents: ActionConversationAgent[];
+  canPost: boolean;
+  notice: string;
+}
+
 export type TransactionContextSourceSection = typeof TransactionContextSourceSection[keyof typeof TransactionContextSourceSection];
 
 
@@ -6569,80 +6732,6 @@ export interface OnbCaseExplanationInput {
   history?: OnbCaseExplanationHistoryEntry[];
 }
 
-export type OnbCaseExplanationParagraphKind = typeof OnbCaseExplanationParagraphKind[keyof typeof OnbCaseExplanationParagraphKind];
-
-
-export const OnbCaseExplanationParagraphKind = {
-  supported: 'supported',
-  'not-recorded': 'not-recorded',
-} as const;
-
-export interface OnbCaseExplanationParagraph {
-  /**
-     * @minLength 1
-     * @maxLength 1500
-     */
-  text: string;
-  /**
-     * @maxItems 12
-     * @items.minLength 1
-     * @items.maxLength 160
-     */
-  sourceIds: string[];
-  kind: OnbCaseExplanationParagraphKind;
-}
-
-export type OnbCaseExplanationSourceTab = typeof OnbCaseExplanationSourceTab[keyof typeof OnbCaseExplanationSourceTab];
-
-
-export const OnbCaseExplanationSourceTab = {
-  overview: 'overview',
-  activity: 'activity',
-  communications: 'communications',
-  documents: 'documents',
-  approvals: 'approvals',
-} as const;
-
-export interface OnbCaseExplanationSource {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  id: string;
-  /**
-     * @minLength 1
-     * @maxLength 80
-     */
-  kind: string;
-  /**
-     * @minLength 1
-     * @maxLength 240
-     */
-  title: string;
-  /**
-     * @minLength 1
-     * @maxLength 1000
-     */
-  excerpt: string;
-  /** @nullable */
-  occurredAt: string | null;
-  tab: OnbCaseExplanationSourceTab;
-}
-
-export interface OnbCaseExplanation {
-  asOf: string;
-  /**
-     * @minItems 1
-     * @maxItems 12
-     */
-  paragraphs: OnbCaseExplanationParagraph[];
-  /** @maxItems 100 */
-  sources: OnbCaseExplanationSource[];
-  /** @items.maxLength 500 */
-  limitations: string[];
-  truncated: boolean;
-}
-
 export interface OnbOfferAcceptanceConfirmation {
   /** @minLength 1 */
   note: string;
@@ -11424,6 +11513,17 @@ export const RetiredCapabilityResponseCode = {
 export type RetiredCapabilityResponse = {
   code: RetiredCapabilityResponseCode;
   message: string;
+};
+
+export type GetActionConversationParams = {
+/**
+ * @minimum 1
+ */
+before?: number;
+/**
+ * @minimum 1
+ */
+workItemId?: number;
 };
 
 export type StartOfflineCaseWorkflowBody = {

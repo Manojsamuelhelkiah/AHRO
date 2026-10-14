@@ -8,6 +8,175 @@
 import * as zod from 'zod';
 
 
+
+
+
+export const GetActionConversationParams = zod.object({
+  "caseId": zod.coerce.number().min(1)
+})
+
+
+
+
+
+export const GetActionConversationQueryParams = zod.object({
+  "before": zod.coerce.number().min(1).optional(),
+  "workItemId": zod.coerce.number().min(1).optional()
+})
+
+export const getActionConversationResponseMessagesItemExplanationOneParagraphsItemTextMax = 1500;
+
+export const getActionConversationResponseMessagesItemExplanationOneParagraphsItemSourceIdsItemMax = 160;
+
+export const getActionConversationResponseMessagesItemExplanationOneParagraphsItemSourceIdsMax = 12;
+
+export const getActionConversationResponseMessagesItemExplanationOneParagraphsMax = 12;
+
+export const getActionConversationResponseMessagesItemExplanationOneSourcesItemIdMax = 160;
+
+export const getActionConversationResponseMessagesItemExplanationOneSourcesItemKindMax = 80;
+
+export const getActionConversationResponseMessagesItemExplanationOneSourcesItemTitleMax = 240;
+
+export const getActionConversationResponseMessagesItemExplanationOneSourcesItemExcerptMax = 1000;
+
+export const getActionConversationResponseMessagesItemExplanationOneSourcesMax = 100;
+
+export const getActionConversationResponseMessagesItemExplanationOneLimitationsItemMax = 500;
+
+
+
+export const GetActionConversationResponse = zod.object({
+  "organizationId": zod.string(),
+  "caseId": zod.number(),
+  "messages": zod.array(zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "submissionId": zod.string(),
+  "author": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "text": zod.string(),
+  "mode": zod.enum(['note', 'triage']),
+  "state": zod.enum(['recorded', 'pending', 'completed', 'failed', 'uncertain', 'withheld']),
+  "outcome": zod.enum(['answer', 'clarification', 'proposal', 'unavailable']).nullable(),
+  "reply": zod.string().nullable(),
+  "explanation": zod.object({
+  "asOf": zod.coerce.date(),
+  "paragraphs": zod.array(zod.object({
+  "text": zod.string().min(1).max(getActionConversationResponseMessagesItemExplanationOneParagraphsItemTextMax),
+  "sourceIds": zod.array(zod.string().min(1).max(getActionConversationResponseMessagesItemExplanationOneParagraphsItemSourceIdsItemMax)).max(getActionConversationResponseMessagesItemExplanationOneParagraphsItemSourceIdsMax),
+  "kind": zod.enum(['supported', 'not-recorded'])
+})).min(1).max(getActionConversationResponseMessagesItemExplanationOneParagraphsMax),
+  "sources": zod.array(zod.object({
+  "id": zod.string().min(1).max(getActionConversationResponseMessagesItemExplanationOneSourcesItemIdMax),
+  "kind": zod.string().min(1).max(getActionConversationResponseMessagesItemExplanationOneSourcesItemKindMax),
+  "title": zod.string().min(1).max(getActionConversationResponseMessagesItemExplanationOneSourcesItemTitleMax),
+  "excerpt": zod.string().min(1).max(getActionConversationResponseMessagesItemExplanationOneSourcesItemExcerptMax),
+  "occurredAt": zod.coerce.date().nullable(),
+  "tab": zod.enum(['overview', 'activity', 'communications', 'documents', 'approvals'])
+})).max(getActionConversationResponseMessagesItemExplanationOneSourcesMax),
+  "limitations": zod.array(zod.string().max(getActionConversationResponseMessagesItemExplanationOneLimitationsItemMax)),
+  "truncated": zod.boolean()
+}).nullable(),
+  "agentKey": zod.string().nullable(),
+  "workItemId": zod.number().nullable(),
+  "reviewHref": zod.string().nullable()
+})),
+  "nextBefore": zod.number().nullable(),
+  "agents": zod.array(zod.object({
+  "key": zod.string(),
+  "role": zod.string(),
+  "registration": zod.string(),
+  "capability": zod.string(),
+  "eligible": zod.boolean(),
+  "owner": zod.string().nullable()
+})),
+  "canPost": zod.boolean(),
+  "notice": zod.string()
+})
+
+
+
+
+
+export const PostActionConversationParams = zod.object({
+  "caseId": zod.coerce.number().min(1)
+})
+
+export const postActionConversationBodyTextMax = 4000;
+
+export const postActionConversationBodyAgentKeyMax = 120;
+
+
+
+
+export const PostActionConversationBody = zod.object({
+  "submissionId": zod.string().uuid(),
+  "text": zod.string().min(1).max(postActionConversationBodyTextMax),
+  "mode": zod.enum(['note', 'triage']),
+  "agentKey": zod.string().max(postActionConversationBodyAgentKeyMax).optional(),
+  "workItemId": zod.number().min(1).optional()
+})
+
+export const postActionConversationResponseExplanationOneParagraphsItemTextMax = 1500;
+
+export const postActionConversationResponseExplanationOneParagraphsItemSourceIdsItemMax = 160;
+
+export const postActionConversationResponseExplanationOneParagraphsItemSourceIdsMax = 12;
+
+export const postActionConversationResponseExplanationOneParagraphsMax = 12;
+
+export const postActionConversationResponseExplanationOneSourcesItemIdMax = 160;
+
+export const postActionConversationResponseExplanationOneSourcesItemKindMax = 80;
+
+export const postActionConversationResponseExplanationOneSourcesItemTitleMax = 240;
+
+export const postActionConversationResponseExplanationOneSourcesItemExcerptMax = 1000;
+
+export const postActionConversationResponseExplanationOneSourcesMax = 100;
+
+export const postActionConversationResponseExplanationOneLimitationsItemMax = 500;
+
+
+
+export const PostActionConversationResponse = zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "submissionId": zod.string(),
+  "author": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "text": zod.string(),
+  "mode": zod.enum(['note', 'triage']),
+  "state": zod.enum(['recorded', 'pending', 'completed', 'failed', 'uncertain', 'withheld']),
+  "outcome": zod.enum(['answer', 'clarification', 'proposal', 'unavailable']).nullable(),
+  "reply": zod.string().nullable(),
+  "explanation": zod.object({
+  "asOf": zod.coerce.date(),
+  "paragraphs": zod.array(zod.object({
+  "text": zod.string().min(1).max(postActionConversationResponseExplanationOneParagraphsItemTextMax),
+  "sourceIds": zod.array(zod.string().min(1).max(postActionConversationResponseExplanationOneParagraphsItemSourceIdsItemMax)).max(postActionConversationResponseExplanationOneParagraphsItemSourceIdsMax),
+  "kind": zod.enum(['supported', 'not-recorded'])
+})).min(1).max(postActionConversationResponseExplanationOneParagraphsMax),
+  "sources": zod.array(zod.object({
+  "id": zod.string().min(1).max(postActionConversationResponseExplanationOneSourcesItemIdMax),
+  "kind": zod.string().min(1).max(postActionConversationResponseExplanationOneSourcesItemKindMax),
+  "title": zod.string().min(1).max(postActionConversationResponseExplanationOneSourcesItemTitleMax),
+  "excerpt": zod.string().min(1).max(postActionConversationResponseExplanationOneSourcesItemExcerptMax),
+  "occurredAt": zod.coerce.date().nullable(),
+  "tab": zod.enum(['overview', 'activity', 'communications', 'documents', 'approvals'])
+})).max(postActionConversationResponseExplanationOneSourcesMax),
+  "limitations": zod.array(zod.string().max(postActionConversationResponseExplanationOneLimitationsItemMax)),
+  "truncated": zod.boolean()
+}).nullable(),
+  "agentKey": zod.string().nullable(),
+  "workItemId": zod.number().nullable(),
+  "reviewHref": zod.string().nullable()
+})
+
+
 export const GetTransactionContextParams = zod.object({
   "caseId": zod.coerce.number()
 })

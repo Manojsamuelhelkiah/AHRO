@@ -7,7 +7,7 @@ import {
 
 const MODEL = "gpt-5-nano";
 const REQUEST_TIMEOUT_MS = 30_000;
-const MAX_COMPLETION_TOKENS = 6_000;
+export const MAX_COMPLETION_TOKENS = 6_000;
 
 export type ExplainabilityCompletionStage = "generation" | "verification";
 

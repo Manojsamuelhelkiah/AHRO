@@ -209,6 +209,9 @@ function NotificationCard({ notification }: { notification: OnbActionCenter['not
         <p className="text-sm text-[var(--text-secondary)] mt-1">{notification.detail}</p>
       </div>
       <div className="flex items-center gap-2 shrink-0 w-full md:w-auto mt-2 md:mt-0">
+<Link href={`/approvals?tab=conversation&caseId=${notification.caseId}`} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center mr-3">
+            Conversation
+          </Link>
          <Link href={notification.caseHref} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center">
            View Case <ChevronRight className="h-3 w-3 ml-1" />
          </Link>
@@ -310,6 +313,9 @@ function DocumentFollowupCard({ doc }: { doc: OnbActionCenter['documentFollowups
             </DialogFooter>
           </DialogContent>
         </Dialog>
+<Link href={`/approvals?tab=conversation&caseId=${doc.caseId}`} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
+            Conversation
+          </Link>
         <Link href={doc.caseHref} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
           View Case
         </Link>
@@ -512,6 +518,9 @@ function WorkItemCard({ item }: { item: OnbActionCenter['workItems'][0] }) {
            </DialogContent>
          </Dialog>
 
+<Link href={`/approvals?tab=conversation&caseId=${item.caseId}&workItemId=${item.id}`} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
+            Conversation
+          </Link>
          <Link href={item.caseHref} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
            View Case
          </Link>
@@ -554,7 +563,10 @@ function OpportunityCard({ opp }: { opp: OnbActionCenter['opportunities'][0] }) 
       <div className="flex flex-wrap items-center gap-2 shrink-0 w-full md:w-auto mt-2 md:mt-0">
          <ManualCallDialog caseId={opp.caseId} defaultNotes={`Regarding opportunity: ${opp.title}`} disabled={!canAct} />
          <ActionCenterCreateWork caseId={opp.caseId} actionVersion={opp.actionVersion} reason={opp.description} disabled={!canAct} />
-         <Link href={opp.caseHref} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
+ <Link href={`/approvals?tab=conversation&caseId=${opp.caseId}`} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
+            Conversation
+          </Link>
+        <Link href={opp.caseHref} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
            View Case <ChevronRight className="h-3 w-3 ml-1" />
          </Link>
       </div>
