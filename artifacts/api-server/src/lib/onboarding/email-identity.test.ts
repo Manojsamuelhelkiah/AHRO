@@ -35,7 +35,7 @@ test("simulated identity copy is explicit and has no delivery claim", () => {
     actionRequired: "Review the simulated case.",
     reference: "BGV-4-cycle",
   }).join("\n");
-  assert.match(lines, /Delivery status: SIMULATED — no email was sent/);
+  assert.match(lines, /Delivery status: NOT SENT — internal request record/);
   assert.match(lines, /Actual delivery address: provider@example.test/);
   assert.match(lines, /App link: https:\/\/hro-agent-nexus\.replit\.app\/approvals/);
 });

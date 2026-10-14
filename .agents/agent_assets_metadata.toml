@@ -340,3 +340,31 @@ mtime_ms = 1791470359076
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/d440707f-7491-4626-9636-a1692cdaf3c9/1748dfab-1c3e-457f-b3aa-83f3fe280655"
 storage_version_token = "1791470455488465"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "HDG_cryfIXdjQzMOE27cX"
+uri = "file://.local/outputs/HRO-Operational-Architecture.pdf"
+type = "pdf"
+title = "HRO Architecture (PDF)"
+description = "Updated operational terminology; proposal and evidence boundaries retained."
+logical_id = "0f591ed8-6f55-4d49-87df-aeaf37ec3679"
+content_hash = "sha256:75fd160a3ca8d572f13e9ab0b7b47da7c7ea1b36f4b1bc41256a30bd49c8fd8a"
+size = 390177
+mtime_ms = 1792001846136
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/0f591ed8-6f55-4d49-87df-aeaf37ec3679/8fab92ad-e5a0-42af-802a-0ae35e435a7b"
+storage_version_token = "1792001847709085"
+content_type = "application/pdf"
+
+[[outputs]]
+id = "EB6O1AulsTmYzr4Q7ApvQ"
+uri = "file://.local/outputs/HRO-Operational-Architecture.pptx"
+type = "slides"
+title = "HRO Architecture (PowerPoint)"
+description = "Updated operational terminology, retaining proposed architecture and verified-result boundaries."
+logical_id = "35599f11-e3e0-42fd-8a90-ef98adea265b"
+content_hash = "sha256:965814c459513a26a26675d682c2b513ecff4bf900a20d8490327b3b9acc0023"
+size = 6048242
+mtime_ms = 1792001858260
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/35599f11-e3e0-42fd-8a90-ef98adea265b/53e2ef4a-3d6d-4e0b-a559-87240008a60d"
+storage_version_token = "1792001859056573"
+content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"

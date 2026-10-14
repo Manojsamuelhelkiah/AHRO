@@ -531,7 +531,7 @@ router.use("/onboarding/cases/:caseId", async (req, res, next) => {
         !isVerifiedHybridDemoControllerCase(caseRow))
     ) {
       res.status(403).json({
-        message: "Shared demo accounts require an authorized synthetic case or an existing historical case-read grant.",
+        message: "Shared accounts require an authorized case or an existing case-read grant.",
         code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
       });
       return;
@@ -822,7 +822,7 @@ async function deriveGateways(row: typeof onbCases.$inferSelect, presentation?: 
       : row.lifecycleStage === "complete" && finalApproval?.status === "approved" && mandatoryReady && malwareBlockers.length === 0 && (!bgvRequiredForDay1 || bgvClear)
       ? { status: "complete" as const, label: "Gate C — Day-1 readiness", reason: "HR approved the final Day-1 review after live readiness checks." }
       : !mandatoryReady || malwareBlockers.length > 0 || (bgvRequiredForDay1 && !bgvClear)
-        ? { status: "blocked" as const, label: "Gate C — Day-1 readiness", reason: malwareBlockers.length > 0 ? "Latest required upload malware evidence is not clear." : bgv ? "Trusted BGV clearance is not currently present; simulated or unproven status is excluded." : "Configured mandatory readiness items are not currently complete." }
+        ? { status: "blocked" as const, label: "Gate C — Day-1 readiness", reason: malwareBlockers.length > 0 ? "Latest required upload malware evidence is not clear." : bgv ? "Trusted BGV clearance is not currently present; unverified results do not meet this requirement." : "Configured mandatory readiness items are not currently complete." }
         : finalApproval?.status === "pending"
           ? { status: "human-review" as const, label: "Gate C — Day-1 readiness", reason: "Live readiness is complete and awaits the dedicated HR final-review queue decision." }
           : finalApproval?.status === "approved"
@@ -939,7 +939,7 @@ async function serializeCase(
     operationalActivated: Boolean(activationRecord(row, false)),
     operationalStartedAt: row.operationalActivation?.generationStartedAt ?? row.operationalActivation?.activatedAt ?? null,
     operationalSourceLabel: activationRecord(row, false)
-      ? `Fictional source ${row.scenarioKey}; original identity and records retained separately, not current evidence.` : null,
+      ? "Original request identity and records are retained separately and are not current operational evidence." : null,
     /** Only server-marked, fictional Demo fixtures may bypass identity authority. */
     fictionalOfflineIdentity: canReadProfile && fictionalOfflineIdentity,
     planSummary: canReadNotes
@@ -1375,7 +1375,7 @@ router.post("/onboarding/cases", async (req, res, next) => {
     }
     if (demoProfile === "reviewer") {
       res.status(403).json({
-        message: "Shared reviewer accounts cannot create cases. Use the Demo Administrator profile for fictional offline samples.",
+        message: "Shared reviewer accounts cannot create cases.",
         code: "SYNTHETIC_DEMO_SCOPE_REQUIRED",
       });
       return;
@@ -2926,7 +2926,7 @@ router.put("/onboarding/cases/:caseId/bgv-notifications", async (req, res, next)
     }
     if (!canManageBgvNotifications(getOrganizationId(req), req.organizationRole)) {
       res.status(403).json({
-        message: "Owner or admin HR role required for BGV recipient configuration; Demo Organization members may save simulation-only configuration.",
+        message: "Owner or admin HR role required for BGV recipient configuration; shared workspace members may save configuration without authorizing delivery.",
       });
       return;
     }
@@ -2986,7 +2986,7 @@ router.post("/onboarding/cases/:caseId/bgv-notifications/reconcile", async (req,
     }
     if (!canManageBgvNotifications(getOrganizationId(req), req.organizationRole)) {
       res.status(403).json({
-        message: "Owner or admin HR role required to reconcile BGV notifications; Demo Organization members may reconcile simulation-only notices.",
+        message: "Owner or admin HR role required to reconcile BGV notifications; shared workspace members may prepare notices without delivery.",
       });
       return;
     }

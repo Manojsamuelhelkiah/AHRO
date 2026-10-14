@@ -62,6 +62,9 @@ export function caseSummary(c: { fictionalOfflineIdentity?: boolean; offlineSamp
 export function sampleIntakeFields(data: Record<string, string>, c?: SamplePresentationContext): [string, string][] {
   if (!c || !isFictionalOfflineExample(c)) return Object.entries(data);
   return Object.entries(data).flatMap(([key, value]): [string, string][] => {
+    if (/(?:^|_)(?:date|due_at)$/.test(key) && /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value)) {
+      return [[key, 'Not confirmed']];
+    }
     if (key === 'request_id' && /^(UAT-DEMO-|FICTIONAL-)/.test(value)) return [];
     if (key === 'worker_name') return [[key, caseWorkerName({ ...c, workerName: value })]];
     if ((key.endsWith('_reference') || key === 'employee_id' || key === 'previous_employee_id')
@@ -73,6 +76,15 @@ export function sampleIntakeFields(data: Record<string, string>, c?: SamplePrese
     // Never transform arbitrary operational intake when the marker is absent.
     return [[key, value.replace(/\bFictional\s+/g, '')]];
   });
+}
+
+/** Fixed inventory dates are not independently confirmed operating dates. */
+export function confirmedCaseDate(c: {
+  joiningDate?: string; fictionalOfflineIdentity?: boolean; offlineSample?: boolean;
+  operationalActivated?: boolean;
+}): string | null {
+  if (isFictionalOfflineExample(c) && !c.operationalActivated) return null;
+  return c.joiningDate && Number.isFinite(Date.parse(c.joiningDate)) ? c.joiningDate : null;
 }
 
 export function casesForList<T extends { controllerRetired?: boolean; fictionalOfflineIdentity?: boolean; offlineSample?: boolean }>(rows: readonly T[], historyOnly: boolean): T[] {

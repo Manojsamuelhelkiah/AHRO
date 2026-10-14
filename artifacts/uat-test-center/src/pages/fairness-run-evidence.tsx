@@ -9,7 +9,7 @@ export function FairnessRunEvidence({ run, canInvestigate, note, validNote, onIn
   return <Card className="p-5 space-y-4">
     <h2 className="font-semibold">Attempt {run.id} — {run.status}</h2>
     <p className="text-sm">{run.at} · {run.provenance} · Programme {run.programmeVersion} / scope {run.scopeRevision} / criteria {run.criteriaRevision}</p>
-    <p className="text-sm">Requested model {run.model} · Prompt {run.promptVersion} · Synthetic policy/catalog {run.catalogVersion} · Output contract {run.outputContractVersion}</p>
+    <p className="text-sm">Requested model {run.model} · Prompt {run.promptVersion} · Test policy/catalog {run.catalogVersion} · Output contract {run.outputContractVersion}</p>
     <details className="text-sm"><summary>Prompt digest and reviewer receipts</summary><p className="break-all">{run.promptDigest}</p><pre className="whitespace-pre-wrap">{JSON.stringify(run.approvals, null, 2)}</pre></details>
     {run.limitation && <p role="status" className="text-[var(--status-amber)]">{run.limitation}</p>}
     {run.observations.length === 0 && <p>No completed pair observations. This attempt establishes no equality conclusion.</p>}

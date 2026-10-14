@@ -602,7 +602,7 @@ export function calculateOutcomeKpis(
   const cycleNote =
     `${AGENT_FILTER_NOTE} Average is measured only from HR-recorded offer acceptance and a Day-1 Readiness completion event whose current final approval is approved and case lifecycle is complete; missing, negative, future, simulation, or inconsistent/reopened evidence is conservatively unknown.`;
   const bgvNote =
-    `${AGENT_FILTER_NOTE} Average is initiation tracking to receipt of a verified vendor result, not provider execution duration. Only non-simulated email-source timestamps are verifiable here; legacy push/poll simulation and missing provider timestamps are excluded, not treated as target success.`;
+    `${AGENT_FILTER_NOTE} Average is initiation tracking to receipt of a verified vendor result, not provider execution duration. Only confirmed email-source timestamps are verifiable here; unconfirmed adapter results and missing provider timestamps are excluded, not treated as target success.`;
   const enpsValues = surveys === undefined
     ? []
     : mostRecentByCase(surveys
@@ -662,7 +662,7 @@ export function calculateOutcomeKpis(
           KPI_DEFINITIONS.experience,
           eligible.length,
           enpsValues,
-          `${AGENT_FILTER_NOTE} eNPS is calculated only from the most recent qualifying voluntary onboarding-30-day response per case (promoters 9–10 minus detractors 0–6). Raw responses and scores are restricted. Trusted-provider or verified human-authorized evidence only; simulated/demo/offline/unknown evidence is excluded. A minimum of ${ENPS_MINIMUM_AGGREGATION_THRESHOLD} distinct usable responses is required before an aggregate is published.`,
+          `${AGENT_FILTER_NOTE} eNPS is calculated only from the most recent qualifying voluntary onboarding-30-day response per case (promoters 9–10 minus detractors 0–6). Raw responses and scores are restricted. Trusted-provider or verified human-authorized evidence only; non-operational and unverified evidence is excluded. A minimum of ${ENPS_MINIMUM_AGGREGATION_THRESHOLD} distinct usable responses is required before an aggregate is published.`,
           ENPS_MINIMUM_AGGREGATION_THRESHOLD,
         ),
     employment === undefined
@@ -677,7 +677,7 @@ export function calculateOutcomeKpis(
           KPI_DEFINITIONS.attrition,
           eligible.length,
           attritionValues,
-          `${AGENT_FILTER_NOTE} Requires a dated actual joining record plus trusted HRIS or verified human-authorized employment evidence. A dated termination within 90 days is attrition; active status before day 90, missing/conflicting dates, planned joining dates, and simulated/demo/offline/unknown evidence remain unknown.`,
+          `${AGENT_FILTER_NOTE} Requires a dated actual joining record plus trusted HRIS or verified human-authorized employment evidence. A dated termination within 90 days is attrition; active status before day 90, missing/conflicting dates, planned joining dates, and non-operational or unverified evidence remain unknown.`,
           SENSITIVE_OUTCOME_MINIMUM_AGGREGATION_THRESHOLD,
         ),
   ];

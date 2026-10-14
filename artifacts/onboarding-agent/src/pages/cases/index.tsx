@@ -29,6 +29,7 @@ import {
   caseSummary,
   originalIntentOf,
   caseOwnerOf,
+  confirmedCaseDate,
   type CaseTypeFilter,
 } from './case-presentation';
 
@@ -626,7 +627,7 @@ export function CasesPage() {
                         <div className="truncate" title={caseTypeOf(c)}><CaseTypeBadge type={caseTypeOf(c)} /></div>
                       </td>
                       <td className="hidden lg:table-cell whitespace-nowrap" style={{ padding: '10px 8px', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                        {c.joiningDate && Number.isFinite(Date.parse(c.joiningDate)) ? format(new Date(c.joiningDate), caseDateFormat) : 'Not applicable'}
+                        {confirmedCaseDate(c) ? format(new Date(confirmedCaseDate(c)!), caseDateFormat) : 'Not confirmed'}
                       </td>
                       <td className="hidden lg:table-cell" style={{ padding: '10px 8px' }}>
                         {c.syntheticJourney ? <span className="block truncate text-xs text-[var(--text-muted)]" title={`${c.syntheticJourney.qualifier} — ${c.syntheticJourney.rationale}`}>

@@ -50,8 +50,10 @@ test('every family and mixed outcome agrees across health, overview, workstreams
       assert.match(timeline, /Case timeline/);
       assert.match(timeline, new RegExp(`${family} intake`));
       assert.match(communications, /Case correspondence/);
+      assert.match(communications, /Delivery not confirmed/);
+      assert.doesNotMatch(timeline + communications, /2030-10-0[12]|animate-pulse|animate-spin/);
       assert.doesNotMatch(summary + tasks + health + overview + timeline + communications,
-        /Old generic placeholder|>none<|Manual Demo data|Offline sample|synthetic|illustrat|fictional/i);
+        /Old generic placeholder|>none<|Manual Demo data|Offline sample|synthetic|illustrat|fictional|simulated/i);
       if (outcome === 'blocked') assert.match(actions, /must resolve the source reference/);
       else assert.match(actions, /No pending (?:work|supported preparation)/);
       assert.equal(caseSummary(c), `${journey.qualifier} · ${journey.rationale}`);

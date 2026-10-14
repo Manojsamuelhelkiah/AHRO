@@ -115,7 +115,7 @@ export function DashboardPage() {
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <PageHeader
         title="HRO Control Tower"
-        subtitle="Case totals include authorized online and offline examples. Historical examples are not verified business outcomes."
+        subtitle="Track authorized cases, outstanding requirements and recorded outcomes. Verified business results are reported separately."
       />
 
       {/* Operations briefing */}

@@ -41,3 +41,16 @@ test('missing and conflicting references remain explicit and unverified', () => 
   assert.ok(html.includes('Specialist review only'));
   assert.ok(!html.includes('FICTIONAL-'));
 });
+
+test('unconfirmed inventory dates are presentation-only, while ordinary submitted dates remain unchanged', () => {
+  const template = HRO_BATCH_TEMPLATES.find(t => t.id === 'payroll-bank-change')!;
+  const data = { request_id: 'FICTIONAL-REF', effective_date: '2030-11-13', due_date: '2031-01-31' };
+  const request = hroRequestForRow(template, data);
+  const before = JSON.stringify(request);
+  const html = renderToStaticMarkup(<HroIntakeRequestPanel request={request} sampleContext={sampleContext} />);
+  assert.doesNotMatch(html, /2030-11-13|2031-01-31/);
+  assert.match(html, /Not confirmed/);
+  const live = renderToStaticMarkup(<HroIntakeRequestPanel request={request} sampleContext={{ ...sampleContext, fictionalOfflineIdentity: false }} />);
+  assert.match(live, /2030-11-13/);
+  assert.equal(JSON.stringify(request), before);
+});

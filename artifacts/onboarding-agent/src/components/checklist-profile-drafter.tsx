@@ -133,7 +133,7 @@ function DraftResult({
     <div className="mt-6 border-t border-[var(--border)] pt-5">
       <div className="mb-4 flex items-center justify-between">
         <h5 className="font-semibold text-[var(--text-sm)]">Proposed Policy Configuration</h5>
-        <Badge className="bg-[var(--status-info-bg)] text-[var(--status-info-fg)] shadow-none">Simulated Match</Badge>
+        <Badge className="bg-[var(--status-info-bg)] text-[var(--status-info-fg)] shadow-none">Proposed Match</Badge>
       </div>
 
       <div className="mb-4 rounded border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-[var(--text-sm)] text-[var(--text-secondary)]">

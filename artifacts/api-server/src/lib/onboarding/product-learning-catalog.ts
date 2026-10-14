@@ -66,7 +66,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ["Versioned source", "Approved extract", "Current publication review"], ["Retired evaluations cannot provide a current accuracy or fairness claim."]),
   guide("systems", "Provider systems and authorized channel checks", "/systems", "Separately authorized operational tests remain available; configuration alone does not prove provider execution.",
     ["Review connector mode and approved estate.", "Use explicit, authorized operational channel checks only.", "Reconcile uncertain effects without automatic non-idempotent redispatch."],
-    ["Verified provider receipt", "Stable effect-journal payload", "Current recipient authorization"], ["Historical test records remain permanently denied dispatch.", "No simulated integration is represented as genuine external work."]),
+    ["Verified provider receipt", "Stable effect-journal payload", "Current recipient authorization"], ["Retained records without current operational authorization cannot dispatch.", "Adapter configuration does not establish genuine external work."]),
   guide("communications", "Communications and monitored replies", "/systems", "Verified transport, tenant attribution, recipient authorization and responder authority are independent.",
     ["Check the exact case-bound reply reference.", "Quarantine ambiguous attribution.", "Review durable delivery status and unknown outcomes."],
     ["Provider message id", "Verified transport evidence", "Case-bound correlation"], ["A shared mailbox identity alone cannot authorize a state change."]),

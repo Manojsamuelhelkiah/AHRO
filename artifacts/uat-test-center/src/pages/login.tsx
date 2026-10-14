@@ -7,8 +7,8 @@ import { safeNext } from '@/lib/admission';
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 const POINTS = [
-  { icon: FlaskConical, title: 'Synthetic runs', text: 'Guided scenarios with expected and observed evidence.' },
-  { icon: ShieldCheck, title: 'Policy quality', text: 'Fictional benchmarks for the constrained Policy Assistant.' },
+  { icon: FlaskConical, title: 'Test runs', text: 'Guided scenarios with expected and observed evidence.' },
+  { icon: ShieldCheck, title: 'Policy quality', text: 'Test benchmarks for the constrained Policy Assistant.' },
   { icon: Scale, title: 'Fairness evidence', text: 'Governed paired observations, not certification.' },
 ];
 
@@ -32,7 +32,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
             ))}
           </ul>
         </div>
-        <p className="hidden text-xs text-[var(--dark-text-muted)] lg:block">Simulated evidence is non-authoritative and never changes live readiness.</p>
+        <p className="hidden text-xs text-[var(--dark-text-muted)] lg:block">Test evidence is not certification and never changes operational readiness.</p>
       </section>
       <section className="flex items-center justify-center bg-[var(--surface-alt)] px-4 py-10 text-[var(--text-primary)]">{children}</section>
     </div>

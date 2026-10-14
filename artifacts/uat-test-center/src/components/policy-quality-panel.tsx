@@ -86,19 +86,19 @@ export function PolicyQualityPanel() {
   return <Card className="p-5 space-y-4" id="policy-quality">
     <div>
       <h2 className="font-semibold text-lg">Policy answer-quality benchmarks</h2>
-      <p className="text-sm text-[var(--text-secondary)]">Review fictional questions and their answer key before evaluating the constrained Policy Assistant. No employee records are used.</p>
+      <p className="text-sm text-[var(--text-secondary)]">Review test questions and their answer key before evaluating the constrained Policy Assistant. No employee records are used.</p>
       <p className="mt-2 text-sm font-medium">Roadmap assurance work, not a current accuracy guarantee. Offline replay checks the contract; it does not test the model’s understanding.</p>
     </div>
-    {query.isLoading && <p>Loading the synthetic benchmark…</p>}
+    {query.isLoading && <p>Loading the test benchmark…</p>}
     {query.isError && <div role="alert"><p>Benchmark evidence could not be loaded.</p><Button onClick={() => void query.refetch()}>Retry</Button></div>}
     {error && <p role="alert" className="text-[var(--status-red)]">{error}</p>}
     {data && <>
-      <p className="text-sm"><strong>{data.approved ? "Business-approved answer key" : "Not approved for evaluation"}</strong> · {data.cases.length} synthetic cases · {data.model} · prompt {data.promptVersion}</p>
+      <p className="text-sm"><strong>{data.approved ? "Business-approved answer key" : "Not approved for evaluation"}</strong> · {data.cases.length} test cases · {data.model} · prompt {data.promptVersion}</p>
       <p className="text-sm">{data.limitation}</p>
       <p className="text-sm">{data.currentLiveEvidence ? "A passing real-model run matches the current benchmark and selection contract." : "No passing real-model evidence matches the current model, prompt and benchmark. Offline passes do not satisfy this check."}</p>
       {data.drift && <section className="border rounded-md p-3 space-y-3" aria-label="Provider model drift programme">
         <h3 className="font-semibold">Provider model drift checks — separately opt in</h3>
-        <p className="text-sm">A provider may change {data.model} without changing its name. Compare fresh fictional results and provider model/fingerprint receipts with a live baseline you have reviewed. No employee content is sent.</p>
+        <p className="text-sm">A provider may change {data.model} without changing its name. Compare fresh test results and provider model/fingerprint receipts with a live baseline you have reviewed. No employee content is sent.</p>
         <p className="text-sm">At most {data.drift.maxChecks} checks over {data.drift.durationDays} days, no more than one every {data.drift.intervalHours} hours. Each check shares the tenant’s existing three-runs-per-day budget (up to {data.limits.calls} calls, {data.limits.totalCompletionTokens.toLocaleString()} completion tokens, bounded input and {data.limits.milliseconds / 1000} seconds). Input tokens also cost money. Approval does not call the provider; the runtime heartbeat runs due checks. Builds and policy publication never authorize spending.</p>
         {data.drift.programme && <div className="text-sm space-y-1">
           <p>Programme: {data.drift.programme.status} · {data.drift.programme.checksReserved}/{data.drift.maxChecks} reservations used · expires {data.drift.programme.expiresAt}</p>
@@ -153,7 +153,7 @@ export function PolicyQualityPanel() {
       <div className="space-y-3">
         <Button disabled={busy || !data.approved} onClick={() => void evaluate("offline")}>Run provider-free contract replay</Button>
         {data.canReview && <div className="border rounded-md p-3 space-y-3">
-        <p className="text-sm">Real-model budget: at most {data.limits.calls} calls, {data.limits.completionTokensPerCall.toLocaleString()} completion tokens per call ({data.limits.totalCompletionTokens.toLocaleString()} total), {data.limits.inputCharactersPerCall.toLocaleString()} input characters per call, {data.limits.milliseconds / 1000} seconds, and {data.limits.liveRunsPerTenantPerDay ?? 3} runs per tenant per UTC day. No automatic retries. Only fixed fictional policy text is sent.</p>
+        <p className="text-sm">Real-model budget: at most {data.limits.calls} calls, {data.limits.completionTokensPerCall.toLocaleString()} completion tokens per call ({data.limits.totalCompletionTokens.toLocaleString()} total), {data.limits.inputCharactersPerCall.toLocaleString()} input characters per call, {data.limits.milliseconds / 1000} seconds, and {data.limits.liveRunsPerTenantPerDay ?? 3} runs per tenant per UTC day. No automatic retries. Only fixed test policy text is sent.</p>
           <label className="flex gap-2 text-sm"><input type="checkbox" checked={liveConfirmed} onChange={e => setLiveConfirmed(e.target.checked)} />{data.liveConfirmation}</label>
           <Button variant="outline" disabled={busy || !data.approved || !liveConfirmed} onClick={() => void evaluate("live")}>Authorize and run real-model benchmark</Button>
         </div>}
@@ -163,7 +163,7 @@ export function PolicyQualityPanel() {
         <h3 className="font-semibold">Recent evidence</h3>
         {data.runs.length === 0 && <p className="text-sm">No evaluated runs. Approval alone is not a model-quality result.</p>}
         {data.runs.map(r => <button key={r.runId} className="block text-left text-sm underline mt-2" onClick={() => setSelected(r)}>
-          {r.mode === "offline" ? "Scripted contract replay" : "Real-model synthetic run"} · {r.status} · {r.passed ?? "—"}/{r.total ?? "—"} · {r.runId}
+          {r.mode === "offline" ? "Scripted contract replay" : "Real-model test run"} · {r.status} · {r.passed ?? "—"}/{r.total ?? "—"} · {r.runId}
           {r.benchmarkHash !== data.benchmarkHash || r.requestHash !== data.requestHash || r.contractHash !== data.contractHash ? " · older benchmark or selection configuration" : ""}
         </button>)}
       </div>

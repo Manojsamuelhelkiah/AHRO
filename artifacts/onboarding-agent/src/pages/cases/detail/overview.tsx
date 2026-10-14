@@ -69,7 +69,7 @@ function OfflinePrivacyRestricted() {
         <ShieldCheck className="w-4 h-4 text-[var(--text-muted)]" />
         <h3 className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Privacy & Retention</h3>
       </div>
-      <p className="text-sm font-medium text-[var(--text-normal)]">Restricted for offline samples</p>
+      <p className="text-sm font-medium text-[var(--text-normal)]">Current operational authorization required</p>
       <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
         This historical test record is read-only and permanently non-operational. Sensitive retention and existing holds still apply.
       </p>

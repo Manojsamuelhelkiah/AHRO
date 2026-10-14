@@ -645,12 +645,12 @@ test("legacy stored requests remain readable with safe identity resolution", asy
     name: "IT Access & Identity Agent",
     origin: "internal",
     description:
-      "Internal simulation persona for tracking access and identity setup work; it does not provision accounts or call an identity provider.",
+      "Tracks access requirements and identity dependencies. Account provisioning requires a confirmed identity-provider result.",
     owner: "IT / Security",
     capabilities: [
       "Track access setup tasks",
       "Record identity dependencies",
-      "Record simulated access blockers",
+      "Record access blockers",
     ],
     simulated: true,
   });
@@ -729,9 +729,9 @@ test("GET is read-only and initialization persists tenant-scoped simulated commu
   assert.ok(communications.every((row) =>
     row.status === "logged-only" &&
     row.channel === "agent" &&
-    row.body.includes("[SIMULATED") &&
-    row.body.includes("No email was sent") &&
-    row.body.includes("AI agent identity:") &&
+    row.body.includes("[REQUEST RECORD") &&
+    row.body.includes("no email was sent") &&
+    row.body.includes("AI agent role:") &&
     row.body.includes("origin: internal"),
   ));
   assert.equal((await db.select().from(onbDocuments).where(eq(onbDocuments.caseId, caseA))).length, 0);
@@ -832,10 +832,10 @@ test("actions are fenced, idempotent, and do not mutate readiness", async () => 
   const emailCommunication = (await db.select().from(onbCommunications)
     .where(and(eq(onbCommunications.caseId, caseA), eq(onbCommunications.channel, "email"))))[0];
   assert.ok(emailCommunication);
-  assert.ok(emailCommunication.toAddress.includes("simulated recipient label"));
-  assert.ok(emailCommunication.body.includes("No email was sent"));
+  assert.ok(emailCommunication.toAddress.includes("responsible team; no delivery address"));
+  assert.ok(emailCommunication.body.includes("no email was sent"));
   assert.ok(emailCommunication.body.includes("AI agent identity: none"));
-  assert.ok(emailCommunication.body.includes("mail recipient label is not an AI agent"));
+  assert.ok(emailCommunication.body.includes("recipient label is not an AI agent"));
   assert.equal(
     (await db.select().from(onbCommunications).where(eq(onbCommunications.caseId, caseA))).length,
     9,
@@ -1005,12 +1005,12 @@ test("requires integer action versions and serializes same-version simulated mut
     name: "Documentation & Compliance Agent",
     origin: "internal",
     description:
-      "Internal simulation persona for tracking documentation and compliance setup work; it does not verify or submit documents.",
+      "Tracks documentation requirements, missing inputs and compliance reviews. Source verification and submission require separate authorized processes.",
     owner: "HR Ops",
     capabilities: [
       "Track documentation setup tasks",
       "Identify missing inputs",
-      "Record simulated compliance blockers",
+      "Record compliance blockers",
     ],
     simulated: true,
   });

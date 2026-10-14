@@ -226,7 +226,7 @@ export function ContactDialog({ caseId, open, onOpenChange }: { caseId: number, 
                     onChange={(e) => setSimulate(e.target.checked)} 
                     className="w-4 h-4 accent-[var(--primary)]"
                   />
-                  <label htmlFor="simulate-call" className="text-[var(--text-sm)] font-medium cursor-pointer">Simulate Call (Live test)</label>
+                  <label htmlFor="simulate-call" className="text-[var(--text-sm)] font-medium cursor-pointer">Preview call — no phone call placed</label>
                 </div>
                 {!simulate && (
                   <div className="p-3 bg-[var(--status-red-bg)] text-[var(--status-red-fg)] text-[var(--text-xs)] rounded-[var(--radius-md)] flex items-start gap-2 border border-[var(--status-red)]/30">
@@ -274,7 +274,7 @@ export function ContactDialog({ caseId, open, onOpenChange }: { caseId: number, 
             <h3 className="text-[var(--text-lg)] font-bold">
               {sendMutation.data?.delivery === 'sent' && 'Sent Successfully'}
               {sendMutation.data?.delivery === 'calling' && 'Call Initiated'}
-              {sendMutation.data?.delivery === 'simulated' && 'Call Simulated'}
+              {sendMutation.data?.delivery === 'simulated' && 'Call preview — not placed'}
               {sendMutation.data?.delivery === 'logged-only' && 'Logged successfully'}
               {sendMutation.data?.delivery === 'duplicate' && 'Duplicate request ignored'}
               {sendMutation.data?.delivery === 'withheld' && 'Delivery Withheld'}

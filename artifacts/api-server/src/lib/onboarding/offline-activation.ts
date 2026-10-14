@@ -113,7 +113,7 @@ export async function activationPrerequisites(tx: OnboardingDbTransaction, row: 
     blockers.push("A real deliverable worker email is required, not a fixture or reserved domain.");
   if (!data.worker_name?.trim() || data.worker_name === source?.values.workerName ||
     /^(example|fictional|sample)(?:\s|—|:|-)/i.test(data.worker_name))
-    blockers.push("Replace the fictional source name with the actual worker identity.");
+    blockers.push("The actual worker identity must be independently recorded and confirmed.");
   if (/^(?:FICTIONAL|SAMPLE|EXAMPLE|UAT)[-_:]/i.test(data.request_id ?? ""))
     blockers.push("Supply the actual source request reference; a fixture reference cannot establish a real request.");
   const workforceContext = normalizedWorkforceContext({
@@ -284,7 +284,7 @@ export async function activateOfflineCaseInTransaction(tx: OnboardingDbTransacti
     lifecycleStage: "trigger-received", createdByUserId: input.actorUserId,
     offerAcceptanceComplete: false, offerAcceptanceCompletedAt: null, offerAcceptanceCompletedBy: null,
     candidateEmailAuthorizedAt: null, candidateEmailAuthorizedBy: null,
-    notes: "Operational identity recorded. Original fictional source is retained separately and is not employee evidence.",
+    notes: "Operational identity recorded. Original request identity is retained separately and is not employee evidence.",
     originalIntent: resolveOriginalIntent(row),
     createdAt: now, updatedAt: now,
   };

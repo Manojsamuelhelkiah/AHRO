@@ -605,7 +605,7 @@ async function sendOutboundUnsafe(opts: {
       sensitive: opts.sensitive ?? false,
       idempotencyKey: opts.idempotencyKey ?? null,
     }).returning({ id: onbCommunications.id });
-    if (!blocked) throw new Error("Synthetic offline communication was not recorded.");
+    if (!blocked) throw new Error("The blocked communication could not be recorded.");
     return { id: blocked.id, status: "blocked", failureReason: SYNTHETIC_OFFLINE_WARNING };
   }
   // This check is deliberately before the per-message effect-journal claim.
@@ -963,7 +963,7 @@ async function sendAdministrativeEmailUnsafe(opts: {
       failureReason: SYNTHETIC_OFFLINE_WARNING,
       idempotencyKey: opts.idempotencyKey ?? null,
     }).returning({ id: onbCommunications.id });
-    if (!blocked) throw new Error("Synthetic offline administrative communication was not recorded.");
+    if (!blocked) throw new Error("The blocked administrative communication could not be recorded.");
     return { id: blocked.id, status: "blocked", failureReason: SYNTHETIC_OFFLINE_WARNING };
   }
   const governance = await evaluateProviderGovernanceGate(

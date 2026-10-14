@@ -64,4 +64,4 @@ export function isSyntheticDemoAuthority(input: {
 }
 
 export const SYNTHETIC_OFFLINE_WARNING =
-  "Historical test record — read-only and permanently non-operational. No provider dispatch, outreach, approval authority, or readiness completion is permitted.";
+  "This record is read-only; operational execution is not authorized. Provider dispatch, outreach, approval authority and readiness completion are not permitted.";

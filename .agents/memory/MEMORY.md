@@ -53,7 +53,7 @@
 - [Synthetic case refresh](synthetic-case-refresh.md) — explicit inventory, authoritative offline mode, dispatch/deletion locking, and retained private file references protect real data and recipients.
 - [Historical controller retirement](controller-retirement-boundaries.md) — retained consent, runs and provider outcomes never authorize operations; volunteers remain real people.
 - [Demo principal boundaries](demo-principal-boundaries.md) — public Demo identities stay pinned; fictional simulations never grant tenant or specialist authority.
-- [Operational simulation truthfulness](operational-simulation-truthfulness.md) — show operational emails and agent actions in Communications without implying real external work or readiness.
+- [Operational language and truthfulness](operational-simulation-truthfulness.md) — business copy with centralized source availability; request progress never implies delivery, authority or execution.
 - [BGV notification boundaries](bgv-notification-boundaries.md) — human notices versus simulated operations; source provenance, private findings, and stale-email fencing.
 - [Shared mailbox personas](shared-mailbox-personas.md) — intended stakeholder, delivery mailbox, and actual responder are separate; demo names never grant authority.
 - [Provider test isolation](provider-test-isolation.md) — in-process delivery stubs cannot protect DB fixtures from the running API's background workers.

@@ -251,7 +251,7 @@ export function CaseDetailPage() {
   if (!canViewIdentity || c.workerName === "Restricted candidate") {
     restrictedFields.push("Identity (Name, Email, Phone, Manager, Recruiter)");
   }
-  if (c.hireType === 'service-request' || c.orchestrationStatus === 'hro-request-pending-review') {
+  if (!c.syntheticJourney && (c.hireType === 'service-request' || c.orchestrationStatus === 'hro-request-pending-review')) {
     return <CaseAccessProvider value={permissions}>
       <div className="mx-auto max-w-5xl space-y-5 px-4 md:px-8">
         <Link href="/cases" className="inline-flex min-h-10 items-center text-sm text-[var(--primary)]">Back to cases</Link>
@@ -259,7 +259,7 @@ export function CaseDetailPage() {
           <OriginalIntent c={c} />
           <h1 className="break-words text-2xl font-semibold text-[var(--text-primary)]">{permissions.access.profileRead ? caseTitleOf(c) : 'Case details restricted'}</h1>
           <p className="mt-1 text-sm text-[var(--text-muted)]">{permissions.access.profileRead ? caseTypeOf(c) : 'Case details restricted'} · Held for specialist review · No external action authorized</p>
-          {isFictionalOfflineExample(c) && <p className="mt-2 text-xs">Offline — read-only; no outreach or business completion.</p>}</div>
+          {isFictionalOfflineExample(c) && <p className="mt-2 text-xs">Read-only · External action not authorized.</p>}</div>
         {c.batchIntake ? <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} /> :
           <RestrictedActionNotice>Submitted fields require current profile, notes and sensitive-record read authority. They have not been removed from the case.</RestrictedActionNotice>}
         {permissions.access.notesRead && <ActivityTab events={events || []} />}
@@ -297,14 +297,14 @@ export function CaseDetailPage() {
       {c.batchIntake && <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} />}
       {c.syntheticJourney && <SyntheticJourneySummary journey={c.syntheticJourney} />}
       {!c.syntheticJourney && c.fictionalOfflineIdentity && permissions.access.notesRead && c.planSummary && (
-        <section aria-label="Example request and pending review" className="my-4 rounded-lg border p-4 text-sm">
+        <section aria-label="Request and pending review" className="my-4 rounded-lg border p-4 text-sm">
           <h3 className="mb-2 font-semibold">Request and unresolved review needs</h3>
           <p className="break-words">{caseSummary(c)}</p>
         </section>
       )}
       {offlineSample ? (
         !isFictionalOfflineExample(c) && <div role="status" className="mb-6 rounded-lg border p-4 text-sm">
-          Historical test record — read-only and permanently non-operational.
+          Read-only record — operational execution is not authorized.
           Retained events and private evidence are not business activity, approval authority, or proof of readiness.
         </div>
       ) : (
@@ -353,7 +353,7 @@ export function CaseDetailPage() {
             <ActivityTab events={events || []} /></>
           : <RestrictedActionNotice>Activity notes are restricted by your current permissions.</RestrictedActionNotice>)}
         {activeTab === 'Communications' && <>{c.syntheticJourney && <><SyntheticJourneyCommunications journey={c.syntheticJourney} />
-          <h2 className="mb-4 font-semibold">Recorded communications · original delivery status and provenance</h2></>}
+          <h2 className="mb-4 font-semibold">Message history · delivery status</h2></>}
           <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} requestsEnv={requestsEnv} requestsLoadError={requestsLoadError} enforceCasePermissions /></>}
         {activeTab === 'Audit' && (permissions.access.notesRead
           ? <AuditTab events={events || []} approvals={approvals} records={records || []} />

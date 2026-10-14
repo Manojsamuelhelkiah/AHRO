@@ -7,6 +7,7 @@ import { Link } from 'wouter';
 import { format } from 'date-fns';
 import { MalwareScannerStatus } from '@/components/malware-scanner-status';
 import { StandardProvidersPanel } from '@/components/standard-providers-panel';
+import { adapterVendorText, adapterDescriptionText } from '@/lib/operational-copy';
 
 export function SystemsPage() {
   const queryClient = useQueryClient();
@@ -45,6 +46,19 @@ export function SystemsPage() {
         title="Systems & Integrations" 
         subtitle="Manage system-of-record adapters and outbound communication channels." 
       />
+      <section aria-label="Integration availability" className="rounded-lg border bg-[var(--surface)] p-4 text-sm space-y-2">
+        <h2 className="font-semibold">Integration availability</h2>
+        <p>The current experience uses application-managed scenario data until connected systems supply confirmed results. Case stages and correspondence describe request handling; they do not establish provider confirmation, employee consent or approval authority.</p>
+        <p>Review each system and messaging channel below for its current availability. Email delivery, inbox monitoring and other connected services retain their own health and delivery records. A configured adapter alone does not confirm an external transaction.</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>HR systems supply worker records, employment changes and source references.</li>
+          <li>Background-verification providers supply authenticated findings and clearance results.</li>
+          <li>IT service systems supply access, equipment and ticket-fulfilment confirmations.</li>
+          <li>Payroll and benefits systems supply enrolment, pay-cycle and reconciliation results.</li>
+          <li>Learning systems supply assignment, enrolment and completion evidence.</li>
+        </ul>
+        <p>System connection is only one prerequisite. Current permissions, verified evidence and applicable human decisions are still required.</p>
+      </section>
 
       <div className="pt-4">
         <Link href="/email-intake" data-testid="link-systems-email-intake" className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium text-[var(--primary)]">Client email intake: mailbox, routes and request review</Link>
@@ -57,9 +71,9 @@ export function SystemsPage() {
       <div className="space-y-4 pt-10">
         <div>
           <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Server className="w-4 h-4 text-[var(--primary)]" /> System Adapters (Legacy)
+            <Server className="w-4 h-4 text-[var(--primary)]" /> System Adapters
           </h2>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Legacy adapters for tracking mode and watcher configurations.</p>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: '2px', marginBottom: 0 }}>Tracking connections and status-monitoring configuration. Adapter settings are not provider confirmation.</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {loadingConn ? <LoadingBlock className="col-span-full">Loading adapters...</LoadingBlock> : connectors?.map(conn => (
@@ -70,7 +84,8 @@ export function SystemsPage() {
                     <IconTile icon={Server} className={cn("border-none shadow-sm", conn.status === 'connected' ? "bg-[var(--status-info-bg)] text-[var(--primary)]" : "bg-[var(--surface-alt)] text-[var(--text-muted)]")} />
                     <div>
                       <h3 className="font-semibold text-[var(--text-base)] text-[var(--text-primary)] leading-tight">{conn.label}</h3>
-                      <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">{conn.description}</p>
+                      <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 font-medium">{adapterDescriptionText(conn.description)}</p>
+                      <p className="mt-1 text-xs font-semibold">{conn.status === 'connected' ? 'Adapter enabled — review source confirmation below' : 'Awaiting system connection'}</p>
                     </div>
                   </div>
                   <label className="flex items-center cursor-pointer shrink-0 mt-1">
@@ -85,7 +100,7 @@ export function SystemsPage() {
                 <div className="flex items-end justify-between gap-4 mt-6 pt-5 border-t border-[var(--border)]">
                   <div className="space-y-2 flex-1 max-w-[200px]">
                     <Label className="text-[var(--text-xs)] font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
-                      <ArrowRightLeft className="w-3.5 h-3.5" /> Active Vendor
+                      <ArrowRightLeft className="w-3.5 h-3.5" /> Configured vendor
                     </Label>
                     <select 
                       className={cn("block w-full text-[var(--text-sm)] font-semibold rounded-[var(--radius-md)] shadow-sm h-[36px] px-3 border outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors cursor-pointer", conn.status !== 'connected' ? "bg-[var(--surface-alt)] text-[var(--text-muted)] border-[var(--border)] opacity-60" : "bg-[var(--surface)] text-[var(--text-primary)] border-[var(--border)]")}
@@ -93,7 +108,7 @@ export function SystemsPage() {
                       onChange={(e) => handleSwap(conn.key, e.target.value)}
                       disabled={conn.status !== 'connected' || updateConnector.isPending}
                     >
-                      {conn.availableVendors.map((v: string) => <option key={v} value={v}>{v}</option>)}
+                      {conn.availableVendors.map((v: string) => <option key={v} value={v}>{adapterVendorText(v)}</option>)}
                     </select>
                   </div>
                   {WATCHED_KEYS.includes(conn.key) && (

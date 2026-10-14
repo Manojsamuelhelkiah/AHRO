@@ -21,7 +21,7 @@ export function StandardProvidersPanel() {
           <Database className="w-4 h-4 text-[var(--primary)]" /> Source of Truth Providers
         </h2>
         <p className="text-[var(--text-sm)] text-[var(--text-muted)] mt-1 mb-0">
-          Standard configurations for authoritative system records. Remote writes are disabled pending dispatcher implementation.
+          Connection and verification status for authoritative records. External updates are not available through these controls.
         </p>
       </div>
 
@@ -62,7 +62,7 @@ function ProviderCard({ provider }: { provider: StandardProviderStatus }) {
               provider.configurationState === 'operator-approved' ? 'bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' :
               'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]'
             )}>
-              {provider.configurationState.replace(/-/g, ' ').toUpperCase()}
+              {provider.configurationState === 'not-configured' ? 'AWAITING SYSTEM CONNECTION' : provider.configurationState.replace(/-/g, ' ').toUpperCase()}
             </Badge>
             {provider.fulfillmentState !== 'not-submitted' && (
                <Badge className="text-[var(--text-xs)] shadow-none border-none font-semibold bg-[var(--surface-alt)] text-[var(--text-muted)]">

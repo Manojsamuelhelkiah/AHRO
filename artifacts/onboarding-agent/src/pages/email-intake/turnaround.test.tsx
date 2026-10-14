@@ -18,7 +18,7 @@ test('turnaround renders empty measurements honestly and preserves held-outcome 
   assert.equal(html.match(/Not measured/g)?.length, 6);
   assert.match(html, /not Gmail delivery/);
   assert.match(html, /not a completed HR outcome/);
-  assert.match(html, /Unbound platform-triage mail and linked synthetic cases are excluded/);
+  assert.match(html, /Unbound platform-triage mail and cases without operational evidence are excluded/);
   assert.match(html, /individual reviewer metrics/);
   assert.match(html, /<caption/);
   assert.doesNotMatch(html, /NaN|undefined/);

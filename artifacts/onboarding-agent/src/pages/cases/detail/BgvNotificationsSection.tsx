@@ -142,7 +142,7 @@ export function BgvNotificationsSection({
   const handleReconcile = (simulation: boolean) => {
     if (!hasEditPermission) return;
     if (!confirm(simulation ? 
-      "Simulate sending these notifications? (No actual emails will be sent)" : 
+      "Preview these notifications? No emails will be sent." :
       "Trigger live reconciliation? This may deliver real human emails to authorized recipients if criteria are met."
     )) return;
 
@@ -216,7 +216,7 @@ export function BgvNotificationsSection({
           </div>
           {isOffline && (
             <span className="text-[10px] px-2 py-1 rounded border border-[var(--violet)] text-[var(--violet-fg)] bg-[var(--violet-light-bg)] font-bold tracking-wider uppercase shrink-0">
-              OFFLINE · READ-ONLY
+              READ-ONLY
             </span>
           )}
         </div>
@@ -403,7 +403,7 @@ export function BgvNotificationsSection({
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => handleReconcile(true)} disabled={reconcile.isPending} className="gap-2">
-               <Bot className="w-4 h-4" /> Simulate Reconcile
+               <Bot className="w-4 h-4" /> Preview notifications
             </Button>
             <Button size="sm" onClick={() => handleReconcile(false)} disabled={reconcile.isPending} className="gap-2 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] shadow-sm">
                <Send className="w-4 h-4" /> Live Reconcile
@@ -464,7 +464,7 @@ function DeliveryBadge({ state }: { state: BgvNotificationDeliveryState }) {
 
   return (
     <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border whitespace-nowrap" style={{ backgroundColor: style.bg, color: style.fg, borderColor: style.border }}>
-      {style.icon} {state.replace('-', ' ')}
+      {style.icon} {state === 'simulated' ? 'Not sent' : state === 'uncertain' ? 'Delivery not confirmed' : state.replace('-', ' ')}
     </span>
   );
 }

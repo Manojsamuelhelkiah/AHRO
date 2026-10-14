@@ -762,7 +762,7 @@ function boundedBgvNoticeLines(
 ): string[] {
   return [
     simulated
-      ? "SIMULATED ONLY — no external provider action was sent."
+      ? "Internal coordination record — no external provider action was sent."
       : "This notice contains only a generic onboarding case reference.",
     `Action required: ${actionRequired}`,
     `Reference: ${reference}`,
@@ -785,7 +785,7 @@ function copyFor(
     : role === "candidate"
       ? "Use the secure onboarding portal or contact HR to provide the requested information."
       : role === "bgvTeam"
-        ? "Review the provider case through the authorized workflow and update its status (simulation only)."
+        ? "Review the provider case through the authorized workflow; external action requires separate authorization."
         : "Review the existing case and coordinate with HR; no automated employment decision was made.";
   if (release) {
     const body =
@@ -803,7 +803,7 @@ function copyFor(
   }
   const body = {
     hr: `${caseReference}: This onboarding case requires human HR review. The case remains on a generic hold pending review. Review the existing case and coordinate the HR review. No finding details are included and no automated employment decision was made.`,
-    bgvTeam: `${caseReference}: SIMULATED ONLY: please review the existing provider case through the authorized provider workflow and update the status. No provider action was sent.`,
+    bgvTeam: `${caseReference}: Please review the existing provider case through the authorized provider workflow. No provider action was sent.`,
     recruiter: `${caseReference}: Please coordinate with HR about a generic onboarding hold and any operational timing impact. Review the existing onboarding case with HR. No finding details are included in this notice.`,
     hiringManager: `${caseReference}: Please coordinate with HR about a generic onboarding hold and any operational timing impact. Review the existing onboarding case with HR. No finding details are included in this notice.`,
     compliance: `${caseReference}: A restricted case state requires human review. Review the existing case through the authorized restricted review process and coordinate with HR. This notice contains no raw finding and makes no automated employment decision.`,
@@ -830,28 +830,28 @@ function internalCopy(
   const reference = `BGV-${caseId}-${internal}`;
   if (episode === "release") {
     return {
-      subject: `Simulated generic onboarding hold release — ${caseReference}`,
+      subject: `Onboarding hold release coordination — ${caseReference}`,
       body: [
         `${caseReference}: generic ${internal} onboarding hold/release coordination was recorded. No external ${internal} system was changed and this does not represent employment clearance.`,
         "",
         ...boundedBgvNoticeLines(
           caseId,
           reference,
-          `Review the simulated ${internal} coordination only; no external system was changed.`,
+          `Review the ${internal} coordination record; no external system was changed.`,
           true,
         ),
       ].join("\n"),
     };
   }
   return {
-    subject: `Simulated generic onboarding hold — ${caseReference}`,
+    subject: `Onboarding hold coordination — ${caseReference}`,
     body: [
       `${caseReference}: generic ${internal} onboarding work is held while a BGV case receives human review. No finding details, employee decision, or external ${internal} action is included.`,
       "",
       ...boundedBgvNoticeLines(
         caseId,
         reference,
-        `Record and review the simulated ${internal} hold only; no external system was changed.`,
+        `Record and review the ${internal} hold; no external system was changed.`,
         true,
       ),
     ].join("\n"),
@@ -1095,7 +1095,7 @@ async function envelope(
         ? offline
           ? "Paused offline case is read-only."
           : organizationId === DEMO_ORGANIZATION_ID
-            ? "Demo notifications are simulation-only."
+            ? "Notifications are prepared only; external delivery is not authorized."
           : null
         : "Owner or admin HR role required to manage real-tenant recipients.",
     },
@@ -1693,7 +1693,7 @@ async function reconcileCycle(
       organizationId,
       caseId,
       key,
-      `${internal} (simulated)`,
+      `${internal} (not sent)`,
       copy.subject,
       copy.body,
     );

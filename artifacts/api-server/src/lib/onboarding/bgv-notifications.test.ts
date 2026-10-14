@@ -1216,7 +1216,7 @@ test("offline, demo, and ordinary simulated cases never reach the sender", async
   });
   assert.equal(demoMember.authority.offline, false);
   assert.equal(demoMember.authority.canManage, true);
-  assert.equal(demoMember.authority.reason, "Demo notifications are simulation-only.");
+  assert.equal(demoMember.authority.reason, "Notifications are prepared only; external delivery is not authorized.");
   const demoUpdated = await updateBgvNotifications({
     organizationId: DEMO_ORGANIZATION_ID,
     caseId: demoCase,

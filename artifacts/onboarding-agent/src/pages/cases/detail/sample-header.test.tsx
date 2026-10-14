@@ -28,7 +28,7 @@ test('sample header has exact reference and clean subtitle without redundant ban
   const html = header();
   assert.ok(html.includes('S3644'));
   assert.ok(html.includes('Kiran Pine • Support Engineer • Singapore'));
-  assert.ok(html.includes(' • Effective Nov 24, 2030'));
+  assert.ok(!html.includes('2030'));
   assert.ok(!html.includes('Offline — read-only; no outreach or business completion.'));
   assert.ok(!/Case #3644|For Example|Example — Kiran|Example · Offline/.test(html));
   assert.ok(!/Take Action|>Contact<|Voice:/.test(html));
@@ -54,6 +54,6 @@ test('historical records preserve numeric identifiers, identity permission check
   assert.ok(!restricted.includes('Kiran Pine'));
   const visible = header(historical, { ...permissions, sensitive: { ...permissions.sensitive, identity: { read: true, edit: false } } });
   assert.ok(visible.includes('For Example — Kiran Pine'));
-  assert.ok(visible.includes('Historical test record — read-only; no provider work or business completion is authorized.'));
+  assert.ok(visible.includes('Read-only record — provider work and business completion are not authorized.'));
   assert.ok(!visible.includes('S3644'));
 });

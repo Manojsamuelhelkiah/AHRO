@@ -36,7 +36,8 @@ test('every actual curated sample keeps meaningful request attributes and pendin
     assert.ok(!JSON.stringify(fields).includes('UAT-DEMO-'), example.key);
     for (const [key, value] of Object.entries(request.data)) {
       if ((!value && (key.endsWith('_reference') || key === 'employee_id')) || (key.endsWith('_date') && value)) {
-        assert.equal(fields[key], value, `${example.title}: preserve ${key}`);
+        assert.equal(fields[key], key.endsWith('_date') && /^\d{4}-\d{2}-\d{2}$/.test(value) ? 'Not confirmed' : value,
+          `${example.title}: preserve source ${key} without presenting an unconfirmed operating date`);
       }
     }
     assert.equal(caseSummary({ ...sample, planSummary: example.values.planSummary }), `${example.summary} All evidence and human decisions remain pending.`);
@@ -82,7 +83,7 @@ test("sample reference cleanup preserves conflicts, missing references, attribut
   };
   assert.deepEqual(Object.fromEntries(sampleIntakeFields(data, sample)), {
     secure_submission_reference: 'Conflicting references A and B — neither verified',
-    evidence_reference: '', effective_date: '2030-11-24',
+    evidence_reference: '', effective_date: 'Not confirmed',
     worker_name: 'Kiran Pine', request_summary: data.request_summary,
   });
   assert.deepEqual(sampleIntakeFields(data), Object.entries(data));

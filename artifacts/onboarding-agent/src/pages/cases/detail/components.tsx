@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { SyntheticJourneyHealth } from './synthetic-journey';
+import { confirmedCaseDate } from '../case-presentation';
 import { format } from 'date-fns';
 import { ChevronDown, Mail, Phone, PhoneCall } from 'lucide-react';
 import { Badge, Button, cn } from '@/components/ui-shared';
@@ -103,10 +104,10 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
                <Badge variant="outline" className="uppercase text-[10px] tracking-wider">{access?.access.profileRead ? presentation.type : 'Case details'}</Badge>
               </div>
            </div>
-              <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{canViewIdentity ? `${isFictionalOfflineExample(c) ? caseWorkerName(c) : `For ${c.workerName}`} • ` : <><span>Restricted candidate</span> • </>}{access?.access.profileRead ? `${c.role} • ${c.geography}` : 'Profile details restricted'}{canViewIdentity && Number.isFinite(Date.parse(c.joiningDate)) ? ` • Effective ${format(new Date(c.joiningDate), 'MMM d, yyyy')}` : ''}</p>
+              <p className="text-[var(--text-sm)] text-[var(--text-muted)] font-medium">{canViewIdentity ? `${isFictionalOfflineExample(c) ? caseWorkerName(c) : `For ${c.workerName}`} • ` : <><span>Restricted candidate</span> • </>}{access?.access.profileRead ? `${c.role} • ${c.geography}` : 'Profile details restricted'}{canViewIdentity && confirmedCaseDate(c) ? ` • Effective ${format(new Date(confirmedCaseDate(c)!), 'MMM d, yyyy')}` : ''}</p>
             {offlineSample && !isFictionalOfflineExample(c) && (
               <p className="mt-2 text-[var(--text-xs)] font-semibold text-[var(--status-amber-fg)]">
-                {isFictionalOfflineExample(c) ? 'Offline — read-only; no outreach or business completion.' : 'Historical test record — read-only; no provider work or business completion is authorized.'}
+                Read-only record — provider work and business completion are not authorized.
               </p>
             )}
            

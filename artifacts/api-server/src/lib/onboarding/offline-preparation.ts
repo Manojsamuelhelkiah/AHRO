@@ -122,7 +122,7 @@ export async function preparationView(tx: OnboardingDbTransaction, row: CaseRow,
   let activationBlocked = false;
   if (!eligible) blockers.push(owned
     ? "Actual UAT run ownership is isolated and cannot be prepared for live operations."
-    : "The exact fictional inventory provenance could not be verified. Real volunteer, controller and uncertain records remain restricted.");
+    : "The original request provenance could not be verified. Volunteer, retained and uncertain records remain restricted.");
   if (sharedDemo) blockers.push("Use a named account with live client and case permissions to save real information or perform transactions. Shared Demo accounts can view this preparation journey only.");
   else if (!canEdit) blockers.push("Current case-flow, profile, notes and sensitive-field permissions are required to save mixed operational request information.");
   if (eligible && template) {
@@ -131,7 +131,7 @@ export async function preparationView(tx: OnboardingDbTransaction, row: CaseRow,
       blockers.push(...preparationInputIssues(template.id, draft?.data ?? {})
         .map(issue => `${issue.column}: ${issue.message}`));
       if (draft?.data.worker_email && !candidateEmailDeliveryDecision({ workerEmail: draft.data.worker_email }).allowed)
-        blockers.push("Replace the fictional or undeliverable worker address with a real deliverable contact before activation.");
+        blockers.push("A verified deliverable worker address is required before activation.");
     }
     const collection = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
       organizationId: row.organizationId,
@@ -159,7 +159,7 @@ export async function preparationView(tx: OnboardingDbTransaction, row: CaseRow,
     if (workflowBlocker) blockers.push(workflowBlocker);
     if (!sharedDemo && !access.allows.includes("tool.external.dispatch"))
       blockers.push("Live transactions require the acting named user's current tool.external.dispatch permission; activation does not grant it.");
-    blockers.push("Only configured, supported providers may execute. Simulated connectors are not live integrations; the normal workflow checks each operation before dispatch.");
+    blockers.push("Only connected, supported providers may execute. Adapter configuration alone is not a live integration; each operation is checked before dispatch.");
   }
   return {
     caseId: row.id, eligible, canEdit, canReadData: canReadDraft, revision: draft?.revision ?? 0,
@@ -176,7 +176,7 @@ export async function preparationView(tx: OnboardingDbTransaction, row: CaseRow,
     state: !eligible ? "restricted-history" as const : active
       ? activationBlocked || workflowBlocker ? "activated-blocked" as const : "activated" as const
       : draft ? "preparing" as const : "unprepared" as const,
-    sourceLabel: source ? `${source.family}: ${source.title} — fictional source retained` : "Restricted historical record",
+    sourceLabel: source ? `${source.family}: ${source.title} — original request retained` : "Restricted historical record",
     evidenceStatus: "unverified" as const,
     fields: eligible && template ? template.columns.filter(field =>
       !["template_id", "template_version"].includes(field.key)) : [],

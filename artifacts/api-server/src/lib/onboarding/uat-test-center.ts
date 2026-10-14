@@ -335,7 +335,7 @@ export async function createUatRun(organizationId: string, actor: string, input:
   const selected = scenario(input.scenarioId);
   if (!selected) throw err("UatScenarioNotFound", "Unknown UAT scenario.");
   if (input.mode !== undefined && input.mode !== "simulated") {
-    throw err("UatRealEmailBlocked", "UAT runs do not send email. Only simulated creation is supported.");
+    throw err("UatRealEmailBlocked", "UAT runs do not send email. Only isolated test runs are supported.");
   }
   const created = await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`onboarding-uat-create:${organizationId}:${input.requestId ?? randomUUID()}`}))`);
@@ -392,7 +392,7 @@ export async function createUatRun(organizationId: string, actor: string, input:
       syntheticProfile: profile,
       initialization: "pending",
       evidence: [{ id: randomUUID(), at: createdAt, stepId: null, result: selected.status === "blocked" ? "blocked" : "not-run", provenance: selected.mode, note: selected.blocker ?? "Run created with a run-owned isolated case. It cannot drive live readiness, providers, outreach, or KPIs." }],
-      cleanupNotice: "Cleanup retires only this run's stored simulated records. The linked synthetic case and retained quarantined uploads are preserved for audit; it never deletes live cases, documents, audit history, holds, or production data.",
+      cleanupNotice: "Cleanup retires only this run's test records. The linked test case and quarantined uploads are preserved for audit; it never deletes operational cases, documents, audit history, holds, or production data.",
     };
     await tx.insert(onbSettings).values({ organizationId, key: key(runId), value: JSON.stringify(run) });
     return { run, caseRow: c };
@@ -596,18 +596,18 @@ export async function applyUatAction(organizationId: string, actor: string, runI
 export function fixturePack(run: Pick<UatRun, "runId" | "scenarioId" | "fixtureSeed">): string {
   denyRetiredCaseCapability();
   return [
-    "ONBOARDING UAT SYNTHETIC FIXTURE PACK v1", "NOT A GENUINE HR, IDENTITY, BANK, TAX, OR EMPLOYMENT RECORD", "",
+    "ONBOARDING UAT TEST DOCUMENT PACK v1", "Test document — not valid for submission", "NOT A GENUINE HR, IDENTITY, BANK, TAX, OR EMPLOYMENT RECORD", "",
     `Run: ${run.runId}`, `Scenario: ${run.scenarioId}`, `Fixture seed: ${run.fixtureSeed}`, "",
     "Files are deliberately harmless text fixtures. Create them locally with the shown content before upload:",
-    "01-valid-synthetic-id.txt — SYNTHETIC QA DOCUMENT / Name: Avery Example / Status: fictional",
-    "02-missing-required-information.txt — SYNTHETIC QA DOCUMENT / Missing required field",
-    "03-expired-date.txt — SYNTHETIC QA DOCUMENT / Expiry: 2000-01-01",
-    "04-inconsistent-name.txt — SYNTHETIC QA DOCUMENT / Name: Different Fictional Person",
+    "01-valid-synthetic-id.txt — Test document — not valid for submission / Name: Avery Example",
+    "02-missing-required-information.txt — Test document — not valid for submission / Missing required field",
+    "03-expired-date.txt — Test document — not valid for submission / Expiry: 2000-01-01",
+    "04-inconsistent-name.txt — Test document — not valid for submission / Name: Different Example Person",
     "05-unsupported-format.exe — do NOT create or upload executable content; verify UI type rejection with a harmless renamed text file only.",
     "06-size-mismatch.txt — use a harmless oversized generated text file only within environment limits.",
-    "07-unreadable-or-corrupt.txt — SYNTHETIC QA DOCUMENT / deliberately malformed fixture marker",
+    "07-unreadable-or-corrupt.txt — Test document — not valid for submission / deliberately malformed fixture marker",
     "08-changed-bytes.txt — change one harmless byte after recording its checksum.",
-    "", "Scanner/provider outcomes may be injected as simulated test evidence. They are not malware scanning, source authenticity, identity verification, or real employment-readiness proof.",
+    "", "Scanner/provider outcomes may be injected as test evidence. They are not malware scanning, source authenticity, identity verification, or operational-readiness proof.",
   ].join("\n");
 }
 

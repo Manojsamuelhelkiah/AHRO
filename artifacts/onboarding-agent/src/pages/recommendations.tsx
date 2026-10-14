@@ -105,7 +105,7 @@ function EvidenceCard({ recommendation }: { recommendation: Recommendation }) {
       <p className="mt-1 text-[var(--text-muted)]">{evidence.cohortDefinition}</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-4">
         <Metric label="Verified outcomes" value={`${evidence.sample.verifiedOutcomes} / ${evidence.sample.candidateCases}`} />
-        <Metric label="Excluded demo/simulation" value={String(evidence.sample.excludedDemoOrSimulation)} />
+        <Metric label="Excluded non-operational records" value={String(evidence.sample.excludedDemoOrSimulation)} />
         <Metric label="Missing outcome evidence" value={String(evidence.sample.missingOutcomeEvidence)} />
         <Metric label="Mean to verified readiness" value={`${evidence.outcome.meanDaysToVerifiedReadiness} days`} />
       </div>
@@ -140,7 +140,7 @@ function BroaderEvidenceCard({ evidence }: { evidence: BroaderCompatibleCohortEv
     <p className="mt-1 text-[var(--text-muted)]">Window: {new Date(evidence.window.startedAt).toLocaleDateString()}–{new Date(evidence.window.endedAt).toLocaleDateString()} ({evidence.window.days} days). Exact current v{evidence.target.currentProfileVersion} cohort: {evidence.target.exactCohortVerifiedOutcomes} verified outcomes.</p>
     <div className="mt-3 grid gap-2 sm:grid-cols-4">
       <Metric label="Verified outcomes" value={`${evidence.sample.verifiedOutcomes} / ${evidence.sample.candidateCases}`} />
-      <Metric label="Excluded demo/simulation" value={String(evidence.sample.excludedDemoOrSimulation)} />
+      <Metric label="Excluded non-operational records" value={String(evidence.sample.excludedDemoOrSimulation)} />
       <Metric label="Missing outcome evidence" value={String(evidence.sample.missingOutcomeEvidence)} />
       <Metric label="Mean to verified readiness" value={evidence.outcome.meanDaysToVerifiedReadiness === null ? 'Not available' : `${evidence.outcome.meanDaysToVerifiedReadiness} days`} />
     </div>

@@ -86,7 +86,7 @@ function TaskCard({ t, caseId, version, run, busy, ktRequired }: { ktRequired: b
           {mode === 'blocked' && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={uncertain} onChange={(e) => setUncertain(e.target.checked)} /> Status is uncertain (not confirmed blocked)</label>}
           {mode === 'evidence' && (
             <div className="space-y-2">
-              <p className="text-xs text-[var(--text-muted)]">Provenance: human-source-attested. Only the current assigned owner can record it, after prerequisites are verified. Simulated results are not accepted.</p>
+              <p className="text-xs text-[var(--text-muted)]">Provenance: human-source-attested. Only the current assigned owner can record it, after prerequisites are verified. Unconfirmed results are not accepted.</p>
               {specs.map((s) => (
                 <div key={s.key}>
                   {s.kind === 'bool' ? <label className="flex items-center gap-2 text-sm"><input type="checkbox" data-testid={`check-${t.id}-${s.key}`} checked={vals[s.key] === true} onChange={(e) => setVals({ ...vals, [s.key]: e.target.checked })} /> {s.label}</label>

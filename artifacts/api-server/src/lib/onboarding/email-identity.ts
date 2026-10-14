@@ -213,7 +213,7 @@ export function formatEmailIdentityLines(input: EmailIdentityLinesInput): string
   const requestedBy = clean(input.requestedBy) || "unnamed requester";
   const state = input.deliveryState ?? (input.deliveryMode === "simulated" ? "not-sent" : "queued");
   const modeLabel = input.deliveryMode === "simulated"
-    ? "SIMULATED — no email was sent"
+    ? "NOT SENT — internal request record"
     : state === "sent"
       ? "REAL — provider reported sent"
       : state === "not-sent"
@@ -224,7 +224,7 @@ export function formatEmailIdentityLines(input: EmailIdentityLinesInput): string
     ...(name
       ? []
       : ["Configure the named stakeholder in the Action identity settings (name and role); do not infer it from the delivery address."]),
-    `Actual delivery address: ${address || (input.deliveryMode === "simulated" ? "none — simulation only" : "not available")}`,
+    `Actual delivery address: ${address || (input.deliveryMode === "simulated" ? "none — not sent" : "not available")}`,
     `Requested by: ${requestedBy} (${input.requestedByKind})`,
     `Delivery status: ${modeLabel}`,
     `Action required: ${input.actionRequired}`,

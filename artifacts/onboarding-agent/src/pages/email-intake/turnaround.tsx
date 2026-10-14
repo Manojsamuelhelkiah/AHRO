@@ -46,7 +46,7 @@ export function ReviewTurnaround({ data }: { data: HroEmailTurnaround }) {
           </> : <ReceiptCohortRows data={cohorts} asOf={data.asOf} />}
         </table>
       </div>
-      <p className="text-xs text-[var(--text-muted)]">Missing evidence counts requests marked reviewed/final without a usable dated event; those requests are not timed. Open requests without a review are pending, not missing evidence. Unbound platform-triage mail and linked synthetic cases are excluded. After explicit client assignment, timing includes prior intake waiting. These aggregates contain no message content, identities or individual reviewer metrics.</p>
+      <p className="text-xs text-[var(--text-muted)]">Missing evidence counts requests marked reviewed/final without a usable dated event; those requests are not timed. Open requests without a review are pending, not missing evidence. Unbound platform-triage mail and cases without operational evidence are excluded. After explicit client assignment, timing includes prior intake waiting. These aggregates contain no message content, identities or individual reviewer metrics.</p>
       <p className="rounded-md bg-[var(--surface-alt)] p-2 text-xs">Conversion creates a held case requiring further approvals. It is not a completed HR outcome, evidence approval or operational release.</p>
     </Card>
   );

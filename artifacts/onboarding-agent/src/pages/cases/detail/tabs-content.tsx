@@ -26,6 +26,7 @@ import { BgvNotificationsSection } from './BgvNotificationsSection';
 import { RestrictedActionNotice, useCaseAccess } from './case-access';
 import { caseSummary, workstreamPresentation } from '../case-presentation';
 import { SyntheticJourneyStages, SyntheticJourneyActions } from './synthetic-journey';
+import { deliveryStatusText } from '../../../lib/operational-copy';
 
 export function TasksTab({ c }: { c: any }) {
   if (c.syntheticJourney) return <div className="min-w-0 space-y-6 pb-12">
@@ -204,7 +205,7 @@ export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, req
                       msg.status === 'failed' ? 'text-[var(--status-red)]' :
                       msg.status === 'delivered' || msg.status === 'sent' ? 'text-[var(--status-green)]' :
                       msg.status === 'sending' ? 'text-[var(--status-amber)]' : 'text-[var(--text-muted)]'
-                    )}>{msg.status}</span>
+                     )}>{deliveryStatusText(msg.status)}</span>
                     {msg.sensitive && <span className="text-[9px] bg-[var(--surface-soft)] text-[var(--status-amber)] border px-1.5 py-0.5 rounded font-bold" style={{ borderColor: 'var(--status-amber)' }}>SENSITIVE</span>}
                     {msg.channel === 'email'
                       && msg.audience === 'candidate'
@@ -241,22 +242,7 @@ export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, req
         </CardContent>
       </Card>
 
-      {canEditCommunication && <details className="border border-[var(--border)] rounded-[var(--radius-lg)] bg-[var(--surface)] overflow-hidden shadow-sm">
-        <summary className="p-4 font-bold text-[var(--text-sm)] cursor-pointer hover:bg-[var(--surface-alt)] select-none uppercase tracking-wider text-[var(--text-secondary)] text-[11px]">
-          Simulation Tools (Development Only)
-        </summary>
-        <div className="p-5 border-t border-[var(--border)] space-y-6 bg-[var(--surface-alt)]">
-          <div className="space-y-2">
-            <h4 className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Simulate Hire Reply</h4>
-            <ReplyComposer caseId={caseId} />
-          </div>
-          <div className="space-y-2">
-            <h4 className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Simulate Voice Actions</h4>
-            <SimulateVoiceCall caseId={caseId} />
-          </div>
-        </div>
-      </details>}
-      {!canEditCommunication && <RestrictedActionNotice>Retry, reply, and simulation controls are restricted by your current permissions.</RestrictedActionNotice>}
+       {!canEditCommunication && <RestrictedActionNotice>Communication actions are restricted by your current permissions.</RestrictedActionNotice>}
     </div>
   );
 }

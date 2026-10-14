@@ -9,7 +9,7 @@ const VIEWPORTS = [
 ];
 
 async function assertUsableCaseControls(page: Page, label: string) {
-  await expect(page.getByText("Historical test record — read-only and permanently non-operational.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Read-only record — operational execution is not authorized.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Simulate next exchange" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Restart simulation|Confirm readiness|Issue candidate portal/i })).toHaveCount(0);
 

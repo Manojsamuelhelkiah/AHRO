@@ -1,13 +1,13 @@
 ---
-name: Operational simulation truthfulness
-description: Operational email and agent requests must be visible without claiming real external work.
+name: Operational presentation and evidence truthfulness
+description: Use ordinary business copy while separating request progress from delivery, authority and verified execution.
 ---
 
-Until a real operational interface is implemented, setup requests and agent actions must be explicitly simulated and recorded in Communications, with their own progress history.
+Use ordinary business language for requests, agents, stages and correspondence. Explain application-managed scenario data and missing source connections centrally in Systems, not through repeated artificial-case labels.
 
-**Why:** The user found activity statements such as assets “booked” and access “coordinated” misleading when no operational message or external action had occurred. Hosting the application in production does not make its vendor adapters real.
+**Why:** The user explicitly superseded repeated “synthetic”, “fictional”, “offline sample” and “simulated” presentation requirements. This authorizes presentation changes only, not fabricated evidence or a new runtime. Hosting the application does not make adapters real.
 
-**How to apply:** Represent both email-led and agent-led tasks, identify the responsible team without inventing an email address, and distinguish simulated completion from genuine readiness evidence. Never turn these simulation controls into payroll, document, malware, or final-approval authority. For older cases, create missing requests through an explicit action with current timestamps rather than fabricating historical sends.
+**How to apply:** Keep structured provenance and effect fences unchanged. Use “Delivery not confirmed”, “Not sent”, “Verification required” and precise permission/prerequisite blockers at relevant controls. Preserve genuine channel health. Request outcomes never establish provider receipts, consent, approvals or verified completion. Do not fabricate dates, assignees or activity. Preserve historical/user/source prose, S references and test-document non-submission safeguards.
 
 Internal/external agent identity is separate from whether execution is simulated or live. Any agent presented as internal must have a matching entry in the app's AI Agents catalog.
 
@@ -15,8 +15,8 @@ Internal/external agent identity is separate from whether execution is simulated
 
 **How to apply:** Use the same identity source for operational requests and the catalog, preserve the human initiator separately, and record agent identity with new history entries. Never backfill a claimed historical executor when the old record did not capture one; an email recipient is not an external AI agent.
 
-Response-driven demos randomize a bounded, typed response rather than skipping to the next successful step. Missing information creates a follow-up, delays remain pending, exceptions require an explicitly simulated human decision, and final completion requires a simulated HR review.
+Do not restore retired creation, reset, progression or evaluation actions while updating copy.
 
-**Why:** A fixed “next step” walkthrough misrepresents orchestration and hides the exception paths the demo is meant to explain.
+**Why:** The user limits the request to presentation of existing case journeys; previous demo-runtime guidance is superseded.
 
-**How to apply:** Persist the sampled response before transition, replay it idempotently, and keep the resulting demo state separate from real readiness, approvals, evidence, provider receipts, and outcome metrics.
+**How to apply:** Reuse the fixed journey projection without changing inventory, source outcomes, metrics or operational authority.

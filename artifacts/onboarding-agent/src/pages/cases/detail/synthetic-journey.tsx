@@ -40,7 +40,6 @@ export function SyntheticJourneyStages({ journey, timeline = false }: { journey:
         <div className="flex flex-wrap justify-between gap-2 font-semibold">
           <h3>{stage.title}</h3><span>{stage.status}</span>
         </div>
-        <p className="mt-2 text-xs text-[var(--text-muted)]">{stage.date}</p>
         <dl className="mt-3 space-y-2">
           <div><dt className="inline font-semibold">Agent: </dt><dd className="inline">{stage.agent}</dd></div>
           <div><dt className="inline font-semibold">Responsible role: </dt><dd className="inline">{stage.role}</dd></div>
@@ -56,8 +55,9 @@ export function SyntheticJourneyStages({ journey, timeline = false }: { journey:
 export function SyntheticJourneyCommunications({ journey }: { journey: OnbSyntheticJourney }) {
   return <section aria-label="Case correspondence" className="mb-6 min-w-0 space-y-3">
     <h2 className="font-semibold">Case correspondence</h2>
+    <p className="text-sm text-[var(--text-muted)]">Prepared correspondence · Delivery not confirmed. Confirmed messages appear in message history with their delivery status.</p>
     {journey.stages.map(stage => <article key={stage.id} className="min-w-0 rounded-lg border p-4 text-sm break-words">
-      <h3 className="font-semibold">{stage.title} · {stage.date}</h3>
+      <h3 className="font-semibold">{stage.title}</h3>
       <p className="mt-2 whitespace-pre-wrap">{stage.communication}</p>
     </article>)}
   </section>;

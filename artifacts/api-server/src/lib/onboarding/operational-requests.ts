@@ -34,7 +34,7 @@ import {
 
 export const OPERATIONAL_REQUEST_SETTING_PREFIX = "operational_requests:";
 export const WORKFORCE_CONTINUATION_SETTING_PREFIX = "workforce_connector_continuation:";
-export const SIMULATED_OPERATIONAL_LABEL = "[SIMULATED — NO EXTERNAL ACTION]";
+export const SIMULATED_OPERATIONAL_LABEL = "[REQUEST RECORD — NO EXTERNAL ACTION]";
 
 export type OperationalRequestMethod = "email" | "agent" | "human-task";
 export type OperationalRequestStatus =
@@ -222,7 +222,7 @@ export class OperationalRequestNotFoundError extends Error {
 export class OperationalRequestOfflineError extends Error {
   constructor() {
     super(
-      "This synthetic sample is paused offline; operational requests are read-only and no simulated action was recorded.",
+      "This case is paused; requests are read-only and no operational action was recorded.",
     );
     this.name = "OperationalRequestOfflineError";
   }
@@ -476,7 +476,7 @@ function defaultRequest(
         at: timestamp,
         actor: "system",
         reason:
-          "Operational setup request initialized for simulation; no provider or external system was contacted.",
+        "Operational request initialized; no provider or external system was contacted.",
         requestId: null,
         communicationId: null,
         agentIdentity: method === "agent" ? registeredAgent : null,
@@ -618,16 +618,16 @@ async function insertSimulationCommunication(
       ? resolveOnboardingAgent(input.request.agent)
       : null;
   const recipient = isEmail
-    ? `${input.request.teamRecipientLabel} (simulated recipient label)`
+    ? `${input.request.teamRecipientLabel} (responsible team; no delivery address)`
     : agentIdentity
-      ? `${agentIdentity.name} (id: ${agentIdentity.id}; origin: ${agentIdentity.origin}; simulated assignment)`
-      : `Unresolved agent id "${input.request.agent}" (identity unavailable; simulated assignment)`;
+      ? `${agentIdentity.name} (id: ${agentIdentity.id}; origin: ${agentIdentity.origin}; planned assignment)`
+      : `Unresolved agent id "${input.request.agent}" (identity unavailable; planned assignment)`;
   const subject = `${SIMULATED_OPERATIONAL_LABEL} ${input.request.label} — ${input.status}`;
   const reasonText = input.reason ? `\nReason: ${input.reason}` : "";
   const identityText = isEmail
-    ? "AI agent identity: none — this is a simulated email/team assignment; the mail recipient label is not an AI agent."
+    ? "AI agent identity: none — this is a team assignment; the recipient label is not an AI agent."
     : agentIdentity
-      ? `AI agent identity: ${agentIdentity.name} (id: ${agentIdentity.id}; origin: ${agentIdentity.origin}; simulated: true).`
+      ? `AI agent role: ${agentIdentity.name} (id: ${agentIdentity.id}; origin: ${agentIdentity.origin}; invocation not confirmed).`
       : `AI agent identity: unavailable for unregistered id "${input.request.agent}"; no AI agent invocation occurred.`;
   const [caseRow] = await tx
     .select({ workerName: onbCases.workerName })
@@ -647,27 +647,27 @@ async function insertSimulationCommunication(
     requestedByKind: "human",
     deliveryMode: "simulated",
     actionRequired: input.status === "completed"
-      ? "Review the recorded simulated completion; no external completion is claimed."
-      : `Review and update the simulated ${input.request.label} request (${input.status}).`,
+      ? "Review the recorded completion; external completion requires verification."
+      : `Review and update the ${input.request.label} request (${input.status}).`,
     reference,
     appPath: `/approvals?tab=approvals&caseId=${encodeURIComponent(String(input.caseId))}&reference=${encodeURIComponent(reference)}`,
   });
   const body = [
     SIMULATED_OPERATIONAL_LABEL,
-    "This is an internal simulation record only. No email was sent, no AI agent was invoked, and no provider or external system was called.",
+    "Internal request record. Delivery not confirmed: no email was sent, no AI agent was invoked, and no provider or external system was called.",
     `Employee: ${caseRow?.workerName ?? "unknown (case record unavailable)"}`,
     `Case: #${input.caseId}`,
     `Workstream owner: ${input.request.owner}`,
     `Method: ${input.request.method}`,
     `Recipient/assignment label: ${recipient}`,
     identityText,
-    `Simulation reference: ${input.request.reference}`,
+    `Request reference: ${input.request.reference}`,
     `Recorded status: ${input.status}`,
     `Recorded by: ${input.actor}`,
     ...identityLines,
     reasonText.trim(),
     input.status === "completed"
-      ? "This records simulated completion only; it is not evidence of external completion."
+      ? "Recorded progress is not evidence of external completion."
       : "",
   ]
     .filter(Boolean)
@@ -701,7 +701,7 @@ async function insertSimulationCommunication(
       ),
     );
   if (!communication) {
-    throw new Error("Simulated operational communication could not be recorded.");
+    throw new Error("The request communication could not be recorded.");
   }
   return communication.id;
 }

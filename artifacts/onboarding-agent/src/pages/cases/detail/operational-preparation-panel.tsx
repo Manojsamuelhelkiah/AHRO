@@ -163,7 +163,7 @@ function OperationalPreparationPanelContent({ caseId, canRead, org, userId }: {
         {data && <span className="text-xs text-[var(--text-muted)]">Revision {data.revision} · Evidence {data.evidenceStatus}</span>}
       </div>
       <p className="mt-1 text-xs text-[var(--text-secondary)]">
-        The original fictional source{data?.sourceLabel ? ` (${data.sourceLabel})` : ''} and original intent are preserved unchanged. Entries here describe a separate current operational request and are unverified.
+        The original request and intent are preserved unchanged. Entries here describe a separate current request and require verification.
         Saving and confirming send no messages or links and never approve or close a case.
         After activation, start supported work separately using the normal case controls. Live operations require a named account, current permissions and configured supported providers.
       </p>
@@ -245,7 +245,7 @@ function OperationalPreparationPanelContent({ caseId, canRead, org, userId }: {
             </label>
             <label className="flex items-start gap-2">
               <input type="checkbox" checked={excludeHistory} onChange={e => setExcludeHistory(e.target.checked)} />
-              <span>Original fictional history, sample approvals and simulated results are not evidence or authority for this work.</span>
+              <span>I will use current verified evidence and decisions; original history and unconfirmed results do not authorize this work.</span>
             </label>
             <button type="button" onClick={confirm} data-testid="button-confirm-operational-activation"
               disabled={!confirmIdentity || !excludeHistory || dirty || conflict || save.isPending || activate.isPending || reconfirm.isPending}
@@ -261,7 +261,7 @@ function OperationalPreparationPanelContent({ caseId, canRead, org, userId }: {
                 : 'Activation did not start work. A separate named-user confirmation is required before emails or external transactions can run.'}
             </p>
             {data.sourceName && <p className="text-xs">
-              Original fictional identity: {data.sourceName}{data.sourceEmail ? ` (${data.sourceEmail})` : ''}.
+              Original request identity: {data.sourceName}{data.sourceEmail ? ` (${data.sourceEmail})` : ''}.
               It remains source history, not the current worker or evidence.
             </p>}
             {data.workflowBlocker && <p className="text-xs">{data.workflowBlocker}</p>}

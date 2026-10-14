@@ -242,7 +242,7 @@ function DocumentFollowupCard({ doc }: { doc: OnbActionCenter['documentFollowups
     }, {
       onSuccess: (result) => {
         toast({
-          title: isDemo ? "Reminder simulated" : "Reminder result",
+          title: isDemo ? "Reminder prepared — not sent" : "Reminder result",
           description: `Status: ${result.action.status}. Sending or recording a reminder does not change readiness.`,
           variant: ['failed', 'blocked'].includes(result.action.status) && !isDemo ? 'destructive' : 'default',
         });
@@ -296,7 +296,7 @@ function DocumentFollowupCard({ doc }: { doc: OnbActionCenter['documentFollowups
                    <SelectTrigger><SelectValue /></SelectTrigger>
                    <SelectContent>
                       {!isDemo && <SelectItem value="live">Live (Send to candidate)</SelectItem>}
-                      {isDemo && <SelectItem value="simulation">Simulation (No email is sent)</SelectItem>}
+                      {isDemo && <SelectItem value="simulation">Prepare only — no email sent</SelectItem>}
                    </SelectContent>
                  </Select>
                  <p className="text-[10px] text-[var(--text-muted)] mt-1">Live mode honors candidate authorization and explicit opt-outs. We never promise a reminder raises readiness score.</p>
@@ -305,7 +305,7 @@ function DocumentFollowupCard({ doc }: { doc: OnbActionCenter['documentFollowups
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
                <Button onClick={handleRemind} disabled={remindMutation.isPending || !canRemind}>
-                 {remindMutation.isPending ? 'Processing...' : isDemo ? 'Simulate Reminder' : 'Send Reminder'}
+                 {remindMutation.isPending ? 'Processing...' : isDemo ? 'Prepare Reminder' : 'Send Reminder'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -636,7 +636,7 @@ export function ManualCallDialog({ caseId, defaultNotes = '', personaEnabled = f
            )}
            {open && c && isDemo && (
              <div className="mb-2 text-sm text-[var(--status-amber)] italic bg-[var(--status-amber-bg)] px-3 py-1.5 rounded-md border border-[var(--status-amber)]">
-               Simulation log only
+               Internal record only — no call placed
              </div>
            )}
            <div className="space-y-2">

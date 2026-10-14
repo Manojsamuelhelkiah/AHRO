@@ -17,6 +17,7 @@ import {
 } from '@workspace/api-client-react';
 import { useOrganizationRole } from '../../../hooks/use-organization-role';
 import { StandardOperationsPanel } from './StandardOperationsPanel';
+import { operationalReferenceText } from '../../../lib/operational-copy';
 
 export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: { caseId: number, requestsEnv?: OnbOperationalRequestsEnvelope, loadError?: boolean }) {
   const queryClient = useQueryClient();
@@ -66,21 +67,21 @@ export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: {
           <div>
             <h3 className="text-[var(--text-base)] font-bold">Operational requests & accountable human tasks</h3>
             <p className="text-[var(--text-sm)] text-[var(--text-secondary)] max-w-md mx-auto mt-2 leading-relaxed">
-              This case currently has no operational requests tracking. Initialization can create only existing operational simulation requests and declared accountable human tasks.
+              No operational requests are tracked yet. Initialization records request plans and declared human tasks; it does not contact a provider.
             </p>
           </div>
           <Button 
             variant="outline" 
             onClick={handleInit}
             disabled={initRequests.isPending || !isHR || roleLoading || offlinePaused}
-            title={!isHR ? 'Only HR can initialize simulation' : undefined}
+            title={!isHR ? 'HR access is required to initialize requests' : undefined}
           >
             Initialize requests
           </Button>
           {!isHR && !roleLoading && (
             <p className="text-xs text-[var(--text-muted)] font-medium">An organization administrator is needed to manage these requests outside Demo Organization.</p>
           )}
-          {offlinePaused && <p className="text-sm text-[var(--text-muted)]">This offline sample remains paused. No new requests will be created.</p>}
+          {offlinePaused && <p className="text-sm text-[var(--text-muted)]">Request creation is paused. Current operational authorization is required.</p>}
           {error && <p className="text-sm text-[var(--status-red)]">{error}</p>}
         </CardContent>
       </Card>
@@ -96,14 +97,14 @@ export function OperationalRequestsSection({ caseId, requestsEnv, loadError }: {
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
           <CardTitle className="text-[var(--text-base)] flex items-center gap-2">
             <MonitorPlay className="h-5 w-5 text-[var(--violet)]" /> 
-             {humanTaskCount ? 'Operational requests & human tasks' : 'Simulated Operational Requests'}
+             {humanTaskCount ? 'Operational requests & human tasks' : 'Operational requests'}
           </CardTitle>
           <span className="text-[10px] sm:text-xs px-2 py-1 rounded border border-[var(--violet)] text-[var(--violet-fg)] bg-[var(--violet-light-bg)] font-bold tracking-wider uppercase self-start sm:self-auto shrink-0">
-             {humanTaskCount ? `${humanTaskCount} HUMAN TASK${humanTaskCount === 1 ? '' : 'S'}` : 'SIMULATED'}
+             {humanTaskCount ? `${humanTaskCount} HUMAN TASK${humanTaskCount === 1 ? '' : 'S'}` : 'VERIFICATION REQUIRED'}
           </span>
         </div>
         <p className="text-xs text-[var(--text-muted)] mt-3 leading-relaxed max-w-3xl">
-           Simulated requests never verify real operational completion. Workforce learning tasks are accountable human work only: they do not send communication, invoke an LMS, calendar, AI agent, or provider.
+           Request progress is separate from confirmed system results. Human learning tasks require accountable evidence; recording them does not send messages or update a learning system or calendar.
         </p>
       </CardHeader>
       <CardContent className="p-0">
@@ -206,7 +207,7 @@ function RequestItem({
   const disabled = offlinePaused || applyAction.isPending || !canAttemptAction || roleLoading;
   const authorizationHint = req.method === 'human-task'
     ? 'Available to the named assignee or designated specialist; the server verifies your signed-in tenant identity.'
-    : !isHR ? 'Only organization owners and admins can act on simulated operational requests.' : undefined;
+    : !isHR ? 'Only organization owners and admins can manage operational requests.' : undefined;
 
   return (
     <div className="p-4 sm:p-6 hover:bg-[var(--surface-alt)] transition-colors">
@@ -220,10 +221,10 @@ function RequestItem({
               req.status === 'in-progress' ? 'bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border-[var(--status-amber)]' :
               'bg-[var(--surface-soft)] text-[var(--text-muted)] border-[var(--border)]'
             )}>
-              {req.status}
+              {req.method !== 'human-task' && req.status === 'completed' ? 'Recorded complete · Verification required' : req.status}
             </span>
             <span className="font-mono text-[10px] sm:text-xs text-[var(--text-muted)] px-2 py-1 border border-[var(--border)] rounded bg-[var(--surface)] break-all">
-              {req.reference}
+              {operationalReferenceText(req.reference)}
             </span>
           </div>
           <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 text-xs text-[var(--text-secondary)]">
@@ -239,7 +240,7 @@ function RequestItem({
                       {req.agentIdentity.name}
                     </Link>
                     {req.agentIdentity.origin === 'internal' ? (
-                      <span className="text-[9px] bg-[var(--violet-light-bg)] text-[var(--violet-fg)] border border-[var(--violet)] px-1 rounded uppercase tracking-wider font-bold" title="Internal Simulated Agent">Internal</span>
+                      <span className="text-[9px] bg-[var(--violet-light-bg)] text-[var(--violet-fg)] border border-[var(--violet)] px-1 rounded uppercase tracking-wider font-bold" title="Internal agent role">Internal</span>
                     ) : (
                       <span className="text-[9px] bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)] border border-[var(--status-amber)] px-1 rounded uppercase tracking-wider font-bold" title="External Agent">External</span>
                     )}
@@ -353,7 +354,7 @@ function RequestItem({
                       <Link href={`/agents#${h.agentIdentity.id}`} className="hover:text-[var(--primary)] hover:underline">
                         {h.agentIdentity.name}
                       </Link>
-                      <span className="capitalize">· {h.agentIdentity.origin} · Simulated</span>
+                      <span className="capitalize">· {h.agentIdentity.origin} · Request record</span>
                     </span>
                   )}
                   {!h.agentIdentity && (

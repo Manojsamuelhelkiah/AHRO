@@ -144,7 +144,7 @@ export function Slide08() {
       </Card>
       <Card title="Provider execution is not assumed" tone="amber">
         <p>Payroll, benefits and other provider outcomes remain distinct source-system evidence until an adapter is configured and its exchange is observed.</p>
-        <p className="mt-[2vh] text-accent">A configuration status, simulation or UI label is not proof that a provider completed a change.</p>
+        <p className="mt-[2vh] text-accent">A configuration status, request stage or UI label is not proof that a provider completed a change.</p>
       </Card>
     </div>
     <Footer value="Control principle · Separate request orchestration, human approval, provider dispatch and observed external outcome." />
@@ -160,7 +160,7 @@ export function Slide09() {
       <Card title="Service discipline">Evidence requirements, stale approval blocks, conflicts and retries remain visible rather than silently resolved.</Card>
     </div>
     <div className="grid grid-cols-2 gap-[2vw] border-t border-[#24406b] pt-[2.5vh]">
-      <p className="font-body text-[1.9vw] leading-snug text-muted">Operational-request simulations and accountable human tasks are intentionally distinct.</p>
+      <p className="font-body text-[1.9vw] leading-snug text-muted">Request progress, accountable human tasks and confirmed provider results are separate records.</p>
       <p className="font-body text-[1.9vw] leading-snug text-accent">Workforce runtime is the bridge from an HR service request to governed human or connected-provider execution.</p>
     </div>
     <Footer />
@@ -274,7 +274,7 @@ export function Slide17() {
       <Card title="Technical readiness">Configured tenant context; validated checklists and profiles; source-system ownership; monitor health; provider connection decisions.</Card>
       <Card title="Evidence readiness" tone="amber">Role-appropriate UAT evidence, tracked defects, go/no-go review and explicit acceptance of any Manual or Blocked scope.</Card>
     </div>
-    <Footer value="A portal, simulation or status label is not a substitute for an observed, authorized external effect." />
+    <Footer value="A portal, request stage or status label is not a substitute for an observed, authorized external effect." />
   </div>;
 }
 

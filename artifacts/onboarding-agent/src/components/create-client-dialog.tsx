@@ -39,7 +39,7 @@ export function CreateClientDialog({ onClose, initialName = "" }: { onClose: () 
         }
       }}>
       <Dialog.Title className="text-lg font-semibold">Create client workspace</Dialog.Title>
-      <Dialog.Description className="mt-2 text-sm text-[var(--text-secondary)]">Creates a client workspace with separate client data and enters it. This is different from saving a Client Setup implementation plan. Use fictional client data during development. Policies and operational approvals are not automatically granted.</Dialog.Description>
+      <Dialog.Description className="mt-2 text-sm text-[var(--text-secondary)]">Creates a client workspace with separate client data and enters it. Saving a Client Setup implementation plan does not create a workspace. Policies and operational approvals require separate review.</Dialog.Description>
       <label className="mt-4 block text-sm">Client workspace name
         <input autoFocus required minLength={2} maxLength={100} disabled={busy} value={name} onChange={event => setName(event.target.value)}
           className="mt-1 block w-full rounded border border-[var(--border)] bg-[var(--surface-alt)] p-2" data-testid="input-new-client-name" />

@@ -156,6 +156,19 @@ test("mounted retirement fence admits only exact read-only explanation paths for
   }
 });
 
+test("actual execution questions require independent receipts, never a request-stage outcome", async () => {
+  const result = await request(async (system, prompt) => {
+    assert.match(system, /Request stages.*are not provider receipts/i);
+    assert.match(system, /Do not repeat data-origin caveats/i);
+    assert.match(prompt, /external transaction actually occurred/i);
+    assert.match(prompt, /never infer execution from a completed stage/i);
+    return { paragraphs: [{ text: "Delivery is not recorded.", sourceIds: [], kind: "not-recorded" }] };
+  }, { question: "Was the email actually delivered and the provider transaction executed?" });
+  assert.equal(result.response.status, 200);
+  assert.equal(result.modelCalls, 1);
+  assert.match(JSON.stringify(await result.response.json()), /Delivery is not recorded/);
+});
+
 test("mounted record restrictions and revoked reads never disclose to the provider", async () => {
   for (const restriction of ["Actual UAT run remains isolated", "Retained controller record cannot be disclosed"]) {
     const result = await request(async () => assert.fail("Must not dispatch"), { question: "What is currently blocking this case?" }, { restriction });
