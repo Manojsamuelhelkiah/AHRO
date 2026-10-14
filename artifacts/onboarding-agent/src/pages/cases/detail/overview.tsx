@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SyntheticJourneyStages, SyntheticJourneyActions, SyntheticJourneyCommunications } from './synthetic-journey';
 import { lifecycleStageText } from '../../../lib/lifecycle-stage-presentation';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CaseReadiness } from './CaseReadiness';
@@ -14,10 +15,23 @@ import {
 } from '../../../lib/approval-actions';
 import { CasePrivacyControls } from './case-privacy-controls';
 import { RestrictedActionNotice, useCaseAccess } from './case-access';
-import { caseOwnerOf, isFictionalOfflineExample } from '../case-presentation';
+import { caseOwnerOf, isFictionalOfflineExample, workstreamPresentation } from '../case-presentation';
 
 export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId }: any) {
   const access = useCaseAccess();
+  if (c.syntheticJourney) return <div className="min-w-0 space-y-6 pb-12">
+    <SyntheticJourneyActions journey={c.syntheticJourney} />
+    <SyntheticJourneyStages journey={c.syntheticJourney} />
+    <SyntheticJourneyCommunications journey={c.syntheticJourney} />
+    <section className="rounded-lg border p-4 text-sm">
+      <h2 className="font-semibold">Recorded operational history</h2>
+      <p>Recorded lifecycle: {lifecycleStageText(c.lifecycleStage)} · orchestration: {c.orchestrationStatus}.
+      </p>
+      <p>Current recorded human assignment: {c.currentActionOwner || 'No unresolved assignment recorded'}.</p>
+      <button className="mt-3 underline" onClick={() => setTab('Activity')}>View recorded activity</button>
+      <button className="ml-4 mt-3 underline" onClick={() => setTab('Communications')}>View recorded communications</button>
+    </section>
+  </div>;
   return (
     <div className="flex flex-col xl:flex-row gap-8 pb-12">
       <div className="flex-1 min-w-0">
@@ -309,6 +323,7 @@ function DocumentsSummaryCard({ docs, setTab }: any) {
 
 
 export function NextActions({ c, pendingApprovals, setTab }: any) {
+  if (c.syntheticJourney) return <SyntheticJourneyActions journey={c.syntheticJourney} />;
   const actions: { title: string; desc: string; owner: string; priority: boolean; status?: string }[] = [];
   
   if (pendingApprovals?.length > 0) {
@@ -328,7 +343,7 @@ export function NextActions({ c, pendingApprovals, setTab }: any) {
       desc: (w.blockers?.length ? w.blockers.join(' ') : '') ||
         (isOfflineDemoSample(c) ? 'Activation, verified evidence and applicable human decisions are required; no work is executing.'
           : w.status === 'blocked' ? 'External dependency remains unresolved.' : 'Pending current evidence, decisions and executable dependencies.'),
-      owner: w.owner || caseOwnerOf(c).coordinatingAgent,
+      owner: workstreamPresentation(c, w).owner,
       status: w.status,
       priority: w.status === 'blocked'
     });

@@ -55,6 +55,11 @@ test("partial sensitive permissions do not unlock unmatched items; full permissi
   const items = [{ key: "custom", label: "PRIVATE", status: "blocked", note: "PRIVATE finding" }];
   assert.equal(readableFictionalItems(items, { ...NO_SENSITIVE_ACCESS, identity: true })[0]!.key, "restricted");
   assert.deepEqual(readableFictionalItems(items, { identity: true, medical: true, payroll: true, bgv: true }), items);
+  const fixed = fixedFictionalPresentation(legacy)!;
+  const recorded = [{ ...fixed.workstreams[0]!, status: "blocked", owner: "Actual recorded owner",
+    blockers: ["Actual unresolved dependency"] }];
+  assert.deepEqual(readableFictionalItems(recorded,
+    { identity: true, medical: true, payroll: true, bgv: true }, fixed.workstreams), recorded);
   for (const alteration of [{ workerName: "Real person" }, { workerPhone: "123" },
     { candidateEmailAuthorizedBy: "person" }, { scenarioKey: "UAT-random" }]) {
     assert.equal(fixedFictionalPresentation({ ...legacy, ...alteration }), null);

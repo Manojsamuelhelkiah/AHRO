@@ -4,7 +4,7 @@ import { originalDemoFullCoverageScenarioKey } from "./demo-full-coverage";
 import { CURATED_OFFLINE_EXAMPLES } from "./offline-example-extension";
 import { getScenario } from "./scenarios";
 import { LEGACY_CHECKLIST } from "./settings";
-import { redactOperationalItems, type SensitiveAccess } from "./sensitive-access";
+import { redactOperationalItems, hasOpaqueNarrativeAccess, type SensitiveAccess } from "./sensitive-access";
 
 type CaseRow = typeof onbCases.$inferSelect;
 
@@ -52,6 +52,7 @@ export function readableFictionalItems<T extends readonly Record<string, unknown
   definitions?: readonly { key?: string; id?: string; label: string; owner?: string; agent?: string }[],
 ): T {
   const restricted = redactOperationalItems(items, access);
+  if (hasOpaqueNarrativeAccess(access)) return restricted;
   if (!definitions) return restricted;
   return items.map((item, index) => {
     const fixed = definitions.find(definition =>
@@ -61,9 +62,9 @@ export function readableFictionalItems<T extends readonly Record<string, unknown
     const { restricted: _restricted, ...state } = typed;
     return {
       ...state, key: fixed.key ?? fixed.id, id: fixed.id, label: fixed.label,
-      ...(fixed.owner ? { owner: fixed.owner } : {}),
+      ...(fixed.owner ? { owner: "Recorded ownership restricted by current field permissions" } : {}),
       ...(fixed.agent ? { agent: fixed.agent } : {}),
-      ...(fixed.agent ? { blockers: ["Operational activation, verified evidence and applicable human decisions are required."] } : {}),
+      ...(fixed.agent ? { blockers: ["Recorded blocker details restricted by current field permissions."] } : {}),
     };
   }) as unknown as T;
 }

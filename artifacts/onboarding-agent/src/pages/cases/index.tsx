@@ -39,7 +39,7 @@ import { ONBOARDING_STAGE_NAMES, lifecycleStageText, stageStatusText } from '../
 /* Existing records are onboarding cases; map them into the neutral HRO case
    shape so additional case types can be introduced incrementally. */
 
-type HroStatus = 'New' | 'In Progress' | 'Waiting' | 'Human Review' | 'Blocked' | 'Completed';
+type HroStatus = 'New' | 'In Progress' | 'Waiting' | 'Human Review' | 'Blocked' | 'Completed' | 'Rejected';
 
 export function caseTypeOf(c: OnbCase): Exclude<CaseTypeFilter, 'All Cases'> {
   return presentedCaseTypeOf(c);
@@ -49,7 +49,9 @@ export function caseTitleOf(c: OnbCase): string {
   return presentedCaseTitleOf(c);
 }
 
-export function statusOf(c: Pick<OnbCase, 'lifecycleStage' | 'orchestrationStatus'>): HroStatus {
+export function statusOf(c: Pick<OnbCase, 'lifecycleStage' | 'orchestrationStatus' | 'syntheticJourney'>): HroStatus {
+  if (c.syntheticJourney) return c.syntheticJourney.outcome === 'completed' ? 'Completed'
+    : c.syntheticJourney.outcome === 'rejected' ? 'Rejected' : 'Blocked';
   const stage = (c.lifecycleStage || '').toLowerCase();
   const orch = (c.orchestrationStatus || '').toLowerCase();
   if (stage === 'completed' || stage === 'complete') return 'Completed';
@@ -89,6 +91,7 @@ const STATUS_STYLES: Record<HroStatus, { bg: string; fg: string; dot?: boolean }
   'Human Review': { bg: 'var(--surface-soft)', fg: 'var(--status-amber)' },
   'Blocked': { bg: 'var(--surface-soft)', fg: 'var(--status-red)' },
   'Completed': { bg: 'var(--surface-soft)', fg: 'var(--status-green)' },
+  'Rejected': { bg: 'var(--surface-soft)', fg: 'var(--status-red)' },
 };
 
 function HroStatusBadge({ status }: { status: HroStatus }) {
@@ -349,9 +352,6 @@ export function CasesPage() {
         Historical test records are read-only and non-operational. Stored status and evidence describe history, not current business activity or readiness.
       </p>}
 
-      {!showHistory && cases?.some(isFictionalOfflineExample) && <p role="status" className="text-sm text-[var(--text-muted)]">
-        Examples are offline and read-only. They are included in list counts, not operational status counts or business outcomes.
-      </p>}
 
       {showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
        {showBatch && <BatchIntakeForm onClose={() => setShowBatch(false)} />}
@@ -391,7 +391,7 @@ export function CasesPage() {
                    <Label>Individual case status</Label>
                   <select className={selectStyle} value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value as AdvancedFilters['status'] })}>
                     <option value="">Any status</option>
-                    {(['New', 'In Progress', 'Waiting', 'Human Review', 'Blocked', 'Completed'] as HroStatus[]).map((s) => <option key={s} value={s}>{s}</option>)}
+                    {(['New', 'In Progress', 'Waiting', 'Human Review', 'Blocked', 'Completed', 'Rejected'] as HroStatus[]).map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                  <div className="space-y-1">
@@ -616,7 +616,6 @@ export function CasesPage() {
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="shrink-0 whitespace-nowrap" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</span>
                           <span className="min-w-0 truncate" title={[`Original intent: ${originalIntentOf(c)}`, caseTitleOf(c), isFictionalOfflineExample(c) ? caseSummary(c) : null].filter(Boolean).join(' — ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{originalIntentOf(c)}</span>
-                          {isFictionalOfflineExample(c) && <span title="Offline and read-only" className="shrink-0 text-[10px] font-semibold text-[var(--text-muted)]">Offline</span>}
                           {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} title="Email source history" aria-label={`Email source history for ${caseIdOf(c)}`} className="shrink-0 text-xs underline">Email</Link>}
                         </div>
                       </td>
@@ -630,10 +629,12 @@ export function CasesPage() {
                         {c.joiningDate && Number.isFinite(Date.parse(c.joiningDate)) ? format(new Date(c.joiningDate), caseDateFormat) : 'Not applicable'}
                       </td>
                       <td className="hidden lg:table-cell" style={{ padding: '10px 8px' }}>
-                        {c.gateways ? <CompactGates gateways={c.gateways} inline /> : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>N/A</span>}
+                        {c.syntheticJourney ? <span className="block truncate text-xs text-[var(--text-muted)]" title={`${c.syntheticJourney.qualifier} — ${c.syntheticJourney.rationale}`}>
+                          {c.syntheticJourney.stages[c.syntheticJourney.stages.length - 1]?.title}</span>
+                          : c.gateways ? <CompactGates gateways={c.gateways} inline /> : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>N/A</span>}
                       </td>
                       <td style={{ padding: '10px 8px' }}>
-                        <div className="truncate" title={status}><HroStatusBadge status={status} /></div>
+                        <div className="truncate" title={c.syntheticJourney ? c.syntheticJourney.qualifier : status}><HroStatusBadge status={status} /></div>
                       </td>
                       <td className="hidden lg:table-cell" style={{ padding: '10px 8px' }}>
                         <OwnerCell owner={owner} />
@@ -680,7 +681,6 @@ export function CasesPage() {
                     <span className="min-w-0 truncate" title={caseTitleOf(c)} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
                     <HroStatusBadge status={status} />
                   </div>
-                  {isFictionalOfflineExample(c) && <span className="text-xs font-semibold text-[var(--text-muted)]">Offline</span>}
                   <p className="mt-1 break-words text-sm text-[var(--text-secondary)]"><span className="font-semibold">Original intent:</span> {originalIntentOf(c)}</p>
                   {isFictionalOfflineExample(c) && c.planSummary && <p title={caseSummary(c)} className="mt-1 line-clamp-1 text-xs text-[var(--text-muted)]">{caseSummary(c)}</p>}
                   <div className="flex items-center justify-between gap-2 mt-1">
@@ -690,7 +690,7 @@ export function CasesPage() {
                   <div className="flex items-center justify-between gap-2 mt-1">
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
                     {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} className="text-xs underline">Email source history</Link>}
-                    {c.gateways && <CompactGates gateways={c.gateways} />}
+                    {!c.syntheticJourney && c.gateways && <CompactGates gateways={c.gateways} />}
                   </div>
                    <WorkforceTags c={c} />
                 </button>

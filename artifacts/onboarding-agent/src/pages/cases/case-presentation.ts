@@ -50,7 +50,8 @@ export function caseWorkerName(c: SamplePresentationContext & { workerName: stri
   return isFictionalOfflineExample(c) ? c.workerName.replace(/^(?:Example|Demo sample) — /, '') : c.workerName;
 }
 
-export function caseSummary(c: { fictionalOfflineIdentity?: boolean; offlineSample?: boolean; planSummary?: string | null }): string {
+export function caseSummary(c: { fictionalOfflineIdentity?: boolean; offlineSample?: boolean; planSummary?: string | null; syntheticJourney?: { qualifier: string; rationale: string } | null }): string {
+  if (c.syntheticJourney) return `${c.syntheticJourney.qualifier} · ${c.syntheticJourney.rationale}`;
   const summary = c.planSummary ?? '';
   return isFictionalOfflineExample(c)
     ? summary.replace(/Offline example only; all evidence and human decisions remain pending\.$/, 'All evidence and human decisions remain pending.')
@@ -68,7 +69,9 @@ export function sampleIntakeFields(data: Record<string, string>, c?: SamplePrese
       if (value === 'FICTIONAL-REF-A / FICTIONAL-REF-B') return [[key, 'Conflicting references A and B — neither verified']];
       return [];
     }
-    return [[key, value]];
+    // The sample request is the server's exact fixed inventory projection.
+    // Never transform arbitrary operational intake when the marker is absent.
+    return [[key, value.replace(/\bFictional\s+/g, '')]];
   });
 }
 
@@ -118,11 +121,28 @@ export function caseTypeOf(c: CaseLike): CaseFamily {
 
 const AGENT_BY_FAMILY: Record<CaseFamily, string> = {
   Onboarding: 'Onboarding Agent', Offboarding: 'Offboarding Agent',
-  'Employee Changes': 'Worker Records Agent', Payroll: 'Payroll Agent',
+  'Employee Changes': 'Employee Changes Agent', Payroll: 'Payroll Agent',
   Benefits: 'Benefits Agent', Leave: 'Leave Agent', Compliance: 'Compliance Agent',
-  'HR Helpdesk': 'HR Service Agent', 'IT Access': 'Identity & Access Agent',
-  Learning: 'Learning Agent', Mobility: 'Mobility Agent', Documents: 'Worker Records Agent',
+  'HR Helpdesk': 'HR Helpdesk Agent', 'IT Access': 'IT Access Agent',
+  Learning: 'Learning Agent', Mobility: 'Mobility Agent', Documents: 'Documents & Records Agent',
 };
+
+/** Presentation only: retain recorded ownership, state and specific blockers. */
+export function workstreamPresentation(c: CaseLike & { fictionalOfflineIdentity?: boolean; offlineSample?: boolean }, w: { agent?: string; owner?: string; label?: string; key?: string; blockers?: string[] }) {
+  const rawAgent = w.agent?.trim();
+  const agent = !rawAgent || rawAgent.toLowerCase() === 'none'
+    ? AGENT_BY_FAMILY[caseTypeOf(c)]
+    : ({ documentation: 'Document Verification Agent', access: 'IT Access Agent',
+      assets: 'Assets & Workplace Agent', learning: 'Learning Agent', analytics: 'Coordination agent not mapped — review required',
+      'Worker Records Agent': AGENT_BY_FAMILY[caseTypeOf(c)],
+      'Identity & Access Agent': 'IT Access Agent', 'HR Service Agent': 'HR Helpdesk Agent' } as Record<string, string>)[rawAgent] || rawAgent;
+  const owner = !w.owner?.trim() || w.owner === 'Unassigned — offline example'
+    ? 'No recorded owner — human assignment required' : w.owner;
+  const blockers = (w.blockers || []).map(blocker => isFictionalOfflineExample(c) &&
+    ['Offline demo sample', 'Offline example; no execution permitted'].includes(blocker)
+    ? 'Operational activation, current evidence and applicable human decisions are required.' : blocker);
+  return { agent, owner, label: w.label || 'Unnamed workstream', blockers };
+}
 
 /** Status alone never establishes a human handoff. */
 export function caseOwnerOf(c: CaseLike & { currentActionOwner?: string | null }) {

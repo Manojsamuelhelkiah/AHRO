@@ -6216,6 +6216,55 @@ export interface OnbWorkforceClassification {
   confidence: OnbWorkforceClassificationConfidence;
 }
 
+export type OnbSyntheticJourneyStageStatus = typeof OnbSyntheticJourneyStageStatus[keyof typeof OnbSyntheticJourneyStageStatus];
+
+
+export const OnbSyntheticJourneyStageStatus = {
+  completed: 'completed',
+  rejected: 'rejected',
+  blocked: 'blocked',
+  cancelled: 'cancelled',
+} as const;
+
+export interface OnbSyntheticJourneyStage {
+  id: string;
+  title: string;
+  date: string;
+  agent: string;
+  agentKey: string;
+  agentVersion: string;
+  role: string;
+  status: OnbSyntheticJourneyStageStatus;
+  dependencies: string[];
+  evidence: string;
+  decision: string;
+  communication: string;
+}
+
+export type OnbSyntheticJourneyOutcome = typeof OnbSyntheticJourneyOutcome[keyof typeof OnbSyntheticJourneyOutcome];
+
+
+export const OnbSyntheticJourneyOutcome = {
+  completed: 'completed',
+  rejected: 'rejected',
+  blocked: 'blocked',
+} as const;
+
+/**
+ * Fixed server-owned read illustration only. Never operational evidence, approval, consent, delivery, authority or measured success.
+ */
+export interface OnbSyntheticJourney {
+  version: string;
+  title: string;
+  family: string;
+  outcome: OnbSyntheticJourneyOutcome;
+  qualifier: string;
+  rationale: string;
+  coordinatingAgent: string;
+  stages: OnbSyntheticJourneyStage[];
+  nextActions: string[];
+}
+
 /**
  * HR-selected contact channel(s) for this new hire
  */
@@ -6341,6 +6390,7 @@ export interface OnbCase {
   operationalSourceLabel?: string | null;
   /** Case-scoped identity projection is synthetic and does not represent sensitive-record authority */
   fictionalOfflineIdentity: boolean;
+  syntheticJourney?: OnbSyntheticJourney | null;
   /**
      * LLM-generated onboarding plan narrative
      * @nullable

@@ -32,6 +32,7 @@ import { GatewaysStrip } from './detail/gateways-strip';
 import { EmployeeVaultPanel } from './detail/employee-vault-panel';
 import { OverviewTab } from './detail/overview';
 import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
+import { SyntheticJourneySummary, SyntheticJourneyStages, SyntheticJourneyCommunications } from './detail/synthetic-journey';
 import { FrontlineTab } from './detail/frontline-tab';
 import { DocumentsTab } from './detail/documents-tab';
 import { ExplainabilityTab, clearCaseAnalysisMemory } from './detail/explainability-tab';
@@ -294,7 +295,8 @@ export function CaseDetailPage() {
       {!offlineSample && <EmployeeVaultPanel caseId={caseId} />}
 
       {c.batchIntake && <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} />}
-      {c.fictionalOfflineIdentity && permissions.access.notesRead && c.planSummary && (
+      {c.syntheticJourney && <SyntheticJourneySummary journey={c.syntheticJourney} />}
+      {!c.syntheticJourney && c.fictionalOfflineIdentity && permissions.access.notesRead && c.planSummary && (
         <section aria-label="Example request and pending review" className="my-4 rounded-lg border p-4 text-sm">
           <h3 className="mb-2 font-semibold">Request and unresolved review needs</h3>
           <p className="break-words">{caseSummary(c)}</p>
@@ -319,7 +321,7 @@ export function CaseDetailPage() {
             : <div className="mb-6"><div role="status" className="rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] px-3 py-2 text-xs text-[var(--status-amber-fg)]">Logistics and portal edits are restricted by your current case permissions.</div></div>}
         </>
       )}
-      {(offlineSample || c.operationalActivated) && <OperationalPreparationPanel caseId={caseId} canRead={permissions.access.flowRead && permissions.access.profileRead} />}
+      {!c.syntheticJourney && (offlineSample || c.operationalActivated) && <OperationalPreparationPanel caseId={caseId} canRead={permissions.access.flowRead && permissions.access.profileRead} />}
       <CaseHealthStrip c={c} pendingApprovals={pendingApprovals} offlineSample={offlineSample} />
 
       <CaseTabs activeTab={activeTab} setTab={setActiveTab} offlineSample={offlineSample} />
@@ -346,9 +348,13 @@ export function CaseDetailPage() {
         {activeTab === 'Frontline' && <FrontlineTab key={caseId} caseId={caseId} />}
         {activeTab === 'Documents' && <DocumentsTab caseId={caseId} docs={docs || []} />}
         {activeTab === 'Activity' && (permissions.access.notesRead
-          ? <ActivityTab events={events || []} />
+          ? <>{c.syntheticJourney && <div className="mb-6"><SyntheticJourneyStages journey={c.syntheticJourney} timeline /></div>}
+            {c.syntheticJourney && <h2 className="mb-4 font-semibold">Recorded activity</h2>}
+            <ActivityTab events={events || []} /></>
           : <RestrictedActionNotice>Activity notes are restricted by your current permissions.</RestrictedActionNotice>)}
-        {activeTab === 'Communications' && <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} requestsEnv={requestsEnv} requestsLoadError={requestsLoadError} enforceCasePermissions />}
+        {activeTab === 'Communications' && <>{c.syntheticJourney && <><SyntheticJourneyCommunications journey={c.syntheticJourney} />
+          <h2 className="mb-4 font-semibold">Recorded communications · original delivery status and provenance</h2></>}
+          <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} requestsEnv={requestsEnv} requestsLoadError={requestsLoadError} enforceCasePermissions /></>}
         {activeTab === 'Audit' && (permissions.access.notesRead
           ? <AuditTab events={events || []} approvals={approvals} records={records || []} />
           : <RestrictedActionNotice>Audit notes are restricted by your current permissions.</RestrictedActionNotice>)}

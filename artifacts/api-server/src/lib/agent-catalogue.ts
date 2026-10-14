@@ -20,6 +20,14 @@ const roles = [
   ["systems-watcher", "Systems Watcher Agent", "", "Support system health observation and escalation. Existing connector watchers are not this registered principal.", []],
 ] as const;
 
+/** Lightweight catalogue identity lookup for read projections. No principal,
+ * permissions, invocation capability or taxonomy computation is created. */
+export function agentCatalogueIdentity(key: string) {
+  const role = roles.find(entry => entry[0] === key);
+  if (!role) throw new Error(`Unknown catalogue agent: ${key}`);
+  return { key: role[0], name: role[1], version: AGENT_CATALOGUE_VERSION };
+}
+
 export function agentCatalogue() {
   const taxonomy = buildIntentCatalog();
   return roles.map(([key, name, family, responsibility, services], index) => ({

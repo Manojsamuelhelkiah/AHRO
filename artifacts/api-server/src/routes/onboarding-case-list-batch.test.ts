@@ -19,6 +19,7 @@ import { resolveEffectiveAccess, resolveEffectiveAccessForCases } from "../lib/a
 import { CURATED_OFFLINE_EXAMPLES } from "../lib/onboarding/offline-example-extension";
 import { demoPrincipalSettingKey } from "../lib/demo-principal";
 import { SYNTHETIC_OFFLINE_MARKER } from "../lib/onboarding/synthetic-offline";
+import { fixedSyntheticJourney } from "../lib/onboarding/synthetic-case-journey";
 
 // Fixtures live outside public tables: neither background workers nor real
 // Demo inventory can see them. No provisioning helper or execution is used.
@@ -139,12 +140,65 @@ test("120 retained examples: batch list matches ordinary projection with bounded
     const example = CURATED_OFFLINE_EXAMPLES.find(item => item.key === row.scenarioKey)!;
     assert.deepEqual(row.batchIntake, example.values.processPolicySnapshot.batchIntake);
     assert.equal(row.planSummary, example.values.planSummary);
+    assert.deepEqual(row.syntheticJourney, fixedSyntheticJourney(cases.find(c => c.id === row.id)!));
     assert.equal(row.workerPhone, null);
     assert.deepEqual(row.processPolicySnapshot, {});
   }
   const smaller = await measured(() => resolveEffectiveAccessForCases(accessInput, rows.slice(0, 10).map(row => row.id)));
   const larger = await measured(() => resolveEffectiveAccessForCases(accessInput, rows.map(row => row.id)));
   assert.equal(larger.queries, smaller.queries);
+});
+
+test("synthetic journeys are separate read-only projections on list and detail, with fresh permission and run-history exclusions", async () => {
+  const before = await db.select().from(onbCases);
+  const rows = await list();
+  for (const row of rows) {
+    assert.ok(row.syntheticJourney);
+    assert.equal(row.orchestrationStatus, "blocked");
+    assert.equal(row.candidateEmailAuthorized, false);
+    assert.equal(row.offerAcceptanceComplete, false);
+    assert.equal(row.lifecycleStage, "service-intake");
+    const response = await fetch(`${baseUrl}/onboarding/cases/${row.id}`);
+    assert.equal(response.status, 200);
+    const detail = await response.json() as Awaited<ReturnType<typeof serializeCaseForRequest>>;
+    assert.deepEqual(detail.syntheticJourney, row.syntheticJourney);
+    assert.deepEqual(detail.readiness, row.readiness);
+    assert.deepEqual(detail.workstreams, row.workstreams);
+  }
+  assert.deepEqual(await db.select().from(onbCases), before, "reads cannot alter original records");
+  for (const outcome of ["completed", "rejected", "blocked"]) {
+    const projected = rows.find(item => item.syntheticJourney?.outcome === outcome)!;
+    assert.ok(projected);
+    const response = await fetch(`${baseUrl}/onboarding/cases/${projected.id}/simulation/run`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+    assert.equal(response.status, 410, "illustrative outcomes cannot restore retired execution");
+  }
+  const row = cases[5]!;
+  for (const key of ["data.case.profile.read", "data.case.notes.read", "data.case.readiness.read"]) {
+    const [denial] = await db.insert(accessNamedGrants).values(grant(key, row.id, "deny")).returning();
+    assert.equal((await list()).find(item => item.id === row.id)!.syntheticJourney, null, key);
+    await db.delete(accessNamedGrants).where(eq(accessNamedGrants.id, denial!.id));
+  }
+  for (const field of ["operationalPreparation", "operationalActivation"] as const) {
+    try {
+      const [changed] = await db.update(onbCases).set({ [field]: {} }).where(eq(onbCases.id, row.id)).returning();
+      assert.equal((await list()).find(item => item.id === row.id)?.syntheticJourney ?? null, null, field);
+      assert.equal((await serializeCaseForRequest(request, changed!)).syntheticJourney, null, field);
+    } finally {
+      await db.update(onbCases).set({ [field]: null }).where(eq(onbCases.id, row.id));
+    }
+  }
+  const key = "onboarding-uat.run.v1:journey-isolation";
+  await db.insert(onbSettings).values({
+    organizationId: "demo", key, value: JSON.stringify({ runId: "journey-isolation", linkedCaseIds: [row.id] }),
+  });
+  assert.equal((await list()).find(item => item.id === row.id)?.syntheticJourney ?? null, null);
+  const response = await fetch(`${baseUrl}/onboarding/cases/${row.id}`);
+  if (response.status === 200) assert.equal((await response.json() as Awaited<ReturnType<typeof serializeCaseForRequest>>).syntheticJourney, null);
+  else assert.ok([403, 404].includes(response.status));
+  await db.delete(onbSettings).where(eq(onbSettings.key, key));
+  assert.ok((await list()).find(item => item.id === row.id)!.syntheticJourney);
 });
 
 test("offline request projection uses fixed fictional definitions, not mutable private data; notes denial hides it", async () => {
@@ -165,6 +219,7 @@ test("offline request projection uses fixed fictional definitions, not mutable p
   const denied = (await list()).find(item => item.id === row.id)!;
   assert.equal(denied.batchIntake, null);
   assert.equal(denied.planSummary, null);
+  assert.equal(denied.syntheticJourney, null);
   await db.update(onbCases).set({ planSummary: row.planSummary, processPolicySnapshot: row.processPolicySnapshot }).where(eq(onbCases.id, row.id));
 });
 
@@ -188,6 +243,7 @@ test("case-scoped denies and redaction are fresh on every list, without broadeni
   assert.equal(redacted.workerEmail, null);
   assert.equal(redacted.fictionalOfflineIdentity, false);
   assert.deepEqual(redacted.readiness, []);
+  assert.equal(redacted.syntheticJourney, null);
   assert.equal(redacted.gateways?.a.status, "restricted");
   await db.update(organizationMembershipsTable).set({ revokedAt: new Date() }).where(and(
     eq(organizationMembershipsTable.organizationId, "demo"), eq(organizationMembershipsTable.clerkUserId, user),
@@ -296,10 +352,12 @@ test("legacy voluntary offboarding detail uses fixed labels while preserving sta
   assert.equal(safe.readiness[0]!.label, row.readiness[0]!.label);
   assert.equal(safe.readiness[1]!.key, "restricted");
   assert.equal(safe.readiness[1]!.status, "blocked");
-  assert.equal(safe.workstreams[0]!.owner, "IT / Security");
+   assert.equal(safe.workstreams[0]!.owner, "Recorded ownership restricted by current field permissions");
   assert.equal(safe.workstreams[0]!.status, "pending");
   assert.equal(safe.offlineSample, true);
   assert.equal(safe.candidateEmailAuthorized, false);
+   assert.equal(safe.syntheticJourney?.outcome, "blocked");
+   assert.match(safe.syntheticJourney?.rationale ?? "", /section 4.6/);
   assert.equal(safe.currentActionOwner, null);
   assert.doesNotMatch(JSON.stringify(safe), /PRIVATE/);
   await db.insert(accessNamedGrants).values(grant("data.case.readiness.read", row.id, "deny"));
@@ -339,6 +397,7 @@ test("legacy voluntary offboarding detail uses fixed labels while preserving sta
   assert.equal((await detail()).currentActionOwner, "Unassigned human team");
   await db.update(onbCases).set({ operationalPreparation: {} as never, planSummary: "Current operational request" }).where(eq(onbCases.id, row.id));
   assert.equal((await detail()).planSummary, "Current operational request");
+   assert.equal((await detail()).syntheticJourney, null);
   await db.insert(accessNamedGrants).values(grant("data.case.notes.read", row.id, "deny"));
   assert.equal((await detail()).currentActionOwner, null);
   await db.insert(onbSettings).values({ organizationId: "demo", key: demoPrincipalSettingKey(user), value: "reviewer" });

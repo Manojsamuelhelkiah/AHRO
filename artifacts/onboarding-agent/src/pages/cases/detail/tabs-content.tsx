@@ -24,9 +24,14 @@ import { StatusBadgeText } from './components';
 import { OperationalRequestsSection } from './OperationalRequestsSection';
 import { BgvNotificationsSection } from './BgvNotificationsSection';
 import { RestrictedActionNotice, useCaseAccess } from './case-access';
-import { caseSummary } from '../case-presentation';
+import { caseSummary, workstreamPresentation } from '../case-presentation';
+import { SyntheticJourneyStages, SyntheticJourneyActions } from './synthetic-journey';
 
 export function TasksTab({ c }: { c: any }) {
+  if (c.syntheticJourney) return <div className="min-w-0 space-y-6 pb-12">
+    <SyntheticJourneyActions journey={c.syntheticJourney} />
+    <SyntheticJourneyStages journey={c.syntheticJourney} />
+  </div>;
   return (
     <div className="space-y-6 pb-12 max-w-4xl">
       <Card>
@@ -53,23 +58,23 @@ export function TasksTab({ c }: { c: any }) {
           {c.workstreams?.filter((w: any) => w.key !== 'restricted').map((w: any) => (
             <div key={w.key} className="p-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-alt)]">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <span className="min-w-0 break-words text-[var(--text-base)] font-bold">{w.label}</span>
+                <span className="min-w-0 break-words text-[var(--text-base)] font-bold">{workstreamPresentation(c, w).label}</span>
                 <StatusBadgeText status={w.status} />
               </div>
               <div className="text-[var(--text-sm)] text-[var(--text-secondary)] space-y-2">
                 <div className="flex gap-2">
                   <span className="w-16 font-semibold text-[var(--text-muted)] text-[11px] uppercase tracking-wider">Agent:</span> 
-                  <span className="font-mono bg-[var(--surface)] px-1.5 py-0.5 rounded text-[11px]">{w.agent}</span>
+                  <span className="min-w-0 break-words bg-[var(--surface)] px-1.5 py-0.5 rounded text-[11px]">{workstreamPresentation(c, w).agent}</span>
                 </div>
                 <div className="flex gap-2">
                   <span className="w-16 font-semibold text-[var(--text-muted)] text-[11px] uppercase tracking-wider">Owner:</span> 
-                  <span className="min-w-0 break-words">{w.owner || 'Owner not recorded'}</span>
+                  <span className="min-w-0 break-words">{workstreamPresentation(c, w).owner}</span>
                 </div>
                 {w.blockers && w.blockers.length > 0 && (
                   <div className="mt-3 p-3 rounded-[var(--radius-md)] bg-[var(--status-red-bg)] border border-[var(--status-red)] text-[var(--status-red-fg)]">
                     <strong className="text-[11px] uppercase tracking-wider">Blockers:</strong>
                     <ul className="list-disc pl-5 mt-1 space-y-1">
-                      {w.blockers.map((b: string, i: number) => <li key={i}>{b}</li>)}
+                      {workstreamPresentation(c, w).blockers.map((b: string, i: number) => <li key={i}>{b}</li>)}
                     </ul>
                   </div>
                 )}

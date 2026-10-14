@@ -28,7 +28,7 @@ test('offline next steps show distinct names, dependencies and actual state with
   assert.match(html, /Access review/);
   assert.match(html, /Verified connector evidence required/);
   assert.match(html, /Asset recovery/);
-  assert.match(html, /Offboarding Agent/);
+  assert.match(html, /No recorded owner — human assignment required/);
   assert.match(html, /no work is executing/);
   assert.doesNotMatch(html, /Begins automatically|Restricted confidential operational item/);
   assert.equal(html.match(/Operational wording is restricted/g)?.length, 1);

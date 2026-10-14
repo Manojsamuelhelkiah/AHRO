@@ -12451,6 +12451,47 @@ components:
         rationale: { type: string }
         confidence: { type: string, enum: [high, medium, uncertain] }
       required: [label, source, rationale, confidence]
+    OnbSyntheticJourneyStage:
+      type: object
+      required: [id, title, date, agent, agentKey, agentVersion, role, status, dependencies, evidence, decision, communication]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        date: { type: string }
+        agent: { type: string }
+        agentKey: { type: string }
+        agentVersion: { type: string }
+        role: { type: string }
+        status:
+          type: string
+          enum: [completed, rejected, blocked, cancelled]
+        dependencies:
+          type: array
+          items: { type: string }
+        evidence: { type: string }
+        decision: { type: string }
+        communication: { type: string }
+    OnbSyntheticJourney:
+      type: object
+      description: Fixed server-owned read illustration only. Never operational evidence, approval, consent, delivery, authority or measured success.
+      required: [version, title, family, outcome, qualifier, rationale, coordinatingAgent, stages, nextActions]
+      properties:
+        version: { type: string }
+        title: { type: string }
+        family: { type: string }
+        outcome:
+          type: string
+          enum: [completed, rejected, blocked]
+        qualifier: { type: string }
+        rationale: { type: string }
+        coordinatingAgent: { type: string }
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnbSyntheticJourneyStage"
+        nextActions:
+          type: array
+          items: { type: string }
     OnbCase:
       type: object
       properties:
@@ -12552,6 +12593,10 @@ components:
         fictionalOfflineIdentity:
           type: boolean
           description: Case-scoped identity projection is synthetic and does not represent sensitive-record authority
+        syntheticJourney:
+          oneOf:
+            - $ref: "#/components/schemas/OnbSyntheticJourney"
+            - type: "null"
         planSummary:
           type: ["string", "null"]
           description: LLM-generated onboarding plan narrative

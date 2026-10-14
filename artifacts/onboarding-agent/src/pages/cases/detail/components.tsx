@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SyntheticJourneyHealth } from './synthetic-journey';
 import { format } from 'date-fns';
 import { ChevronDown, Mail, Phone, PhoneCall } from 'lucide-react';
 import { Badge, Button, cn } from '@/components/ui-shared';
@@ -73,7 +74,8 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
     });
   };
 
-  const statusText = c.orchestrationStatus === 'waiting-approval' ? 'HUMAN REVIEW' : c.orchestrationStatus.replace(/-/g, ' ');
+  const statusText = c.syntheticJourney ? c.syntheticJourney.qualifier
+    : c.orchestrationStatus === 'waiting-approval' ? 'HUMAN REVIEW' : c.orchestrationStatus.replace(/-/g, ' ');
   const offlineSample = isOfflineDemoSample(c);
   const ownership = caseOwnerOf(c);
    const presentation = { ...casePresentation(c), type: caseTypeOf(c), title: caseTitleOf(c) };
@@ -112,7 +114,9 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
               <span className="break-words">Current owner: <span className="text-[var(--text-primary)]">{ownership.name}</span></span>
               {ownership.kind === 'Human Reviewer' && <span className="break-words">Coordinating agent: {ownership.coordinatingAgent}</span>}
              <span className="flex items-center gap-1">Priority: <span className={c.urgency === 'elevated' ? 'text-[var(--status-red)]' : 'text-[var(--text-primary)]'}>{c.urgency}</span></span>
-             <span className="flex items-center gap-1">Stage: <span className="text-[var(--text-primary)]">{c.lifecycleStage.replace(/-/g, ' ')}</span></span>
+             <span className="flex items-center gap-1">Stage: <span className="text-[var(--text-primary)]">{c.syntheticJourney
+               ? c.syntheticJourney.stages[c.syntheticJourney.stages.length - 1]?.title
+               : c.lifecycleStage.replace(/-/g, ' ')}</span></span>
              <span className="flex items-center gap-1">Status: <span className="text-[var(--text-primary)]">{statusText}</span></span>
               {canViewIdentity && <span className="flex items-center gap-1">Manager: <span className="text-[var(--text-primary)]">{c.managerName}</span></span>}
            </div>
@@ -166,6 +170,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
 }
 
 export function CaseHealthStrip({ c, pendingApprovals, offlineSample = false }: { c: any, pendingApprovals: any[], offlineSample?: boolean }) {
+  if (c.syntheticJourney) return <SyntheticJourneyHealth journey={c.syntheticJourney} />;
   const total = c.workstreams?.length || 0;
   const ready = c.workstreams?.filter((w: any) => w.status === 'ready').length || 0;
   const progressPct = total > 0 ? Math.round((ready / total) * 100) : 0;
@@ -177,7 +182,8 @@ export function CaseHealthStrip({ c, pendingApprovals, offlineSample = false }: 
   const healthTitle = state === 'offline' ? 'Awaiting prerequisites' : state === 'attention' ? 'Attention required' : state === 'blocked' ? 'Blocked' : state === 'done' ? 'Complete' : state === 'idle' ? 'Idle' : 'Healthy';
   const healthSub = state === 'offline' ? 'Activation, verified evidence and current human decisions are required.'
     : state === 'attention' ? `${pendingApprovals.length} decision${pendingApprovals.length > 1 ? 's' : ''} require${pendingApprovals.length === 1 ? 's' : ''} review`
-    : state === 'blocked' ? (orch === 'checklist-blocked' ? 'Waiting for mandatory checklist items' : 'Waiting for manual unblock')
+    : state === 'blocked' ? (c.workstreams?.find((w: any) => w.status === 'blocked' && w.blockers?.length)?.blockers.join(' ')
+      || (orch === 'checklist-blocked' ? 'Waiting for mandatory checklist items' : 'Waiting for recorded prerequisites and human review'))
     : state === 'done' ? 'Case processing complete'
     : state === 'idle' ? 'No execution in progress'
     : 'Automated execution active';

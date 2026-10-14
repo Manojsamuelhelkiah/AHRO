@@ -332,6 +332,7 @@ import { CURATED_OFFLINE_EXAMPLES } from "../lib/onboarding/offline-example-exte
 import { originalIntentLabel, onboardingOriginalIntent } from "../lib/onboarding/original-intent";
 import { fixedFictionalPresentation, readableFictionalItems } from "../lib/onboarding/fictional-case-presentation";
 import { currentActionOwners } from "../lib/onboarding/current-action-owner";
+import { fixedSyntheticJourney } from "../lib/onboarding/synthetic-case-journey";
 
 const router: IRouter = Router();
 router.use((req, res, next) => {
@@ -882,7 +883,13 @@ async function serializeCase(
   const profileSensitiveAccess = canReadProfile ? sensitiveAccess : NO_SENSITIVE_ACCESS;
   const ownerReadable = canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess);
   const pendingOwners = ownerReadable && !presentation ? await currentActionOwners(row.organizationId, [row.id]) : null;
+  const syntheticJourney = canReadProfile && canReadNotes && canReadReadiness && offlineExample
+    ? fixedSyntheticJourney(row, presentation
+      ? presentation.actualRunOwned || presentation.uatOwned
+      : await actualRunOwnsCase(db, row) || await isAuthoritativelyUatRunOwnedCase(row))
+    : null;
   return {
+    syntheticJourney,
     currentActionOwner: ownerReadable
       ? presentation?.currentActionOwner ?? pendingOwners?.get(row.id) ?? null
       : null,

@@ -41,3 +41,15 @@ draft must not be interpreted as an activation receipt, authority, integration
 readiness or measured business outcome. Real volunteer/controller histories
 and actual UAT-run-owned cases remain ineligible. Offboarding closure remains
 blocked until section 4.6 is supplied and approved.
+
+## Read-only synthetic journey presentation
+
+Existing verified fictional examples now have a separate fixed journey
+illustration, with completed, rejected and blocked branches. This does not
+implement any of the operational capabilities listed above. See
+[synthetic-journey-verification.md](synthetic-journey-verification.md) for the
+eligibility inventory, outcome matrix, served-build diagnosis and verification.
+Stored operational state, original source narratives/dates, readiness,
+approvals, communications and audit history remain unchanged. Fictional roles
+are not assignments; illustrative decisions and source summaries are not
+evidence, consent, delivery or release authority.
