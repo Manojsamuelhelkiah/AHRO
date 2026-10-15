@@ -14,3 +14,9 @@ API build outputs are shared by workflows, not exclusively owned by the API serv
 **Why:** An API startup failed with an unexpected end of input in generated JavaScript even though a subsequent syntax check of the same output passed. A competing build can replace output while another workflow starts Node; a successful compilation alone is not proof the process read a complete artifact.
 
 **How to apply:** Preserve the last complete output during builds and publish complete files atomically, with the server entry published last. Verify the actual managed process and health response after recovery rather than relying on the bundle currently on disk.
+
+Self-starting smoke-test dependencies must use fallback ports separate from the managed preview services.
+
+**Why:** During parallel workflow startup, a smoke test can see a temporarily unavailable API and launch its own validation-mode API on the preview port. The managed API then fails with an address-in-use error; the smoke test's normal cleanup removes the temporary API and leaves no service running.
+
+**How to apply:** Reuse a healthy managed service when available, but start missing test dependencies on isolated ports. Cleanup must stop only test-owned processes; never change preview ports or weaken authentication to make a smoke check pass.

@@ -4,7 +4,23 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createDependencyOrchestrator } from "./smoke-dependencies.mjs";
+import {
+  createDependencyOrchestrator,
+  DEFAULT_SMOKE_API_URL,
+  DEFAULT_SMOKE_WEB_URL,
+} from "./smoke-dependencies.mjs";
+
+test("fallback test servers cannot claim the managed API or frontend ports", () => {
+  const api = new URL(DEFAULT_SMOKE_API_URL);
+  const web = new URL(DEFAULT_SMOKE_WEB_URL);
+  assert.equal(api.hostname, "127.0.0.1");
+  assert.equal(web.hostname, "127.0.0.1");
+  assert.notEqual(api.port, web.port);
+  for (const url of [api, web]) {
+    assert.notEqual(url.port, "8080");
+    assert.notEqual(url.port, "18940");
+  }
+});
 
 const fixture = fileURLToPath(
   new URL("./fixtures/smoke-dependency-fixture.mjs", import.meta.url),

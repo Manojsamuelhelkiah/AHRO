@@ -5,7 +5,11 @@ import {
   ensureDevelopmentSmokeMembership,
   reconcileDevelopmentDatabase,
 } from "../../api-server/test-db-setup.mjs";
-import { createDependencyOrchestrator } from "./smoke-dependencies.mjs";
+import {
+  createDependencyOrchestrator,
+  DEFAULT_SMOKE_WEB_URL,
+  DEFAULT_SMOKE_API_URL,
+} from "./smoke-dependencies.mjs";
 
 const workspaceRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const startupTimeoutMs = Number(
@@ -81,12 +85,12 @@ process.once("SIGTERM", () => {
 const remotePageUrl = new URL("/cost-explorer/intents", baseUrl);
 const localPageUrl = new URL(
   "/cost-explorer/intents",
-  process.env.INTENT_ROUTING_SMOKE_WEB_URL ?? "http://127.0.0.1:18940",
+  process.env.INTENT_ROUTING_SMOKE_WEB_URL ?? DEFAULT_SMOKE_WEB_URL,
 );
 const remoteHealthUrl = new URL("/api/healthz", baseUrl);
 const localHealthUrl = new URL(
   "/api/healthz",
-  process.env.INTENT_ROUTING_SMOKE_API_URL ?? "http://127.0.0.1:8080",
+  process.env.INTENT_ROUTING_SMOKE_API_URL ?? DEFAULT_SMOKE_API_URL,
 );
 const localWebPort = localPageUrl.port || "80";
 const localApiPort = localHealthUrl.port || "80";

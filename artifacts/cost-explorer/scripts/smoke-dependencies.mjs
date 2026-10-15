@@ -1,5 +1,9 @@
 import { spawn } from "node:child_process";
 
+// Fallback test servers must never occupy the managed preview service ports.
+export const DEFAULT_SMOKE_WEB_URL = "http://127.0.0.1:4186";
+export const DEFAULT_SMOKE_API_URL = "http://127.0.0.1:4187";
+
 export function createDependencyOrchestrator({
   workspaceRoot,
   startupTimeoutMs,
