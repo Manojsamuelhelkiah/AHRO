@@ -21,6 +21,19 @@ Access and equipment cases; those cases inherit a version-bound contact snapshot
 unless explicitly overridden or paused. Initial requests remain explicit and
 case readiness is independently checked before sending.
 
+Saving a case-specific task owner or escalation contact requires active named
+client membership and an allowed deliverable address, not case-read, case-edit
+or decision permissions on the recipient.
+
+**Why:** Reusable client defaults already permit contact configuration before
+execution readiness; case overrides must follow the same configuration boundary
+instead of blocking setup on permissions used only by delivery and replies.
+
+**How to apply:** Separate contact validation from live send/reply authorization.
+Configuration never grants recipient access or decision authority; retain
+case-specific permissions and independently verified identity where actual
+disclosure or source-confirmed transitions require them.
+
 Escalation is optional, controlled by the client administrator's escalation
 switch; escalation contacts are required only when it is enabled.
 

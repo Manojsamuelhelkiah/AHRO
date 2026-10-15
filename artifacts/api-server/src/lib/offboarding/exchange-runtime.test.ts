@@ -8,7 +8,7 @@ import { db, pool, organizationsTable, organizationMembershipsTable, accessNamed
 import { recordHumanPermissionDecision } from "../human-permissions";
 import { SENSITIVE_DATA_CLASSES } from "../onboarding/sensitive-lifecycle";
 import { externalProviderDispatchDenied } from "../onboarding/provider-policy";
-import { provisionExchangePilots, enrollExchange, exchangeAction, stateOf, readExchange, updateCommunicationChecks, queueExchangeInTransaction, agentGate } from "./exchange-service";
+import { provisionExchangePilots, enrollExchange, exchangeAction, stateOf, readExchange, updateCommunicationChecks, queueExchangeInTransaction, agentGate, verifiedRecipient } from "./exchange-service";
 import { exchangeSetupChoices, saveGmailDefaults } from "./exchange-setup";
 import { withExchangeTestIdentity } from "./exchange-test-boundary";
 import { withOffboardingTestProvider, dispatchExchange, ingestExchangeMessage, reconcileAcceptedExchange } from "./exchange-runtime";
@@ -119,8 +119,16 @@ test("isolated contextual Gmail lifecycle: admission, partial/exception, replay,
       await assert.rejects(db.transaction(tx => agentGate(tx, "demo", operator, agentId, first)), /requires delegated/);
       await db.update(organizationMembershipsTable).set({ role: "admin" }).where(and(
         eq(organizationMembershipsTable.organizationId, "demo"), eq(organizationMembershipsTable.clerkUserId, operator)));
+      const removedContactRead = await db.delete(accessNamedGrants).where(and(
+        eq(accessNamedGrants.organizationId, "demo"), eq(accessNamedGrants.principalId, owner),
+        eq(accessNamedGrants.resourceKey, "flow.case.read"))).returning();
+      assert.equal(removedContactRead.length, 1);
       await enrollExchange("demo", operator, first, { expectedRevision: stateOf(await pilot(first)).enrollment.revision,
         enabled: true, escalationEnabled: false, agentId, recipients: taskOwnerOnly, confirmCommunicationOnly: true });
+      await assert.rejects(db.transaction(tx => verifiedRecipient(tx, "demo", owner, ownerAddress, first, false, false)),
+        /scoped case permissions/, "saving a contact must not grant email disclosure or reply authority");
+      assert.equal(sendCount, 0, "saving a contact with no case access sends no mail");
+      await db.insert(accessNamedGrants).values(removedContactRead);
       assert.equal(stateOf(await pilot(first)).enrollment.inheritsClientDefaults, false,
         "a case override can be saved before the plan is ready without bypassing request readiness");
       const pausedCase = provisioned.caseIds[2];

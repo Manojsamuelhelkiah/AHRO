@@ -74,11 +74,15 @@ export async function policyGate(tx: Tx, row: typeof offbCases.$inferSelect) {
   if (!gate.allowed) throw new SeparationError(gate.reason);
   return endOfLwd(row.facts.lastWorkingDay, policy.policy.endOfLwd, policy.policy.timeZone);
 }
-export async function verifiedRecipient(tx: Tx, org: string, memberId: string, address: string, caseId: number, owner: boolean, requireTransportBinding = true) {
+/** Contact configuration is not a case-read or decision permission grant. */
+export async function validateRecipientContact(tx: Tx, org: string, memberId: string, address: string) {
   if (!explicitlyConfiguredAddressAllowed(address) || /\.(?:invalid|test|example)$/i.test(address.split("@")[1])) throw new SeparationError("Recipient must be a deliverable address on the explicit configured allowlist.");
   if (await registeredDemoProfile(memberId)) throw new SeparationError("Shared Demo principals cannot be enrolled.", 403);
   const [member] = await tx.select().from(organizationMembershipsTable).where(and(eq(organizationMembershipsTable.organizationId, org), eq(organizationMembershipsTable.clerkUserId, memberId))).for("share");
   if (!member || member.revokedAt) throw new SeparationError("Recipient needs a current named membership.", 403);
+}
+export async function verifiedRecipient(tx: Tx, org: string, memberId: string, address: string, caseId: number, owner: boolean, requireTransportBinding = true) {
+  await validateRecipientContact(tx, org, memberId, address);
   let verified = false;
   if (requireTransportBinding) try {
     const fixture = exchangeTestIdentity();
@@ -173,8 +177,8 @@ export async function enrollExchange(org: string, actor: string, id: number, raw
       await agentGate(tx, org, actor, b.agentId, id);
       if (new Set(b.recipients.map(r => r.taskId)).size !== b.recipients.length) throw new SeparationError("Each task needs exactly one enrolled source owner.");
       for (const r of b.recipients) {
-        await verifiedRecipient(tx, org, r.memberId, r.address, id, true, false);
-        if (b.escalationEnabled ?? true) await verifiedRecipient(tx, org, r.escalationMemberId!, r.escalationAddress!, id, false, false);
+        await validateRecipientContact(tx, org, r.memberId, r.address);
+        if (b.escalationEnabled ?? true) await validateRecipientContact(tx, org, r.escalationMemberId!, r.escalationAddress!);
         const task = state.tasks.find(t => t.id === r.taskId)!;
         if (task.owner !== r.memberId) {
           task.revision++; task.owner = r.memberId; task.confirmed = []; task.outstanding = [...task.expected]; task.status = "pending"; task.evidence = []; task.exception = null;
