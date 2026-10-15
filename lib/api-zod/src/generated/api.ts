@@ -63,6 +63,9 @@ export const UpdateOffboardingEmailIndicatorsResponse = zod.object({
 })),
   "enrollment": zod.object({
   "enabled": zod.boolean(),
+  "escalationEnabled": zod.boolean().optional(),
+  "inheritsClientDefaults": zod.boolean().optional(),
+  "clientDefaultsRevision": zod.number().optional(),
   "revision": zod.number(),
   "generation": zod.number(),
   "operator": zod.string().nullable(),
@@ -75,8 +78,8 @@ export const UpdateOffboardingEmailIndicatorsResponse = zod.object({
   "address": zod.string(),
   "persona": zod.string(),
   "consentReference": zod.string().optional(),
-  "escalationMemberId": zod.string(),
-  "escalationAddress": zod.string(),
+  "escalationMemberId": zod.string().optional(),
+  "escalationAddress": zod.string().optional(),
   "escalationConsentReference": zod.string().optional()
 }))
 }),
@@ -161,6 +164,9 @@ export const ReviewOffboardingEmailIndicatorsResponse = zod.object({
 })),
   "enrollment": zod.object({
   "enabled": zod.boolean(),
+  "escalationEnabled": zod.boolean().optional(),
+  "inheritsClientDefaults": zod.boolean().optional(),
+  "clientDefaultsRevision": zod.number().optional(),
   "revision": zod.number(),
   "generation": zod.number(),
   "operator": zod.string().nullable(),
@@ -173,8 +179,8 @@ export const ReviewOffboardingEmailIndicatorsResponse = zod.object({
   "address": zod.string(),
   "persona": zod.string(),
   "consentReference": zod.string().optional(),
-  "escalationMemberId": zod.string(),
-  "escalationAddress": zod.string(),
+  "escalationMemberId": zod.string().optional(),
+  "escalationAddress": zod.string().optional(),
   "escalationConsentReference": zod.string().optional()
 }))
 }),
@@ -213,10 +219,12 @@ export const SaveOffboardingGmailDefaultsBody = zod.object({
   "address": zod.string(),
   "persona": zod.string(),
   "consentReference": zod.string().optional(),
-  "escalationMemberId": zod.string(),
-  "escalationAddress": zod.string(),
+  "escalationMemberId": zod.string().optional(),
+  "escalationAddress": zod.string().optional(),
   "escalationConsentReference": zod.string().optional()
-}))
+})),
+  "enabled": zod.boolean().optional(),
+  "escalationEnabled": zod.boolean().optional()
 })
 
 export const SaveOffboardingGmailDefaultsResponse = zod.object({
@@ -228,10 +236,12 @@ export const SaveOffboardingGmailDefaultsResponse = zod.object({
   "address": zod.string(),
   "persona": zod.string(),
   "consentReference": zod.string().optional(),
-  "escalationMemberId": zod.string(),
-  "escalationAddress": zod.string(),
+  "escalationMemberId": zod.string().optional(),
+  "escalationAddress": zod.string().optional(),
   "escalationConsentReference": zod.string().optional()
-}))
+})),
+  "enabled": zod.boolean(),
+  "escalationEnabled": zod.boolean()
 })
 
 
@@ -249,10 +259,12 @@ export const GetOffboardingExchangeSetupResponse = zod.object({
   "address": zod.string(),
   "persona": zod.string(),
   "consentReference": zod.string().optional(),
-  "escalationMemberId": zod.string(),
-  "escalationAddress": zod.string(),
+  "escalationMemberId": zod.string().optional(),
+  "escalationAddress": zod.string().optional(),
   "escalationConsentReference": zod.string().optional()
-}))
+})),
+  "enabled": zod.boolean(),
+  "escalationEnabled": zod.boolean()
 }),
   "cases": zod.array(zod.object({
   "id": zod.number(),
@@ -329,6 +341,9 @@ export const GetOffboardingExchangesResponse = zod.object({
 })),
   "enrollment": zod.object({
   "enabled": zod.boolean(),
+  "escalationEnabled": zod.boolean().optional(),
+  "inheritsClientDefaults": zod.boolean().optional(),
+  "clientDefaultsRevision": zod.number().optional(),
   "revision": zod.number(),
   "generation": zod.number(),
   "operator": zod.string().nullable(),
@@ -341,8 +356,8 @@ export const GetOffboardingExchangesResponse = zod.object({
   "address": zod.string(),
   "persona": zod.string(),
   "consentReference": zod.string().optional(),
-  "escalationMemberId": zod.string(),
-  "escalationAddress": zod.string(),
+  "escalationMemberId": zod.string().optional(),
+  "escalationAddress": zod.string().optional(),
   "escalationConsentReference": zod.string().optional()
 }))
 }),
@@ -379,6 +394,7 @@ export const EnrollOffboardingExchangeParams = zod.object({
 export const EnrollOffboardingExchangeBody = zod.object({
   "expectedRevision": zod.number(),
   "enabled": zod.boolean(),
+  "escalationEnabled": zod.boolean().optional(),
   "agentId": zod.string().optional(),
   "confirmCommunicationOnly": zod.literal(true),
   "recipients": zod.array(zod.object({
@@ -387,8 +403,8 @@ export const EnrollOffboardingExchangeBody = zod.object({
   "address": zod.string(),
   "persona": zod.string(),
   "consentReference": zod.string().optional(),
-  "escalationMemberId": zod.string(),
-  "escalationAddress": zod.string(),
+  "escalationMemberId": zod.string().optional(),
+  "escalationAddress": zod.string().optional(),
   "escalationConsentReference": zod.string().optional()
 }))
 })
@@ -438,6 +454,9 @@ export const EnrollOffboardingExchangeResponse = zod.object({
 })),
   "enrollment": zod.object({
   "enabled": zod.boolean(),
+  "escalationEnabled": zod.boolean().optional(),
+  "inheritsClientDefaults": zod.boolean().optional(),
+  "clientDefaultsRevision": zod.number().optional(),
   "revision": zod.number(),
   "generation": zod.number(),
   "operator": zod.string().nullable(),
@@ -450,8 +469,8 @@ export const EnrollOffboardingExchangeResponse = zod.object({
   "address": zod.string(),
   "persona": zod.string(),
   "consentReference": zod.string().optional(),
-  "escalationMemberId": zod.string(),
-  "escalationAddress": zod.string(),
+  "escalationMemberId": zod.string().optional(),
+  "escalationAddress": zod.string().optional(),
   "escalationConsentReference": zod.string().optional()
 }))
 }),
@@ -545,6 +564,9 @@ export const ActOffboardingExchangeResponse = zod.object({
 })),
   "enrollment": zod.object({
   "enabled": zod.boolean(),
+  "escalationEnabled": zod.boolean().optional(),
+  "inheritsClientDefaults": zod.boolean().optional(),
+  "clientDefaultsRevision": zod.number().optional(),
   "revision": zod.number(),
   "generation": zod.number(),
   "operator": zod.string().nullable(),
@@ -557,8 +579,8 @@ export const ActOffboardingExchangeResponse = zod.object({
   "address": zod.string(),
   "persona": zod.string(),
   "consentReference": zod.string().optional(),
-  "escalationMemberId": zod.string(),
-  "escalationAddress": zod.string(),
+  "escalationMemberId": zod.string().optional(),
+  "escalationAddress": zod.string().optional(),
   "escalationConsentReference": zod.string().optional()
 }))
 }),

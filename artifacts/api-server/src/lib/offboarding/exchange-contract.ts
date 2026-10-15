@@ -30,7 +30,8 @@ export type PilotTask = {
 export type Enrollment = {
   enabled: boolean; revision: number; generation: number; operator: string | null; agentId: string | null;
   mailbox: string | null; approvedAt: string | null;
-  recipients: Array<{ taskId: typeof TASK_IDS[number]; memberId: string; address: string; persona: string; consentReference?: string; escalationMemberId: string; escalationAddress: string; escalationConsentReference?: string }>;
+  escalationEnabled?: boolean; inheritsClientDefaults?: boolean; clientDefaultsRevision?: number;
+  recipients: Array<{ taskId: typeof TASK_IDS[number]; memberId: string; address: string; persona: string; consentReference?: string; escalationMemberId?: string; escalationAddress?: string; escalationConsentReference?: string }>;
 };
 export type CommunicationChecks = { emailConsent: boolean; emailVerified: boolean; reviewRequired: boolean; basis: "client-declared"; changedBy: string | null; reviewedBy: string | null; reviewReference: string | null };
 export type PilotState = { clock: string; tasks: PilotTask[]; enrollment: Enrollment; communicationChecks?: CommunicationChecks };
@@ -47,9 +48,10 @@ export const EnrollmentInput = z.object({
   recipients: z.array(z.object({
     taskId: TaskId, memberId: z.string().min(1).max(160), address: z.string().email().max(254),
     persona: z.string().min(1).max(160), consentReference: z.string().min(1).max(512).optional(),
-    escalationMemberId: z.string().min(1).max(160), escalationAddress: z.string().email().max(254),
+    escalationMemberId: z.string().max(160).optional(), escalationAddress: z.union([z.string().email().max(254), z.literal("")]).optional(),
     escalationConsentReference: z.string().min(1).max(512).optional(),
   }).strict()).max(6),
+  escalationEnabled: z.boolean().optional(),
   confirmCommunicationOnly: z.literal(true),
 }).strict();
 

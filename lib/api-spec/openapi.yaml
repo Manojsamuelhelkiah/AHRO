@@ -104,9 +104,11 @@ paths:
                 expectedRevision: { type: integer }
                 agentId: { type: string }
                 recipients: { type: array, items: { $ref: "#/components/schemas/OffboardingRecipient" } }
+                enabled: { type: boolean }
+                escalationEnabled: { type: boolean }
       responses:
         "200":
-          description: Client defaults saved without enrollment or dispatch
+          description: Client email settings saved and inherited by eligible cases without dispatch
           content:
             application/json:
               schema: { $ref: "#/components/schemas/OffboardingGmailDefaults" }
@@ -207,6 +209,7 @@ paths:
               properties:
                 expectedRevision: { type: integer }
                 enabled: { type: boolean }
+                escalationEnabled: { type: boolean }
                 agentId: { type: string }
                 confirmCommunicationOnly: { type: boolean, enum: [true] }
                 recipients:
@@ -7387,14 +7390,16 @@ components:
         expectedRevision: { type: integer }
     OffboardingGmailDefaults:
       type: object
-      required: [revision, agentId, recipients]
+      required: [revision, agentId, recipients, enabled, escalationEnabled]
       properties:
         revision: { type: integer }
         agentId: { type: string }
         recipients: { type: array, items: { $ref: "#/components/schemas/OffboardingRecipient" } }
+        enabled: { type: boolean }
+        escalationEnabled: { type: boolean }
     OffboardingRecipient:
       type: object
-      required: [taskId, memberId, address, persona, escalationMemberId, escalationAddress]
+      required: [taskId, memberId, address, persona]
       properties:
         taskId: { type: string }
         memberId: { type: string }
@@ -7488,6 +7493,9 @@ components:
           required: [enabled, revision, generation, operator, agentId, mailbox, approvedAt, recipients]
           properties:
             enabled: { type: boolean }
+            escalationEnabled: { type: boolean }
+            inheritsClientDefaults: { type: boolean }
+            clientDefaultsRevision: { type: integer }
             revision: { type: integer }
             generation: { type: integer }
             operator: { type: [string, "null"] }

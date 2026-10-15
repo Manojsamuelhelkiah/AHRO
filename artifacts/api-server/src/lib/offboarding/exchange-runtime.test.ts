@@ -8,7 +8,7 @@ import { db, pool, organizationsTable, organizationMembershipsTable, accessNamed
 import { recordHumanPermissionDecision } from "../human-permissions";
 import { SENSITIVE_DATA_CLASSES } from "../onboarding/sensitive-lifecycle";
 import { externalProviderDispatchDenied } from "../onboarding/provider-policy";
-import { provisionExchangePilots, enrollExchange, exchangeAction, stateOf, readExchange, updateCommunicationChecks } from "./exchange-service";
+import { provisionExchangePilots, enrollExchange, exchangeAction, stateOf, readExchange, updateCommunicationChecks, queueExchangeInTransaction } from "./exchange-service";
 import { exchangeSetupChoices, saveGmailDefaults } from "./exchange-setup";
 import { withExchangeTestIdentity } from "./exchange-test-boundary";
 import { withOffboardingTestProvider, dispatchExchange, ingestExchangeMessage, reconcileAcceptedExchange } from "./exchange-runtime";
@@ -89,8 +89,48 @@ test("isolated contextual Gmail lifecycle: admission, partial/exception, replay,
       resourceKey, source: "named" as const, effect: "allow" as const, status: "active" as const, createdByUserId: "fixture-grantor",
       approvedByUserId: "fixture-independent-grantor", approvedAt: new Date() })));
     await controlled(async () => {
+      const taskOwnerOnly = [{ taskId: "access-inventory", memberId: owner, address: ownerAddress, persona: "Access owner" }];
+      const beforeCases = await exchangeSetupChoices("demo", operator);
+      let clientSettings = await saveGmailDefaults("demo", operator, {
+        expectedRevision: beforeCases.defaults.revision, agentId, recipients: taskOwnerOnly,
+        enabled: true, escalationEnabled: false,
+      });
+      assert.equal(sendCount, 0, "enabling client email before cases exist sends nothing");
+      await assert.rejects(saveGmailDefaults("demo", reviewer, {
+        expectedRevision: clientSettings.revision, agentId: "", recipients: [],
+        enabled: false, escalationEnabled: false,
+      }), /administrator/);
       const provisioned = await provisionExchangePilots("demo", operator, { confirmAddThree: true });
       assert.equal(provisioned.caseIds.length, 3);
+      for (const id of provisioned.caseIds) {
+        const enrollment = stateOf(await pilot(id)).enrollment;
+        assert.equal(enrollment.enabled, true, "future eligible cases inherit client enablement");
+        assert.equal(enrollment.inheritsClientDefaults, true);
+        assert.equal(enrollment.escalationEnabled, false);
+        assert.equal(enrollment.recipients[0].escalationMemberId, undefined);
+      }
+      assert.equal((await db.select().from(offbExchanges)).length, 0, "inherited enablement never starts a request");
+      await assert.rejects(action(provisioned.caseIds[0], "request", { taskId: "access-inventory" }), /standard voluntary-resignation plan/);
+      const first = provisioned.caseIds[0];
+      await enrollExchange("demo", operator, first, { expectedRevision: stateOf(await pilot(first)).enrollment.revision,
+        enabled: true, escalationEnabled: false, agentId, recipients: taskOwnerOnly, confirmCommunicationOnly: true });
+      assert.equal(stateOf(await pilot(first)).enrollment.inheritsClientDefaults, false,
+        "a case override can be saved before the plan is ready without bypassing request readiness");
+      const pausedCase = provisioned.caseIds[2];
+      await enrollExchange("demo", operator, pausedCase, { expectedRevision: stateOf(await pilot(pausedCase)).enrollment.revision,
+        enabled: false, escalationEnabled: false, recipients: [], confirmCommunicationOnly: true });
+      clientSettings = await saveGmailDefaults("demo", operator, { expectedRevision: clientSettings.revision, agentId,
+        recipients: taskOwnerOnly, enabled: false, escalationEnabled: false });
+      const queuedPilot = await pilot(first);
+      await assert.rejects(db.transaction(tx => queueExchangeInTransaction(tx, queuedPilot, stateOf(queuedPilot).tasks[0], "request")), /paused for this client/);
+      assert.equal((await readExchange("demo", operator, first))!.enrollment.enabled, false,
+        "tenant pause also hides effective enablement on case overrides");
+      clientSettings = await saveGmailDefaults("demo", operator, { expectedRevision: clientSettings.revision, agentId,
+        recipients: [{ ...taskOwnerOnly[0], escalationMemberId: escalation, escalationAddress }],
+        enabled: true, escalationEnabled: true });
+      assert.equal(stateOf(await pilot(pausedCase)).enrollment.enabled, false, "tenant re-enable does not erase a case-specific pause");
+      assert.equal(stateOf(await pilot(provisioned.caseIds[1])).enrollment.enabled, true, "existing inherited cases receive settings updates");
+      assert.equal(sendCount, 0, "client settings and overrides never send initial mail");
       assert.equal((await db.select().from(onbSensitiveLifecyclePolicies)).length, 0,
         "fixed fictional metadata does not create or approve tenant collection policies");
       await assert.rejects(createSeparations("demo", operator, {
@@ -111,7 +151,7 @@ test("isolated contextual Gmail lifecycle: admission, partial/exception, replay,
       assert.equal(defaults.recipients.length, 1);
       assert.deepEqual((await exchangeSetupChoices("demo", operator)).defaults, defaults);
       await assert.rejects(saveGmailDefaults("demo", operator, { expectedRevision: choices.defaults.revision, agentId, recipients: defaultRecipients }), /changed/);
-      assert.equal(sendCount, 0, "reusable defaults never send or enroll a case");
+      assert.equal(sendCount, 0, "reusable defaults never start a request");
       await assert.rejects(exchangeSetupChoices("other", operator), /Demo/);
       assert.deepEqual((await provisionExchangePilots("demo", operator, { confirmAddThree: true })).caseIds, provisioned.caseIds);
       assert.equal(sendCount, 0, "provisioning never sends");

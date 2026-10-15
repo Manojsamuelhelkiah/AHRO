@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { clerkClient } from "@clerk/express";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql, inArray } from "drizzle-orm";
 import { db, offbCases, offbExchangePilots, offbExchanges, onbCases, organizationsTable, accessAgents, organizationMembershipsTable } from "@workspace/db";
 import { resolveEffectiveAccessInTransaction } from "../access-governance";
 import { hasHumanPermissions } from "../human-permissions";
@@ -19,6 +19,7 @@ import { externalProviderDispatchDenied } from "../onboarding/provider-policy";
 import { exchangeTestIdentity } from "./exchange-test-boundary";
 import { getUatCaseIsolation } from "../onboarding/uat-isolation";
 import { sourceHandling, type SourceHandling } from "./source-handling";
+import { readClientDefaults, requireClientEmailEnabled, validateEscalation, normalizedRecipients, type ClientDefaults } from "./exchange-client-settings";
 
 export const PILOT_PROVENANCE = "offboarding-contextual/v1";
 export type PilotRow = typeof offbExchangePilots.$inferSelect;
@@ -136,6 +137,8 @@ export async function provisionExchangePilots(org: string, actor: string, input:
         state: state as unknown as Record<string, unknown> });
       ids.push(result.caseId);
     }
+    const defaults = await readClientDefaults(tx, org);
+    if (defaults.enabled) await applyClientDefaultsToPilots(tx, org, defaults);
     return { caseIds: ids, sent: 0 };
   }));
 }
@@ -153,20 +156,25 @@ export async function enrollExchange(org: string, actor: string, id: number, raw
     const { pilot, row } = await loadPilot(tx, org, id), state = stateOf(pilot);
     if (state.enrollment.revision !== b.expectedRevision) throw new SeparationError("Enrollment changed; reload before approving.");
     if (b.enabled) {
-      const due = await policyGate(tx, row);
-      if (!b.agentId || !b.recipients.length) throw new SeparationError("Enroll at least one task owner and an independent escalation contact, and choose a registered agent.");
+      await requireClientEmailEnabled(tx, org);
+      // Project deadlines when a reviewed plan is already ready, but saving
+      // communication settings does not require or approve that plan.
+      let due: string | undefined;
+      try { due = await policyGate(tx, row); }
+      catch (error) { if (!(error instanceof SeparationError)) throw error; }
+      if (!b.agentId || !b.recipients.length) throw new SeparationError("Choose a registered agent and at least one task owner.");
+      validateEscalation(b.recipients, b.escalationEnabled ?? true);
       await agentGate(tx, org, actor, b.agentId, id);
       if (new Set(b.recipients.map(r => r.taskId)).size !== b.recipients.length) throw new SeparationError("Each task needs exactly one enrolled source owner.");
       for (const r of b.recipients) {
-        if (r.memberId === r.escalationMemberId || r.address.toLowerCase() === r.escalationAddress.toLowerCase()) throw new SeparationError("Escalation requires a distinct accountable person and mailbox.");
         await verifiedRecipient(tx, org, r.memberId, r.address, id, true, false);
-        await verifiedRecipient(tx, org, r.escalationMemberId, r.escalationAddress, id, false, false);
+        if (b.escalationEnabled ?? true) await verifiedRecipient(tx, org, r.escalationMemberId!, r.escalationAddress!, id, false, false);
         const task = state.tasks.find(t => t.id === r.taskId)!;
         if (task.owner !== r.memberId) {
           task.revision++; task.owner = r.memberId; task.confirmed = []; task.outstanding = [...task.expected]; task.status = "pending"; task.evidence = []; task.exception = null;
           delete task.handling;
         }
-        task.dueAt = due; task.notBeforeAt = task.id === "access-closure" ? due : null;
+        if (due) { task.dueAt = due; task.notBeforeAt = task.id === "access-closure" ? due : null; }
       }
       const stale = new Set(state.tasks.filter(t => t.evidence.length === 0).map(t => t.id));
       let changed = true;
@@ -180,8 +188,10 @@ export async function enrollExchange(org: string, actor: string, id: number, raw
       }
     }
     state.enrollment = { enabled: b.enabled, revision: state.enrollment.revision + 1, generation: row.generation,
+      escalationEnabled: b.escalationEnabled ?? state.enrollment.escalationEnabled ?? true,
+      inheritsClientDefaults: false,
       operator: actor, agentId: b.agentId ?? state.enrollment.agentId, mailbox: mailbox ?? state.enrollment.mailbox,
-      approvedAt: new Date().toISOString(), recipients: b.enabled ? b.recipients.map(({ consentReference: _legacyConsent, escalationConsentReference: _legacyEscalation, ...r }) => ({ ...r, address: r.address.toLowerCase(), escalationAddress: r.escalationAddress.toLowerCase() })) : state.enrollment.recipients };
+      approvedAt: new Date().toISOString(), recipients: b.enabled ? normalizedRecipients(b.recipients, b.escalationEnabled ?? true) : state.enrollment.recipients };
     state.communicationChecks = { ...checksOf(state), changedBy: actor };
     const saved = await persistState(tx, pilot, state);
     await audit(tx, org, actor, b.enabled ? "gmail-enrolled" : "gmail-paused", id, saved.version);
@@ -189,8 +199,57 @@ export async function enrollExchange(org: string, actor: string, id: number, raw
   }));
 }
 
+/** Snapshot the admin's client approval only into current registered pilots.
+ * Explicit per-case overrides/pauses stay untouched. Never queues a message. */
+export async function applyClientDefaultsToPilots(tx: Tx, org: string, defaults: ClientDefaults) {
+  const pilots = await tx.select({ pilot: offbExchangePilots }).from(offbExchangePilots)
+    .innerJoin(offbCases, and(eq(offbCases.organizationId, offbExchangePilots.organizationId),
+      eq(offbCases.id, offbExchangePilots.caseId), eq(offbCases.generation, offbExchangePilots.generation),
+      inArray(offbCases.status, ["held", "restricted", "active", "paused", "closure-preparation"]))).where(and(
+    eq(offbExchangePilots.organizationId, org), eq(offbExchangePilots.provenance, PILOT_PROVENANCE),
+  )).orderBy(offbExchangePilots.caseId);
+  for (const { pilot: candidate } of pilots) {
+    // The tenant switch also governs explicit overrides. Fence every eligible
+    // case before changing the client setting, even when its snapshot is kept.
+    await acquireCaseDispatchMutationLock(tx, org, candidate.caseId);
+    const { pilot, row } = await loadPilot(tx, org, candidate.caseId), state = stateOf(pilot);
+    // Recheck under the case lock, including explicit case-level opt-outs.
+    if ((!state.enrollment.inheritsClientDefaults && state.enrollment.operator) ||
+        state.enrollment.clientDefaultsRevision === defaults.revision) continue;
+    const changed = new Set<string>();
+    for (const task of state.tasks) {
+      const owner = defaults.recipients.find(r => r.taskId === task.id)?.memberId ?? null;
+      if (task.owner !== owner) changed.add(task.id);
+      task.owner = owner;
+    }
+    let extended = true;
+    while (extended) {
+      extended = false;
+      for (const task of state.tasks) if (!changed.has(task.id) && task.prerequisites.some(p => changed.has(p))) {
+        changed.add(task.id); extended = true;
+      }
+    }
+    for (const task of state.tasks) if (changed.has(task.id)) {
+      task.revision++; task.confirmed = []; task.outstanding = [...task.expected];
+      task.status = "pending"; task.evidence = []; task.exception = null; delete task.handling;
+    }
+    state.enrollment = {
+      enabled: defaults.enabled, escalationEnabled: defaults.escalationEnabled,
+      inheritsClientDefaults: true, clientDefaultsRevision: defaults.revision,
+      revision: state.enrollment.revision + 1, generation: row.generation,
+      operator: defaults.operator, agentId: defaults.agentId || null, mailbox: defaults.mailbox,
+      approvedAt: new Date().toISOString(), recipients: normalizedRecipients(defaults.recipients, defaults.escalationEnabled),
+    };
+    await persistState(tx, pilot, state);
+    await audit(tx, org, defaults.operator!, "client-email-settings-applied", row.id, pilot.version + 1);
+  }
+}
+
 export async function exchangeView(tx: Tx, pilot: PilotRow) {
   const blockers: string[] = [];
+  const client = await readClientDefaults(tx, pilot.organizationId);
+  const clientEnabled = !client.clientControlConfigured || client.enabled;
+  if (!clientEnabled) blockers.push("Email is paused for this client. Enable email in Client defaults.");
   const [row] = await tx.select().from(offbCases).where(and(eq(offbCases.organizationId, pilot.organizationId), eq(offbCases.id, pilot.caseId)));
   try { if (!row) throw new SeparationError("Case missing."); await policyGate(tx, row); } catch (e) { blockers.push(e instanceof SeparationError ? e.message : "Current policy readiness could not be confirmed."); }
   if (!stateOf(pilot).enrollment.enabled) blockers.push("Gmail communication is not enabled. A named operator must approve the exact case and enrolled recipients.");
@@ -198,6 +257,7 @@ export async function exchangeView(tx: Tx, pilot: PilotRow) {
   if (messages.some(m => m.status === "ambiguous")) blockers.push("Gmail acceptance is unconfirmed. The connected mailbox is checked for the exact signed frozen request; no automatic resend is allowed. Investigate the provider record if reconciliation stays blocked.");
   if (!communicationAllowed(stateOf(pilot)) && stateOf(pilot).enrollment.enabled) blockers.push("Case email is paused pending manual consent or address review.");
   return { caseId: pilot.caseId, version: pilot.version, generation: pilot.generation, ...stateOf(pilot), communicationChecks: checksOf(stateOf(pilot)),
+    enrollment: { ...stateOf(pilot).enrollment, enabled: stateOf(pilot).enrollment.enabled && clientEnabled },
     exchanges: messages,
     closureAvailable: false, blockers };
 }
@@ -231,7 +291,7 @@ export async function updateCommunicationChecks(org: string, actor: string, id: 
       if (!state.enrollment.recipients.length) throw new SeparationError("Configure the case contacts before reviewing their addresses.");
       for (const r of state.enrollment.recipients) {
         await verifiedRecipient(tx, org, r.memberId, r.address, id, true);
-        await verifiedRecipient(tx, org, r.escalationMemberId, r.escalationAddress, id, false);
+        if (state.enrollment.escalationEnabled ?? true) await verifiedRecipient(tx, org, r.escalationMemberId!, r.escalationAddress!, id, false);
       }
       state.communicationChecks = { emailConsent: true, emailVerified: true, reviewRequired: false, basis: "client-declared",
         changedBy: actor, reviewedBy: actor, reviewReference: JSON.stringify({ consent: text(b.consentReference, "Consent review evidence"), email: text(b.emailReference, "Email review evidence"), version: pilot.version }) };
@@ -249,9 +309,15 @@ export async function updateCommunicationChecks(org: string, actor: string, id: 
 }
 
 export async function queueExchangeInTransaction(tx: Tx, pilot: PilotRow, task: PilotTask, kind: string, previous?: Observation) {
+  const client = await requireClientEmailEnabled(tx, pilot.organizationId);
   const state = stateOf(pilot), enrollment = state.enrollment;
   const binding = enrollment.recipients.find(r => r.taskId === task.id);
   if (!communicationAllowed(state) || !binding || !enrollment.operator || !enrollment.agentId || !enrollment.mailbox) throw new SeparationError("Configure case contacts and resolve any manual email review before sending.");
+  if (kind === "escalation" && (!(enrollment.escalationEnabled ?? true) ||
+    (client.clientControlConfigured && !client.escalationEnabled))) throw new SeparationError("Escalation is disabled for this case.");
+  const recipient = kind === "escalation" ? binding.escalationAddress : binding.address;
+  const memberId = kind === "escalation" ? binding.escalationMemberId : binding.memberId;
+  if (!recipient || !memberId) throw new SeparationError("A configured contact and address are required for this message.");
   if (task.status === "resolved" && kind !== "receipt") throw new SeparationError("This task has no outstanding portions.");
   const recent = await tx.select().from(offbExchanges).where(and(eq(offbExchanges.caseId, pilot.caseId), eq(offbExchanges.direction, "outbound"))).orderBy(desc(offbExchanges.createdAt)).limit(100);
   // A possibly dispatched operation must be reconciled even after enrollment
@@ -270,8 +336,7 @@ export async function queueExchangeInTransaction(tx: Tx, pilot: PilotRow, task: 
     id: randomUUID(), organizationId: pilot.organizationId, caseId: pilot.caseId, taskId: task.id,
     generation: pilot.generation, taskRevision: task.revision, enrollmentRevision: enrollment.revision,
     reference, direction: "outbound", kind, status: "queued",
-    recipient: kind === "escalation" ? binding.escalationAddress : binding.address,
-    memberId: kind === "escalation" ? binding.escalationMemberId : binding.memberId,
+    recipient, memberId,
     operator: enrollment.operator, agentId: enrollment.agentId, persona: kind === "escalation" ? "Accountable escalation contact" : binding.persona,
     mailbox: enrollment.mailbox, ...payload,
   }).returning();

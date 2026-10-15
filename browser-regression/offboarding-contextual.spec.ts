@@ -35,7 +35,7 @@ test("contextual offboarding: three additive cases, interface resolution, paused
     await route.fulfill({ json: {
       cases: fixture.caseIds.map((caseId: number, index: number) => ({ id: caseId, name: ["Alex Morgan", "Jordan Ellis", "Taylor Reed"][index] })),
       agents: [{ id: "owned-directory-agent", name: "Conversation agent" }],
-      defaults: { revision: 1, agentId: "", recipients: [] },
+      defaults: { revision: 1, agentId: "", recipients: [], enabled: false, escalationEnabled: true },
       members: [{ id: "directory-owner", name: "Alex Owner", addresses: ["owner@example.test"] },
         { id: "directory-escalation", name: "Jordan Escalation", addresses: ["escalation@example.test"] }],
     } });
@@ -57,8 +57,8 @@ test("contextual offboarding: three additive cases, interface resolution, paused
       .slice(0, 8).map(e => ({ tag: e.tagName, className: e.className, right: e.getBoundingClientRect().right })));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), JSON.stringify(overflow)).toBeTruthy();
   }
-  await settings.getByRole("button", { name: "Enable Gmail for this case" }).click();
-  await expect(settings.getByRole("alert").filter({ hasText: "different escalation contact" })).toBeVisible();
+  await settings.getByRole("button", { name: "Save and enable case override" }).click();
+  await expect(settings.getByRole("alert").filter({ hasText: "Escalation contacts are required" })).toBeVisible();
   await page.getByLabel("Case", { exact: true }).selectOption(String(fixture.caseIds[1]));
   await expect(settings.getByLabel("Task owner", { exact: true })).toHaveCount(0);
   await page.getByLabel("Case", { exact: true }).selectOption(String(id));
@@ -66,7 +66,8 @@ test("contextual offboarding: three additive cases, interface resolution, paused
   expect((await get(id)).enrollment.enabled).toBe(false);
   await page.goto("/client-setup");
   const defaults = page.getByLabel("Client Gmail defaults", { exact: true });
-  await defaults.locator("summary").click();
+  await expect(defaults.getByLabel("Enable email for client")).toBeVisible();
+  await defaults.getByLabel("Enable email for client").check();
   await defaults.getByLabel("Default registered agent").selectOption({ label: "Conversation agent" });
   await defaults.locator("fieldset").first().getByRole("checkbox").check();
   await defaults.locator("fieldset").first().getByLabel("Task owner", { exact: true }).selectOption({ label: "Alex Owner" });
@@ -75,7 +76,7 @@ test("contextual offboarding: three additive cases, interface resolution, paused
     await page.setViewportSize({ width, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
   }
-  const defaultValue = { revision: 2, agentId: "owned-directory-agent", recipients: [{
+  const defaultValue = { revision: 2, agentId: "owned-directory-agent", enabled: true, escalationEnabled: true, recipients: [{
     taskId: "access-inventory", memberId: "directory-owner", address: "owner@example.test", persona: "Access inventory",
     escalationMemberId: "directory-escalation", escalationAddress: "escalation@example.test",
   }] };
@@ -83,7 +84,7 @@ test("contextual offboarding: three additive cases, interface resolution, paused
     expect(route.request().postDataJSON()).not.toHaveProperty("consentReference");
     await route.fulfill({ json: defaultValue });
   });
-  await defaults.getByRole("button", { name: "Save client defaults" }).click();
+  await defaults.getByRole("button", { name: "Save client email settings" }).click();
   await expect(defaults.getByRole("status")).toHaveText("Client Gmail defaults saved.");
   await page.getByLabel("Case", { exact: true }).selectOption(String(fixture.caseIds[2]));
   await expect(settings.getByLabel("Registered agent", { exact: true })).toHaveValue("owned-directory-agent");

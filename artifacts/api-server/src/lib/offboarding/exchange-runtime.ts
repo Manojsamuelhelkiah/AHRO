@@ -20,7 +20,8 @@ import { hash } from "./service";
 import { interpretReply, uncertainObservation } from "./exchange-agent";
 import { explicitAttestation, communicationAllowed, type Observation } from "./exchange-contract";
 import { SeparationError } from "./model";
-import { receipt } from "./authority";
+import { receipt, lockTenant } from "./authority";
+import { requireClientEmailEnabled } from "./exchange-client-settings";
 import { logger } from "../logger";
 import { sourceHandling } from "./source-handling";
 
@@ -73,9 +74,13 @@ export async function dispatchExchange(id: string): Promise<void> {
   const entry = await ensureEffectJournalEntry(identity);
   const mailbox = await mailboxHealth();
   await withSensitiveLifecycleFence(prepared.organizationId, () => db.transaction(async tx => {
+    await lockTenant(tx, prepared.organizationId);
     await acquireCaseDispatchMutationLock(tx, prepared.organizationId, prepared.caseId);
     const { pilot, row } = await loadPilot(tx, prepared.organizationId, prepared.caseId), state = stateOf(pilot);
     const e = state.enrollment, task = state.tasks.find(t => t.id === prepared.taskId);
+    const client = await requireClientEmailEnabled(tx, prepared.organizationId);
+    if (prepared.kind === "escalation" && (!(e.escalationEnabled ?? true) ||
+        (client.clientControlConfigured && !client.escalationEnabled))) throw new SeparationError("Escalation is disabled.");
     const [message] = await tx.select().from(offbExchanges).where(eq(offbExchanges.id, id)).for("update");
     if (!message || message.status === "accepted") return;
     if (!task) throw new SeparationError("Task no longer exists.");
@@ -120,6 +125,7 @@ export async function reconcileAcceptedExchange(id: string): Promise<void> {
   if (!prepared || prepared.status !== "ambiguous") return;
   const mailbox = await mailboxHealth();
   await withSensitiveLifecycleFence(prepared.organizationId, () => db.transaction(async tx => {
+    await lockTenant(tx, prepared.organizationId);
     await acquireCaseDispatchMutationLock(tx, prepared.organizationId, prepared.caseId);
     const { pilot, row } = await loadPilot(tx, prepared.organizationId, prepared.caseId), s = stateOf(pilot), e = s.enrollment;
     const [message] = await tx.select().from(offbExchanges).where(eq(offbExchanges.id, id)).for("update");
@@ -192,6 +198,7 @@ export async function ingestExchangeMessage(msg: GmailMessage, rawMessage: strin
 async function recordExchangeReply(input: { outbound: ExchangeRow; msg: GmailMessage; body: string; address: string; proof: VerifiedSourceAttestation | null; statement: string }) {
   const { outbound, msg } = input;
   await withSensitiveLifecycleFence(outbound.organizationId, () => db.transaction(async tx => {
+    await lockTenant(tx, outbound.organizationId);
     await acquireCaseDispatchMutationLock(tx, outbound.organizationId, outbound.caseId);
     const { pilot, row } = await loadPilot(tx, outbound.organizationId, outbound.caseId), state = stateOf(pilot);
     const prior = await tx.select().from(offbExchanges).where(eq(offbExchanges.providerMessageId, msg.id));
@@ -201,6 +208,7 @@ async function recordExchangeReply(input: { outbound: ExchangeRow; msg: GmailMes
     const e = state.enrollment, binding = e.recipients.find(r => r.taskId === task.id);
     let authorized = false, blocker = "";
     try {
+      await requireClientEmailEnabled(tx, outbound.organizationId);
       if (!communicationAllowed(state) || outbound.status !== "accepted" || outbound.enrollmentRevision !== e.revision ||
           outbound.generation !== pilot.generation || outbound.taskRevision !== task.revision || !binding ||
           binding.memberId !== task.owner || binding.memberId !== outbound.memberId || binding.address !== input.address ||
@@ -303,6 +311,7 @@ async function scheduleOutstanding() {
     if (!communicationAllowed(stateOf(p))) continue;
     try {
       await withSensitiveLifecycleFence(p.organizationId, () => db.transaction(async tx => {
+        await lockTenant(tx, p.organizationId);
         await acquireCaseDispatchMutationLock(tx, p.organizationId, p.caseId);
         const { pilot, row } = await loadPilot(tx, p.organizationId, p.caseId), state = stateOf(pilot);
         if (!communicationAllowed(state)) return;
@@ -312,12 +321,17 @@ async function scheduleOutstanding() {
         const messages = await tx.select().from(offbExchanges).where(and(eq(offbExchanges.caseId, p.caseId), eq(offbExchanges.direction, "outbound"))).orderBy(desc(offbExchanges.createdAt)).limit(100);
         for (const task of state.tasks) {
           if (task.status === "resolved" || !state.enrollment.recipients.some(r => r.taskId === task.id)) continue;
+          if (!messages.some(m => m.taskId === task.id && m.kind === "request" &&
+            m.enrollmentRevision === state.enrollment.revision && m.taskRevision === task.revision)) continue;
           const last = messages.find(m => m.taskId === task.id && m.generation === pilot.generation && m.taskRevision === task.revision);
           // Enrollment/opening/estate setup sends nothing. Only explicitly initiated tasks get reminders.
           if (!last || last.status !== "accepted" || Date.now() - (last.attemptedAt ?? last.createdAt).getTime() < 24 * 3600000) continue;
           const overdue = Date.now() > Date.parse(task.dueAt);
           if (overdue && messages.some(m => m.taskId === task.id && m.kind === "escalation" && m.enrollmentRevision === state.enrollment.revision)) continue;
-          await queueExchangeInTransaction(tx, pilot, task, overdue ? "escalation" : "follow-up", uncertainObservation("The requested source confirmation remains outstanding."));
+          const client = await requireClientEmailEnabled(tx, p.organizationId);
+          const escalate = overdue && (state.enrollment.escalationEnabled ?? true) &&
+            (!client.clientControlConfigured || client.escalationEnabled);
+          await queueExchangeInTransaction(tx, pilot, task, escalate ? "escalation" : "follow-up", uncertainObservation("The requested source confirmation remains outstanding."));
         }
       }));
     } catch { logger.warn({ caseId: p.caseId, component: "offboarding-exchanges" }, "Conversation continuation blocked by current admission checks"); }

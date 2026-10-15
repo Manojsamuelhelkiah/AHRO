@@ -39,8 +39,8 @@ export interface OffboardingRecipient {
   persona: string;
   /** @deprecated */
   consentReference?: string;
-  escalationMemberId: string;
-  escalationAddress: string;
+  escalationMemberId?: string;
+  escalationAddress?: string;
   /** @deprecated */
   escalationConsentReference?: string;
 }
@@ -49,6 +49,8 @@ export interface OffboardingGmailDefaults {
   revision: number;
   agentId: string;
   recipients: OffboardingRecipient[];
+  enabled: boolean;
+  escalationEnabled: boolean;
 }
 
 export interface OffboardingSourceHandling {
@@ -147,6 +149,9 @@ export type OffboardingExchangeViewCommunicationChecks = {
 
 export type OffboardingExchangeViewEnrollment = {
   enabled: boolean;
+  escalationEnabled?: boolean;
+  inheritsClientDefaults?: boolean;
+  clientDefaultsRevision?: number;
   revision: number;
   generation: number;
   /** @nullable */
@@ -11706,6 +11711,8 @@ export type SaveOffboardingGmailDefaultsBody = {
   expectedRevision: number;
   agentId: string;
   recipients: OffboardingRecipient[];
+  enabled?: boolean;
+  escalationEnabled?: boolean;
 };
 
 export type GetOffboardingExchangeSetupParams = {
@@ -11747,6 +11754,7 @@ export type ProvisionOffboardingExchanges200 = {
 export type EnrollOffboardingExchangeBody = {
   expectedRevision: number;
   enabled: boolean;
+  escalationEnabled?: boolean;
   agentId?: string;
   confirmCommunicationOnly: true;
   recipients: OffboardingRecipient[];

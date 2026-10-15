@@ -15,8 +15,21 @@ intended visible distinction.
 
 **How to apply:** Do not restore preparation/enrollment setup forms as prominent
 case-page sections. Keep provenance, verification, permissions and provider fences
-internally enforced. Reusable defaults never enroll recipients or grant dispatch
-authority by themselves.
+internally enforced. Merely saving reusable defaults never starts communication.
+A named client administrator may explicitly enable client-wide email for eligible
+Access and equipment cases; those cases inherit a version-bound contact snapshot
+unless explicitly overridden or paused. Initial requests remain explicit and
+case readiness is independently checked before sending.
+
+Escalation is optional, controlled by the client administrator's escalation
+switch; escalation contacts are required only when it is enabled.
+
+**Why:** The user explicitly requested Enable email for client in Client defaults
+and rejected mandatory escalation contacts when escalation is not being used.
+
+**How to apply:** Saving settings must work before a case plan is ready without
+approving that plan. Client pause also blocks overridden cases' sends; enabling
+the client must not erase explicit case pauses or send initial mail.
 
 Email consent and email verification are assumed Yes as client declarations.
 Use two small default-checked case indicators; no routine consent forms or
