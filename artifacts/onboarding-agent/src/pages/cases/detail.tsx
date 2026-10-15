@@ -1,15 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'wouter';
+import React, { useEffect } from 'react';
+import { useParams, useLocation, useSearch } from 'wouter';
 import {
   useGetOnboardingCase,
-  useListOnboardingCaseEvents,
   useListOnboardingCaseCommunications,
   useListOnboardingCaseDocuments,
   useListOnboardingApprovals,
   useListOnboardingCaseRecords,
   useGetOnboardingOperationalRequests,
   getGetOnboardingCaseQueryKey,
-  getListOnboardingCaseEventsQueryKey,
   getListOnboardingCaseCommunicationsQueryKey,
   getListOnboardingCaseDocumentsQueryKey,
   getListOnboardingApprovalsQueryKey,
@@ -30,8 +28,12 @@ import { CaseHeader, OriginalIntent, CaseHealthStrip, CaseTabs, isOfflineDemoSam
 import { GatewaysStrip } from './detail/gateways-strip';
 import { EmployeeVaultPanel } from './detail/employee-vault-panel';
 import { OverviewTab } from './detail/overview';
-import { TasksTab, ActivityTab, CommunicationsTab, AuditTab } from './detail/tabs-content';
-import { SyntheticJourneySummary, SyntheticJourneyStages, SyntheticJourneyCommunications } from './detail/synthetic-journey';
+import { CommunicationsTab, AuditTab } from './detail/tabs-content';
+import { SyntheticJourneySummary, SyntheticJourneyCommunications } from './detail/synthetic-journey';
+import { ProgressTab } from './detail/progress-tab';
+import { ProgressHistory } from './detail/progress-history';
+import { useCaseHistory } from './detail/use-case-history';
+import { caseDestinationFromSearch, caseSectionSearch } from './detail/progress-navigation';
 import { FrontlineTab } from './detail/frontline-tab';
 import { DocumentsTab } from './detail/documents-tab';
 import { ExplainabilityTab, clearCaseAnalysisMemory } from './detail/explainability-tab';
@@ -48,12 +50,13 @@ export function CaseDetailPage() {
   const { id } = useParams();
   const caseId = Number(id);
   const { user } = useUser();
-  const [activeTab, setActiveTab] = useState(() => {
-    const requested = typeof window === "undefined"
-      ? null
-      : new URLSearchParams(window.location.search).get("tab")?.toLowerCase();
-    return requested === "context" ? "Transaction context" : requested === "communications" ? "Communications" : requested === "early-tenure" ? "Early tenure" : "Overview";
-  });
+  const [location, navigate] = useLocation();
+  const search = useSearch();
+  const destination = caseDestinationFromSearch(search);
+  const activeTab = destination.tab;
+  const setActiveTab = (tab: string, section?: string) => {
+    navigate(`${location}${caseSectionSearch(search, tab, section)}${window.location.hash}`);
+  };
 
   const { data: c, isLoading, error: caseError } = useGetOnboardingCase(caseId, {
     query: {
@@ -110,15 +113,9 @@ export function CaseDetailPage() {
     retry: false,
   });
 
-  const { data: events } = useListOnboardingCaseEvents(caseId, {
-    query: {
-      enabled: !!caseId && permissions?.access.flowRead === true && permissions?.access.notesRead === true,
-      queryKey: getListOnboardingCaseEventsQueryKey(caseId),
-      refetchInterval: () => {
-        return (c?.orchestrationStatus === 'running' || c?.orchestrationStatus === 'waiting-approval' || c?.orchestrationStatus === 'blocked' || c?.orchestrationStatus === 'checklist-blocked' || c?.orchestrationStatus === 'idle') ? 2500 : false;
-      }
-    }
-  });
+  const history = useCaseHistory(caseId, getPinnedOrganizationIdForPage() || 'anon',
+    user?.id || 'anon', permissions, Boolean(permissionsError || caseError), c?.orchestrationStatus);
+  const events = history.events;
 
   const { data: docs } = useListOnboardingCaseDocuments(caseId, {
     query: {
@@ -262,7 +259,10 @@ export function CaseDetailPage() {
           {isFictionalOfflineExample(c) && <p className="mt-2 text-xs">Read-only · External action not authorized.</p>}</div>
         {c.batchIntake ? <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} /> :
           <RestrictedActionNotice>Submitted fields require current profile, notes and sensitive-record read authority. They have not been removed from the case.</RestrictedActionNotice>}
-        {permissions.access.notesRead && <ActivityTab events={events || []} />}
+        <section aria-label="History" className="space-y-4">
+          <h2 className="font-semibold">History</h2>
+          <ProgressHistory {...history} />
+        </section>
       </div>
     </CaseAccessProvider>;
   }
@@ -337,20 +337,18 @@ export function CaseDetailPage() {
             pendingApprovals={pendingApprovals}
             records={records || []}
             setTab={setActiveTab}
+            history={history}
           />
         )}
 
         {activeTab === 'Early tenure' && !offlineSample && (permissions.access.flowEdit && permissions.access.profileEdit && permissions.sensitive.identity.edit
           ? <EarlyTenurePanel caseId={caseId} joiningDate={c.joiningDate} />
           : <RestrictedActionNotice>Early-tenure case actions are restricted by your current permissions.</RestrictedActionNotice>)}
-        {activeTab === 'Tasks' && <TasksTab c={c} />}
+        {activeTab === 'Progress' && <ProgressTab key={caseId} c={c}
+          pendingApprovals={permissions.access.notesRead ? pendingApprovals : []}
+          history={history} section={destination.section} />}
         {activeTab === 'Frontline' && <FrontlineTab key={caseId} caseId={caseId} />}
         {activeTab === 'Documents' && <DocumentsTab caseId={caseId} docs={docs || []} />}
-        {activeTab === 'Activity' && (permissions.access.notesRead
-          ? <>{c.syntheticJourney && <div className="mb-6"><SyntheticJourneyStages journey={c.syntheticJourney} timeline /></div>}
-            {c.syntheticJourney && <h2 className="mb-4 font-semibold">Recorded activity</h2>}
-            <ActivityTab events={events || []} /></>
-          : <RestrictedActionNotice>Activity notes are restricted by your current permissions.</RestrictedActionNotice>)}
         {activeTab === 'Communications' && <>{c.syntheticJourney && <><SyntheticJourneyCommunications journey={c.syntheticJourney} />
           <h2 className="mb-4 font-semibold">Message history · delivery status</h2></>}
           <CommunicationsTab caseId={caseId} c={c} comms={comms || []} channels={channels} requestsEnv={requestsEnv} requestsLoadError={requestsLoadError} enforceCasePermissions /></>}
@@ -358,7 +356,7 @@ export function CaseDetailPage() {
           ? <AuditTab events={events || []} approvals={approvals} records={records || []} />
           : <RestrictedActionNotice>Audit notes are restricted by your current permissions.</RestrictedActionNotice>)}
         {activeTab === 'Transaction context' && <TransactionContextTab caseId={caseId} setTab={setActiveTab}
-          availableTabs={['Overview', 'Tasks', 'Documents', ...(permissions.access.notesRead ? ['Activity', 'Communications', 'Audit'] : [])]} />}
+          availableTabs={['Overview', 'Progress', 'Documents', ...(permissions.access.notesRead ? ['Communications', 'Audit'] : [])]} />}
         {activeTab === 'Ask AI' && (canAnalyze
           ? <ExplainabilityTab key={`${getPinnedOrganizationIdForPage() || 'anon'}-${user?.id || 'anon'}-${caseId}`} caseId={caseId} userId={user?.id} />
           : <RestrictedActionNotice>Ask AI requires current case and sensitive-field read permissions. Review only the case records available to your account.</RestrictedActionNotice>)}

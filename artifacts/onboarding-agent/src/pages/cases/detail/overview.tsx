@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SyntheticJourneyStages, SyntheticJourneyActions, SyntheticJourneyCommunications } from './synthetic-journey';
+import { SyntheticJourneyActions, SyntheticJourneyCommunications } from './synthetic-journey';
 import { lifecycleStageText } from '../../../lib/lifecycle-stage-presentation';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CaseReadiness } from './CaseReadiness';
@@ -17,19 +17,20 @@ import { CasePrivacyControls } from './case-privacy-controls';
 import { RestrictedActionNotice, useCaseAccess } from './case-access';
 import { caseOwnerOf, caseTypeOf, isFictionalOfflineExample, workstreamPresentation } from '../case-presentation';
 
-export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId }: any) {
+export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId, history }: any) {
   const access = useCaseAccess();
   const showOnboardingReadiness = caseTypeOf(c) === 'Onboarding' && !isOfflineDemoSample(c) && !c.controllerRetired;
   if (c.syntheticJourney) return <div className="min-w-0 space-y-6 pb-12">
     <SyntheticJourneyActions journey={c.syntheticJourney} />
-    <SyntheticJourneyStages journey={c.syntheticJourney} />
+    <button type="button" className="min-h-11 text-sm font-semibold text-[var(--primary)] underline"
+      onClick={() => setTab('Progress', 'current-work')}>View current work and stages</button>
     <SyntheticJourneyCommunications journey={c.syntheticJourney} />
     <section className="rounded-lg border p-4 text-sm">
       <h2 className="font-semibold">Recorded operational history</h2>
       <p>Recorded lifecycle: {lifecycleStageText(c.lifecycleStage)} · orchestration: {c.orchestrationStatus}.
       </p>
       <p>Current recorded human assignment: {c.currentActionOwner || 'No unresolved assignment recorded'}.</p>
-      <button className="mt-3 underline" onClick={() => setTab('Activity')}>View recorded activity</button>
+      <button className="mt-3 min-h-11 underline" onClick={() => setTab('Progress', 'history')}>View recorded history</button>
       <button className="ml-4 mt-3 underline" onClick={() => setTab('Communications')}>View recorded communications</button>
     </section>
   </div>;
@@ -42,7 +43,7 @@ export function OverviewTab({ c, events, docs, comms, approvals, pendingApproval
           : <RestrictedActionNotice>Onboarding requirements are restricted by your current permissions.</RestrictedActionNotice>)}
         <NextActions c={c} pendingApprovals={pendingApprovals} setTab={setTab} />
         {access?.access.notesRead
-          ? <RecentActivitySummary events={events} />
+          ? <RecentActivitySummary events={events} setTab={setTab} history={history} />
           : <RestrictedActionNotice>Case notes and activity details are restricted by your current permissions.</RestrictedActionNotice>}
       </div>
       <div className="w-full xl:w-[360px] shrink-0">
@@ -323,7 +324,7 @@ function DocumentsSummaryCard({ docs, setTab }: any) {
 }
 
 
-export function NextActions({ c, pendingApprovals, setTab }: any) {
+export function NextActions({ c, pendingApprovals, setTab, showPlanLink = true }: any) {
   if (c.syntheticJourney) return <SyntheticJourneyActions journey={c.syntheticJourney} />;
   const actions: { title: string; desc: string; owner: string; priority: boolean; status?: string }[] = [];
   
@@ -337,7 +338,8 @@ export function NextActions({ c, pendingApprovals, setTab }: any) {
   }
 
   const restricted = (c.workstreams || []).filter((w: any) => w.key === 'restricted');
-  const waitingWorkstreams = (c.workstreams || []).filter((w: any) => w.key !== 'restricted' && w.status !== 'ready');
+  const waitingWorkstreams = (c.workstreams || []).filter((w: any) => w.key !== 'restricted'
+    && !['ready', 'completed', 'done', 'complete', 'rejected', 'cancelled'].includes(w.status));
   waitingWorkstreams.forEach((w: any) => {
     actions.push({
       title: w.label,
@@ -373,14 +375,14 @@ export function NextActions({ c, pendingApprovals, setTab }: any) {
           </div>
         ))}
       </div>
-      <button onClick={() => setTab('Tasks')} className="text-[var(--primary)] text-[var(--text-xs)] font-bold mt-4 text-left hover:underline">
-        Execution plan →
-      </button>
+      {showPlanLink && <button onClick={() => setTab('Progress', 'current-work')} className="min-h-11 text-[var(--primary)] text-[var(--text-xs)] font-bold mt-4 text-left hover:underline">
+        Current work and plan →
+      </button>}
     </div>
   );
 }
 
-function RecentActivitySummary({ events }: any) {
+function RecentActivitySummary({ events, setTab, history }: any) {
   // Events arrive ascending — take the last 4 and show newest first.
   const recent = (events ? [...events].slice(-4).reverse() : []);
 
@@ -403,8 +405,12 @@ function RecentActivitySummary({ events }: any) {
             </div>
           </div>
         ))}
-        {recent.length === 0 && <p className="text-[var(--text-sm)] text-[var(--text-muted)]">No recent activity.</p>}
+        {history?.failed ? <p role="alert">Recorded history could not be loaded.</p>
+          : history?.loading ? <p role="status">Loading recorded history...</p>
+            : recent.length === 0 && <p className="text-[var(--text-sm)] text-[var(--text-muted)]">No recent activity.</p>}
       </div>
+      <button type="button" onClick={() => setTab('Progress', 'history')}
+        className="mt-3 min-h-11 text-sm text-[var(--primary)] underline">View recorded history</button>
     </div>
   );
 }

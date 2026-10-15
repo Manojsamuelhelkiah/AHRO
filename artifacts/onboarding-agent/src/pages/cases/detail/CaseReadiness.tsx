@@ -20,7 +20,7 @@ import { StatusBadgeText } from './components';
 import { updateWorkforceContext } from '@/lib/workforce-policy-api';
 import { RestrictedActionNotice, useCaseAccess } from './case-access';
 
-export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) => void }) {
+export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string, section?: string) => void }) {
   const access = useCaseAccess();
   const inactive = c.offlineSample === true || c.controllerRetired === true;
   const canEditProfile = !inactive && access?.access.flowEdit === true && access?.access.profileEdit === true;
@@ -432,7 +432,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[var(--status-amber)]"></span>{reviewCount} human review</span>
       </div>
       <div className="flex gap-4 mt-4">
-        <button type="button" data-testid="button-view-case-tasks" onClick={() => setTab('Tasks')} className="text-[var(--primary)] text-[var(--text-xs)] font-bold text-left hover:underline">
+        <button type="button" data-testid="button-view-case-tasks" onClick={() => setTab('Progress', 'current-work')} className="text-[var(--primary)] text-[var(--text-xs)] font-bold text-left hover:underline">
           View tasks →
         </button>
         <button type="button" data-testid="button-view-frontline" onClick={() => setTab('Frontline')} className="text-[var(--primary)] text-[var(--text-xs)] font-bold text-left hover:underline">

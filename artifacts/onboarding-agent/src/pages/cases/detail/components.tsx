@@ -93,7 +93,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
     && Object.values(access.sensitive).every((permission) => permission.read);
 
   return (
-    <div className="sticky top-0 z-30 bg-[var(--surface)] pb-4 pt-4 px-6 md:px-8 -mx-6 md:-mx-8 border-b border-[var(--border)] shadow-[var(--shadow-sm)] mb-6">
+    <div data-case-header className="lg:sticky top-0 z-30 bg-[var(--surface)] pb-4 pt-4 px-6 md:px-8 -mx-6 md:-mx-8 border-b border-[var(--border)] shadow-[var(--shadow-sm)] mb-6">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div className="min-w-0">
            <div className="mb-1">
@@ -229,8 +229,8 @@ export function CaseHealthStrip({ c, pendingApprovals, offlineSample = false }: 
 
 export function CaseTabs({ activeTab, setTab, offlineSample = false }: { activeTab: string, setTab: (t: string) => void, offlineSample?: boolean }) {
   const access = useCaseAccess();
-  const tabs = ['Overview', ...(offlineSample ? [] : ['Early tenure']), 'Tasks', 'Frontline', 'Documents',
-    ...(access?.access.notesRead ? ['Activity', 'Communications', 'Audit'] : []),
+  const tabs = ['Overview', ...(offlineSample ? [] : ['Early tenure']), 'Progress', 'Frontline', 'Documents',
+    ...(access?.access.notesRead ? ['Communications', 'Audit'] : []),
     ...(access?.access.flowRead ? ['Transaction context'] : []),
     'Ask AI'];
   return (

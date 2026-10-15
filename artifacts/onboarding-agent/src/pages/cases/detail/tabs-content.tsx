@@ -91,33 +91,6 @@ export function TasksTab({ c }: { c: any }) {
 }
 
 
-export function ActivityTab({ events }: { events: any[] }) {
-  return (
-    <div className="pb-12 max-w-4xl">
-      <Card>
-        <CardHeader className="pb-3 border-b shrink-0 bg-[var(--surface-alt)]">
-          <CardTitle className="text-[var(--text-base)]">Operational Timeline</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="divide-y divide-[var(--border)]">
-            {events?.map((e: any) => (
-              <div key={e.id} className="p-5 hover:bg-[var(--surface-alt)] transition-colors">
-                <div className="flex justify-between items-start mb-2">
-                  <EngineBadge engine={e.engine} />
-                  <span className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--surface-alt)] px-1.5 py-0.5 rounded border border-[var(--border)]">{format(new Date(e.createdAt), 'MMM d, HH:mm:ss')}</span>
-                </div>
-                <p className="text-[var(--text-sm)] font-bold mb-1 leading-snug text-[var(--text-primary)]">{lifecycleStageText(e.title)}</p>
-                <p className="text-[var(--text-xs)] text-[var(--text-secondary)] mb-3 leading-relaxed">{lifecycleStageText(e.detail)}</p>
-              </div>
-            ))}
-            {!events?.length && <div className="p-[var(--space-xl)] text-center text-[var(--text-sm)] text-[var(--text-muted)]">No events logged.</div>}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
 export function CommunicationsTab({ caseId, c, comms, channels, requestsEnv, requestsLoadError, enforceCasePermissions = false }: any) {
   const access = useCaseAccess();
   const canReadCommunication = !enforceCasePermissions || (access?.access.notesRead === true

@@ -9,6 +9,7 @@ import {
 } from '@workspace/api-client-react';
 import { Button } from '@/components/ui-shared';
 import { useCaseAccess, RestrictedActionNotice } from './case-access';
+import { caseDestination } from './progress-navigation';
 
 const KINDS = [
   { kind: 'question', label: 'Open question' },
@@ -18,8 +19,8 @@ const KINDS = [
 type Kind = typeof KINDS[number]['kind'];
 const MAX = 2000;
 const TAB_LABELS: Record<string, string> = {
-  overview: 'Overview', activity: 'Activity', communications: 'Communications',
-  documents: 'Documents', approvals: 'Overview', audit: 'Audit', tasks: 'Tasks',
+  overview: 'Overview', activity: 'Progress', communications: 'Communications',
+  documents: 'Documents', approvals: 'Overview', audit: 'Audit', tasks: 'Progress', progress: 'Progress',
 };
 
 export function transactionContextScope(orgId: string, userId: string, caseId: number, sig: string) {
@@ -27,7 +28,7 @@ export function transactionContextScope(orgId: string, userId: string, caseId: n
 }
 
 export function TransactionContextTab({ caseId, setTab, availableTabs }: {
-  caseId: number; setTab: (t: string) => void; availableTabs?: string[];
+  caseId: number; setTab: (t: string, section?: string) => void; availableTabs?: string[];
 }) {
   const access = useCaseAccess();
   const { user } = useUser();
@@ -38,12 +39,13 @@ export function TransactionContextTab({ caseId, setTab, availableTabs }: {
     return <RestrictedActionNotice>Transaction context requires current case read permission.</RestrictedActionNotice>;
   }
   return <Inner key={scope} scope={scope} caseId={caseId} setTab={setTab} availableTabs={availableTabs}
+    canReadHistory={access.access.notesRead === true}
     liveCanEdit={access.access.notesEdit === true && access.access.flowEdit === true &&
       Object.values(access.sensitive).every(s => s.read && s.edit)} />;
 }
 
-function Inner({ scope, caseId, setTab, availableTabs, liveCanEdit }: {
-  scope: string; caseId: number; setTab: (t: string) => void; availableTabs?: string[]; liveCanEdit: boolean;
+function Inner({ scope, caseId, setTab, availableTabs, liveCanEdit, canReadHistory }: {
+  scope: string; caseId: number; setTab: (t: string, section?: string) => void; availableTabs?: string[]; liveCanEdit: boolean; canReadHistory: boolean;
 }) {
   const qc = useQueryClient();
   const queryKey = ['transaction-context', scope] as const;
@@ -89,7 +91,9 @@ function Inner({ scope, caseId, setTab, availableTabs, liveCanEdit }: {
   };
   const go = (tab: string) => {
     const label = TAB_LABELS[String(tab).toLowerCase()];
-    if (label && (!availableTabs || availableTabs.includes(label))) setTab(label);
+    const destination = caseDestination(tab);
+    if (label && (!availableTabs || availableTabs.includes(label))
+      && (destination.section !== 'history' || canReadHistory)) setTab(label, destination.section);
   };
   const submit = (kind: Kind) => {
     if (!canEdit || save.isPending || !editBase) return;
@@ -156,9 +160,10 @@ function Inner({ scope, caseId, setTab, availableTabs, liveCanEdit }: {
                     <summary className="min-h-8 cursor-pointer py-1">Source details</summary>
                     <p className="break-all">Source {s.id} · Revision {String(s.revision)} · Provenance: {s.provenance} · Occurred {fmt(s.occurredAt)}</p>
                   </details>
-                  {TAB_LABELS[String(s.tab).toLowerCase()] && (!availableTabs || availableTabs.includes(TAB_LABELS[String(s.tab).toLowerCase()])) &&
+                   {TAB_LABELS[String(s.tab).toLowerCase()] && (!availableTabs || availableTabs.includes(TAB_LABELS[String(s.tab).toLowerCase()]))
+                     && (caseDestination(s.tab).section !== 'history' || canReadHistory) &&
                     <button type="button" onClick={() => go(s.tab)} className="mt-1 min-h-10 text-xs font-semibold text-[var(--primary)] underline">
-                      Open in {TAB_LABELS[String(s.tab).toLowerCase()]} tab<span className="sr-only">: {s.label}</span></button>}
+                       Open in {TAB_LABELS[String(s.tab).toLowerCase()]}{caseDestination(s.tab).section === 'history' ? ' history' : caseDestination(s.tab).section === 'current-work' ? ' current work' : ' tab'}<span className="sr-only">: {s.label}</span></button>}
                 </li>
               ))}
             </ul>
