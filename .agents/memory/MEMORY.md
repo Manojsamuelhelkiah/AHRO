@@ -88,6 +88,7 @@
 - [Separate UAT admission](uat-admission-boundary.md) — reuse existing accounts but require fresh UAT authentication; neither demo tickets nor login grant domain authority.
 - [Administrator case access](administrator-viewing-agreement.md) — verified Super Admin gets case reads and administrative edits; retained-record state and employee-owned consent remain separate.
 - [Client administrator rights](client-administrator-rights.md) — active named owners/admins have full administrative rights in their own client; cross-client privilege stays with Platform Super Admin.
+- [Agent permission deferral](agent-permission-deferral.md) — Access and equipment temporarily uses its owning client admin's read/send rights, without decision or closure authority.
 - [Administrator session observation](administrator-session-observation.md) — missing headers are not expiry; late negative responses from prior sessions must not invalidate renewed access.
 - [Offboarding specification boundary](offboarding-specification-boundary.md) — the user will supply closure section 4.6 later; operational preparation must not imply finalization.
 - [Offboarding Gmail scope](offboarding-gmail-scope.md) — named consent enables only exact fictional-case communication, never real account/asset effects or workforce outcomes.

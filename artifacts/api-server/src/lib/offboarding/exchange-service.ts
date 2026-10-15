@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { clerkClient } from "@clerk/express";
 import { and, eq, desc, sql, inArray } from "drizzle-orm";
 import { db, offbCases, offbExchangePilots, offbExchanges, onbCases, organizationsTable, accessAgents, organizationMembershipsTable } from "@workspace/db";
-import { resolveEffectiveAccessInTransaction } from "../access-governance";
+import { resolveEffectiveAccessInTransaction, isClientAdministratorInTransaction } from "../access-governance";
 import { hasHumanPermissions } from "../human-permissions";
 import { registeredDemoProfile } from "../demo-principal";
 import { explicitlyConfiguredAddressAllowed } from "../onboarding/channels";
@@ -106,8 +106,14 @@ export async function verifyHandlingOwner(tx: Tx, org: string, id: number, handl
 export async function agentGate(tx: Tx, org: string, operator: string, agentId: string, caseId: number) {
   const [agent] = await tx.select().from(accessAgents).where(and(eq(accessAgents.organizationId, org), eq(accessAgents.id, agentId))).for("share");
   if (!agent || agent.status !== "active" || agent.revokedAt || agent.ownerUserId !== operator) throw new SeparationError("Select an active registered agent owned by the named initiating operator.", 403);
+  const requiredKeys = ["tool.case.read", "flow.case.read", "data.case.profile.read", "data.identity.read", "data.medical.read", "data.payroll.read", "data.bgv.read", "tool.notification.send", "tool.external.dispatch"] as const;
+  // Temporary, explicitly requested deferral for Access and equipment only.
+  // An administrator's own active agent may use the initiating human's current
+  // case reads and communication rights, never approval or policy authority.
+  if (await isClientAdministratorInTransaction(tx, org, operator) &&
+      await hasHumanPermissions(tx, { organizationId: org, actorUserId: operator, caseId, requiredKeys })) return;
   const effective = await resolveEffectiveAccessInTransaction(tx, { organizationId: org, principalType: "agent", principalId: agentId, caseId, purpose: "offboarding-contextual-conversation", initiatorUserId: operator });
-  if (!["tool.case.read", "flow.case.read", "data.case.profile.read", "data.identity.read", "data.medical.read", "data.payroll.read", "data.bgv.read", "tool.notification.send", "tool.external.dispatch"].every(k => effective.allows.includes(k))) throw new SeparationError("Agent requires delegated private case-read and conversation-dispatch capabilities intersected with its initiating operator; no decision authority is inferred.", 403);
+  if (!requiredKeys.every(k => effective.allows.includes(k))) throw new SeparationError("Agent requires delegated private case-read and conversation-dispatch capabilities intersected with its initiating operator; no decision authority is inferred.", 403);
 }
 
 /** Additive, retry-safe, sends nothing and grants no authority. */

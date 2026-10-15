@@ -14,6 +14,8 @@ should not need individual grants for ordinary administration.
 **How to apply:** Use current app-owned membership roles, not names, directory
 labels, or public Demo shortcuts. Role downgrade and revocation must remove the
 exception. Apply it consistently to case access and Settings controls, including
-batch permission evaluation. Agents still need their own explicit permissions.
+batch permission evaluation. Agents normally need their own explicit permissions;
+the temporary Access and equipment exception is documented in
+[Agent permission deferral](agent-permission-deferral.md).
 Independent review, evidence, consent, retained-record and external-execution
 safeguards remain separate; administrative access is not proof those gates passed.

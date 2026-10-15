@@ -8,7 +8,7 @@ import { db, pool, organizationsTable, organizationMembershipsTable, accessNamed
 import { recordHumanPermissionDecision } from "../human-permissions";
 import { SENSITIVE_DATA_CLASSES } from "../onboarding/sensitive-lifecycle";
 import { externalProviderDispatchDenied } from "../onboarding/provider-policy";
-import { provisionExchangePilots, enrollExchange, exchangeAction, stateOf, readExchange, updateCommunicationChecks, queueExchangeInTransaction } from "./exchange-service";
+import { provisionExchangePilots, enrollExchange, exchangeAction, stateOf, readExchange, updateCommunicationChecks, queueExchangeInTransaction, agentGate } from "./exchange-service";
 import { exchangeSetupChoices, saveGmailDefaults } from "./exchange-setup";
 import { withExchangeTestIdentity } from "./exchange-test-boundary";
 import { withOffboardingTestProvider, dispatchExchange, ingestExchangeMessage, reconcileAcceptedExchange } from "./exchange-runtime";
@@ -84,10 +84,6 @@ test("isolated contextual Gmail lifecycle: admission, partial/exception, replay,
         approvedByUserId: "fixture-independent-grantor", approvedAt: new Date() })));
     }
     await db.insert(accessAgents).values({ organizationId: "demo", id: agentId, name: "Conversation agent", ownerUserId: operator, createdByUserId: operator });
-    await db.insert(accessNamedGrants).values(keys.filter(k => k !== "tool.approval.decide").map(resourceKey => ({ organizationId: "demo", principalType: "agent" as const, principalId: agentId,
-      scope: "tenant" as const, resourceType: resourceKey.startsWith("flow.") ? "flow" as const : resourceKey.startsWith("tool.") ? "tool" as const : "field" as const,
-      resourceKey, source: "named" as const, effect: "allow" as const, status: "active" as const, createdByUserId: "fixture-grantor",
-      approvedByUserId: "fixture-independent-grantor", approvedAt: new Date() })));
     await controlled(async () => {
       const taskOwnerOnly = [{ taskId: "access-inventory", memberId: owner, address: ownerAddress, persona: "Access owner" }];
       const beforeCases = await exchangeSetupChoices("demo", operator);
@@ -112,6 +108,17 @@ test("isolated contextual Gmail lifecycle: admission, partial/exception, replay,
       assert.equal((await db.select().from(offbExchanges)).length, 0, "inherited enablement never starts a request");
       await assert.rejects(action(provisioned.caseIds[0], "request", { taskId: "access-inventory" }), /standard voluntary-resignation plan/);
       const first = provisioned.caseIds[0];
+      await db.transaction(tx => agentGate(tx, "demo", operator, agentId, first));
+      await assert.rejects(db.transaction(tx => agentGate(tx, "other", operator, agentId, first)), /owned by/);
+      await assert.rejects(db.transaction(tx => agentGate(tx, "demo", reviewer, agentId, first)), /owned by/);
+      await db.update(accessAgents).set({ revokedAt: new Date() }).where(eq(accessAgents.id, agentId));
+      await assert.rejects(db.transaction(tx => agentGate(tx, "demo", operator, agentId, first)), /active registered agent/);
+      await db.update(accessAgents).set({ revokedAt: null }).where(eq(accessAgents.id, agentId));
+      await db.update(organizationMembershipsTable).set({ role: "member" }).where(and(
+        eq(organizationMembershipsTable.organizationId, "demo"), eq(organizationMembershipsTable.clerkUserId, operator)));
+      await assert.rejects(db.transaction(tx => agentGate(tx, "demo", operator, agentId, first)), /requires delegated/);
+      await db.update(organizationMembershipsTable).set({ role: "admin" }).where(and(
+        eq(organizationMembershipsTable.organizationId, "demo"), eq(organizationMembershipsTable.clerkUserId, operator)));
       await enrollExchange("demo", operator, first, { expectedRevision: stateOf(await pilot(first)).enrollment.revision,
         enabled: true, escalationEnabled: false, agentId, recipients: taskOwnerOnly, confirmCommunicationOnly: true });
       assert.equal(stateOf(await pilot(first)).enrollment.inheritsClientDefaults, false,
