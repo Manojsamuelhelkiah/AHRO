@@ -8,6 +8,7 @@ import { useGetSeparationCase, useApplySeparationAction, useListSeparationPolici
 import type { SeparationAction, SeparationDetail, SeparationTask, SeparationReceipt } from '@workspace/api-client-react';
 import { Card, Input, Button } from '@/components/ui-shared';
 import { ArrowLeft } from 'lucide-react';
+import { Disclosure } from '../detail/disclosure';
 import { ExchangePanel } from './exchange-panel';
 import { caseListReference } from '../case-presentation';
 import { ClosureWarning, ErrorBox, FACT_FIELDS, FactsForm, Field, Pill, SkeletonRows, areaCls, selectCls, statusTone, validateFacts } from './shared';
@@ -230,6 +231,14 @@ export function SeparationDetailPage() {
       onError: (e) => { setStale(/changed/i.test(String((e as Error).message))); resolve(false); },
     });
   });
+  const renderStreams = (pred: (t: SeparationTask) => boolean) => !d ? null : (
+              <section aria-label="Workstreams" className="space-y-3">
+                {streams.length === 0 ? <div className="rounded-md border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--text-muted)]">No checklist yet. Complete Separation Screening, classification, then adopt an approved policy.</div> : streams.map(([s, all]) => { const ts = all.filter(pred); return ts.length === 0 ? null : (
+                  <div key={s} className="space-y-2"><h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">{s} <span className="font-normal">({all.filter((t) => t.status === 'verified').length}/{all.length} verified)</span></h3>
+                    {ts.map((t) => <TaskCard ktRequired={d.state.tasks.some((x) => x.id === 'kt-access-exception' && x.details.exceptionRequired === true)} key={`${t.id}-${d.generation}-${d.version}`} t={t} caseId={caseId} version={d.version} busy={act.isPending} run={(a) => { void run(a); }} />)}</div>
+                ); })}
+              </section>
+  );
   if (!valid) return <ErrorBox error={new Error('Invalid case id.')} />;
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -238,7 +247,6 @@ export function SeparationDetailPage() {
         <>
           <header className="flex flex-wrap items-start justify-between gap-3">
             <div><p className="text-sm font-semibold">Case {caseListReference(d)}</p>
-              <OriginalIntent c={d} />
               <h1 className="break-words text-2xl font-semibold" data-testid="text-worker-name">{d.facts.workerName}</h1>
               <p className="text-sm text-[var(--text-muted)]">Offboarding · {!d.fictionalOfflineIdentity && <>{d.facts.employeeId} · </>}{d.facts.role} · {d.facts.country} · LWD {d.facts.lastWorkingDay} ({d.facts.timeZone}) · v{d.version} gen {d.generation}</p></div>
             <div className="flex flex-wrap gap-2"><Pill tone={statusTone(d.status)}>{d.status}</Pill><Pill tone={statusTone(d.state.gatewayA)}>Separation Screening {d.state.gatewayA}</Pill>{d.state.conflict && <Pill tone="red">source conflict</Pill>}</div>
@@ -249,6 +257,22 @@ export function SeparationDetailPage() {
           {d.state.holds.length > 0 && <div role="status" className="rounded-md border border-[var(--status-red)] bg-[var(--status-red-bg)] p-3 text-sm text-[var(--status-red-fg)]">Holds: {d.state.holds.join('; ')}. Deletion and archival are prohibited.</div>}
           {stale && <div role="alert" className="flex items-center justify-between gap-2 rounded-md bg-[var(--status-amber-bg)] p-3 text-sm text-[var(--status-amber-fg)]">The case changed since you loaded it. <Button size="sm" variant="outline" onClick={() => q.refetch()}>Reload</Button></div>}
           {act.isError && !stale && <ErrorBox error={act.error} />}
+          <section aria-label="Action required" data-testid="block-action-required" className="rounded-[var(--radius-lg)] border-2 border-[var(--primary)] bg-[var(--surface)] p-4 shadow-[var(--shadow-md)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary)]">Action required</p>
+            <h2 className="mb-1 text-lg font-bold">{d.state.pauseReason ? 'Paused: record the HRBP disposition' : d.status === 'restricted' ? 'Restricted case: human-led handling only' : 'Record the next case action'}</h2>
+            <p className="mb-3 text-sm text-[var(--text-muted)]">{streams.length === 0 ? 'No checklist yet. Complete Separation Screening, classification, then adopt an approved policy.' : `${d.state.tasks.filter((t) => t.status !== 'verified').length} of ${d.state.tasks.length} tasks still need evidence. Task actions are under Activities and workstreams.`}</p>
+            {!d.privateVisible && <p className="mb-3 text-xs text-[var(--text-muted)]" data-testid="text-privacy-explainer">Restricted sources, receipts, decisions and history are hidden. Viewing them requires current verified HR, Legal, Payroll and Occupational Health authorities (all four) and all-sensitive field grants (not one or the other). Nothing here weakens that check.</p>}
+            <CasePanel key={`${scope}-${d.privateVisible}-${d.version}-${d.generation}`} d={d} run={run} busy={act.isPending} />
+            {d.state.tasks.some((t) => t.status !== 'verified') && <div className="mt-4 space-y-2"><h3 className="font-semibold">Tasks needing action</h3>{renderStreams((t) => t.status !== 'verified')}</div>}
+            {d.privateVisible && d.fictionalOfflineIdentity === true && <div className="mt-4"><ExchangePanel caseId={caseId} /></div>}
+          </section>
+          <Disclosure title="Original intake request" summary="The request that originated this case">
+            {d.originalIntent ? <OriginalIntent c={d} /> : <p className="text-sm text-[var(--text-muted)]">No original intake request is recorded for this case.</p>}
+          </Disclosure>
+          <Disclosure title="Verified activities and workstreams" summary="Completed tasks and their evidence receipts">
+            {d.state.tasks.some((t) => t.status === 'verified') ? renderStreams((t) => t.status === 'verified') : <p className="text-sm text-[var(--text-muted)]">No tasks are verified yet.</p>}
+          </Disclosure>
+          <Disclosure title="Facts, decisions, settlement and history" summary="Case facts, receipts, revisions, evidence sources">
           <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
             <div className="space-y-5">
               <Card className="space-y-2 p-4"><h2 className="font-semibold">Facts and classification</h2>
@@ -263,14 +287,6 @@ export function SeparationDetailPage() {
                   <Pill tone={d.state.policyId ? (d.state.policyCurrent ? 'green' : 'red') : 'muted'}>{d.state.policyId ? `Policy ${d.state.policyId} v${d.state.policyVersion}${d.state.policyCurrent ? '' : ' (not current)'}` : 'No policy adopted'}</Pill>
                 </div>
               </Card>
-              <section aria-label="Workstreams" className="space-y-3">
-                <h2 className="font-semibold">Activities and workstreams</h2>
-                {streams.length === 0 ? <div className="rounded-md border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--text-muted)]">No checklist yet. Complete Separation Screening, classification, then adopt an approved policy.</div> : streams.map(([s, ts]) => (
-                  <div key={s} className="space-y-2"><h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">{s} <span className="font-normal">({ts.filter((t) => t.status === 'verified').length}/{ts.length} verified)</span></h3>
-                    {ts.map((t) => <TaskCard ktRequired={d.state.tasks.some((x) => x.id === 'kt-access-exception' && x.details.exceptionRequired === true)} key={`${t.id}-${d.generation}-${d.version}`} t={t} caseId={caseId} version={d.version} busy={act.isPending} run={(a) => { void run(a); }} />)}</div>
-                ))}
-              </section>
-              {d.privateVisible && d.fictionalOfflineIdentity === true && <ExchangePanel caseId={caseId} />}
               <Card className="space-y-2 p-4"><h2 className="font-semibold">Decisions</h2>
                 {d.state.decisions.length === 0 ? <p className="text-sm text-[var(--text-muted)]">{d.privateVisible ? 'No decisions recorded.' : 'Decision history is restricted.'}</p> : d.state.decisions.map((r, i) => <div key={i} className="border-b border-[var(--border)] pb-2 last:border-0"><Receipt r={r} /></div>)}</Card>
               <Card className="space-y-2 p-4"><h2 className="font-semibold">Settlement versions</h2>
@@ -283,9 +299,9 @@ export function SeparationDetailPage() {
               <Card className="space-y-2 p-4"><h2 className="font-semibold">Evidence sources</h2>
                 {!d.privateVisible ? <p className="text-sm text-[var(--text-muted)]">Source narratives are visible only to verified HR and Legal readers.</p> : d.sources.map((s, i) => <div key={i} className="text-xs"><b>{s.channel}</b> · {s.sourceReference} · {s.actor} · <span className="text-[var(--text-muted)]">{s.provenance}</span></div>)}</Card>
             </div>
-            <aside className="space-y-4">{!d.privateVisible && <Card className="p-4 text-xs text-[var(--text-muted)]" data-testid="text-privacy-explainer">Restricted sources, receipts, decisions and history are hidden. Viewing them requires current verified HR, Legal, Payroll and Occupational Health authorities (all four) and all-sensitive field grants (not one or the other). Nothing here weakens that check.</Card>}<CasePanel key={`${scope}-${d.privateVisible}-${d.version}-${d.generation}`} d={d} run={run} busy={act.isPending} />
-              <Card className="p-4 text-xs text-[var(--text-muted)]">Final Closure and Activity 12 are unavailable. No override exists.</Card></aside>
+            <aside className="space-y-4"><Card className="p-4 text-xs text-[var(--text-muted)]">Final Closure and Activity 12 are unavailable. No override exists.</Card></aside>
           </div>
+          </Disclosure>
         </>
       )}
     </div>

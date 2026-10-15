@@ -55,7 +55,7 @@ export function OriginalIntent({ c }: { c: { originalIntent?: string | null } })
   </p>;
 }
 
-export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setTab?: (t: string) => void }) {
+export function CaseHeader({ c, caseId, setTab, hideAsk = false, hideOriginalIntent = false }: { c: any, caseId: number, setTab?: (t: string) => void, hideAsk?: boolean, hideOriginalIntent?: boolean }) {
   const access = useCaseAccess();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [actionOpen, setActionOpen] = useState(false);
@@ -98,7 +98,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
         <div className="min-w-0">
            <div className="mb-1">
              <span className="shrink-0 text-[var(--text-xs)] font-bold text-[var(--primary)] bg-[var(--primary-light-bg)] px-2 py-0.5 rounded-full">{sampleCaseReference(c) ?? `Case #${c.id}`}</span>
-              <OriginalIntent c={c} />
+              {!hideOriginalIntent && <OriginalIntent c={c} />}
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="break-words text-[var(--text-2xl)] font-bold text-[var(--text-primary)] leading-tight m-0">{access?.access.profileRead ? presentation.title : 'Case details restricted'}</h1>
                <Badge variant="outline" className="uppercase text-[10px] tracking-wider">{access?.access.profileRead ? presentation.type : 'Case details'}</Badge>
@@ -137,7 +137,7 @@ export function CaseHeader({ c, caseId, setTab }: { c: any, caseId: number, setT
         </div>
          <div className="flex shrink-0 items-center gap-2 self-start lg:self-auto relative">
            {contactPermissions && offlineSample && <p className="max-w-xs text-xs text-[var(--text-muted)]">Contact requires an active operational case; no delivery is authorized here.</p>}
-           {setTab && canAskAboutCase && (
+           {!hideAsk && setTab && canAskAboutCase && (
             <Button variant="outline" className="gap-2 text-[var(--primary)] border-[var(--primary)] hover:bg-[var(--primary-light-bg)]" onClick={() => setTab('Ask AI')}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-sparkles"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
               Ask about this case
@@ -227,12 +227,12 @@ export function CaseHealthStrip({ c, pendingApprovals, offlineSample = false }: 
   );
 }
 
-export function CaseTabs({ activeTab, setTab, offlineSample = false }: { activeTab: string, setTab: (t: string) => void, offlineSample?: boolean }) {
+export function CaseTabs({ activeTab, setTab, offlineSample = false, hideAsk = false }: { activeTab: string, setTab: (t: string) => void, offlineSample?: boolean, hideAsk?: boolean }) {
   const access = useCaseAccess();
   const tabs = ['Overview', ...(offlineSample ? [] : ['Early tenure']), 'Progress', 'Frontline', 'Documents',
     ...(access?.access.notesRead ? ['Communications', 'Audit'] : []),
     ...(access?.access.flowRead ? ['Transaction context'] : []),
-    'Ask AI'];
+    ...(hideAsk ? [] : ['Ask AI'])];
   return (
     <div role="group" aria-label="Case sections" className="flex flex-wrap border-b border-[var(--border)] mb-6">
       {tabs.map(t => (

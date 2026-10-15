@@ -17,11 +17,11 @@ import { CasePrivacyControls } from './case-privacy-controls';
 import { RestrictedActionNotice, useCaseAccess } from './case-access';
 import { caseOwnerOf, caseTypeOf, isFictionalOfflineExample, workstreamPresentation } from '../case-presentation';
 
-export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId, history }: any) {
+export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId, history, actionsAbove = false }: any) {
   const access = useCaseAccess();
   const showOnboardingReadiness = caseTypeOf(c) === 'Onboarding' && !isOfflineDemoSample(c) && !c.controllerRetired;
   if (c.syntheticJourney) return <div className="min-w-0 space-y-6 pb-12">
-    <SyntheticJourneyActions journey={c.syntheticJourney} />
+    {!actionsAbove && <SyntheticJourneyActions journey={c.syntheticJourney} />}
     <button type="button" className="min-h-11 text-sm font-semibold text-[var(--primary)] underline"
       onClick={() => setTab('Progress', 'current-work')}>View current work and stages</button>
     <SyntheticJourneyCommunications journey={c.syntheticJourney} />
@@ -38,19 +38,19 @@ export function OverviewTab({ c, events, docs, comms, approvals, pendingApproval
     <div className="flex flex-col xl:flex-row gap-8 pb-12">
       <div className="flex-1 min-w-0">
         {showOnboardingReadiness && access?.access.profileRead && <ConnectedReadinessSla caseId={caseId} />}
-        {showOnboardingReadiness && (access?.access.profileRead
+        {!actionsAbove && showOnboardingReadiness && (access?.access.profileRead
           ? <CaseReadiness c={c} setTab={setTab} />
           : <RestrictedActionNotice>Onboarding requirements are restricted by your current permissions.</RestrictedActionNotice>)}
-        <NextActions c={c} pendingApprovals={pendingApprovals} setTab={setTab} />
+        {!actionsAbove && <NextActions c={c} pendingApprovals={pendingApprovals} setTab={setTab} />}
         {access?.access.notesRead
           ? <RecentActivitySummary events={events} setTab={setTab} history={history} />
           : <RestrictedActionNotice>Case notes and activity details are restricted by your current permissions.</RestrictedActionNotice>}
       </div>
       <div className="w-full xl:w-[360px] shrink-0">
         <div className="xl:sticky xl:top-[120px] space-y-6">
-           {access?.access.notesRead
+           {!actionsAbove && (access?.access.notesRead
              ? <AttentionPanel approval={pendingApprovals[0]} caseId={caseId} offlineSample={isOfflineDemoSample(c)} />
-             : <RestrictedActionNotice>Approval notes and decision details are restricted by your current permissions.</RestrictedActionNotice>}
+             : <RestrictedActionNotice>Approval notes and decision details are restricted by your current permissions.</RestrictedActionNotice>)}
            {access?.access.profileRead && <WorkforceContextCard c={c} />}
           {!isFictionalOfflineExample(c) && (isOfflineDemoSample(c) ? <OfflinePrivacyRestricted /> : <CasePrivacyControls caseId={caseId} />)}
            {access?.access.notesRead && <CaseOwnerCard c={c} events={events} approvals={approvals} />}

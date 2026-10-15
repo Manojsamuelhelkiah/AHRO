@@ -8,6 +8,19 @@ front-end selection of named contacts and agents rather than requiring users to
 copy system IDs into each case. Case pages should focus on the request, tasks,
 conversations and decisions—not a separate operational-preparation process.
 
+Case details must be action-first: the first block explains the current required
+action and contains the existing controls to complete straightforward work.
+Ask AI follows that block and opens only through "Ask about this case".
+Original intake request and supporting records belong below in initially
+collapsed sections.
+
+**Why:** The user explicitly wants business users to finish simple transactions
+without reading the content below Original intake request.
+
+**How to apply:** Preserve permission, evidence and version guards when moving
+controls. Describe blocked, waiting and read-only records honestly. Explicit
+tab/section deep links must still reveal the relevant collapsed content.
+
 Do not add an Offboarding/Separations shortcut button to the main Cases header.
 
 **Why:** The user explicitly removed that extra header button as unnecessary.

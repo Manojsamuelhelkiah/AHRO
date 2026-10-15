@@ -44,6 +44,9 @@ import { getApprovalRefetchInterval } from '../../lib/approval-actions';
 import { SimulationPanel } from './detail/simulation-panel';
 import { caseTitleOf, caseTypeOf, isDemoCoverageCase, isFictionalOfflineExample, sampleCaseReference, caseSummary } from './case-presentation';
 import { HroIntakeRequestPanel } from '../../components/hro-intake-request-panel';
+import { AskCaseSection } from './detail/ask-case-section';
+import { Disclosure } from './detail/disclosure';
+import { CaseActionBlock } from './detail/case-action-block';
 import { CaseAccessProvider, RestrictedActionNotice, type CaseAccessPermissions } from './detail/case-access';
 
 export function CaseDetailPage() {
@@ -53,8 +56,10 @@ export function CaseDetailPage() {
   const [location, navigate] = useLocation();
   const search = useSearch();
   const destination = caseDestinationFromSearch(search);
-  const activeTab = destination.tab;
+  const activeTab = destination.tab === 'Ask AI' ? 'Overview' : destination.tab;
+  const deepLinked = activeTab !== 'Overview' || Boolean(destination.section);
   const setActiveTab = (tab: string, section?: string) => {
+    if (tab === 'Ask AI') { navigate(`${location}${caseSectionSearch(search, 'Ask AI')}${window.location.hash}`); return; }
     navigate(`${location}${caseSectionSearch(search, tab, section)}${window.location.hash}`);
   };
 
@@ -188,6 +193,9 @@ export function CaseDetailPage() {
     || !permissions?.access.notesEdit
     || Object.values(permissions?.sensitive ?? {}).some((permission) => !permission.read || !permission.edit);
 
+  const askNode = <AskCaseSection key={`${getPinnedOrganizationIdForPage() || 'anon'}-${user?.id || 'anon'}-${caseId}`}
+    canAnalyze={canAnalyze} caseId={caseId} userId={user?.id} requested={destination.tab === 'Ask AI' ? search : null} />;
+
   if (permissionsLoading) return <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Checking case permissions...</div>;
 
   if (permissionsError || !permissions) {
@@ -253,16 +261,19 @@ export function CaseDetailPage() {
       <div className="mx-auto max-w-5xl space-y-5 px-4 md:px-8">
         <Link href="/cases" className="inline-flex min-h-10 items-center text-sm text-[var(--primary)]">Back to cases</Link>
         <div><p className="text-sm font-semibold">{sampleCaseReference(c) ?? `Case #${caseId}`}</p>
-          <OriginalIntent c={c} />
           <h1 className="break-words text-2xl font-semibold text-[var(--text-primary)]">{permissions.access.profileRead ? caseTitleOf(c) : 'Case details restricted'}</h1>
           <p className="mt-1 text-sm text-[var(--text-muted)]">{permissions.access.profileRead ? caseTypeOf(c) : 'Case details restricted'} · Held for specialist review · No external action authorized</p>
           {isFictionalOfflineExample(c) && <p className="mt-2 text-xs">Read-only · External action not authorized.</p>}</div>
-        {c.batchIntake ? <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} /> :
-          <RestrictedActionNotice>Submitted fields require current profile, notes and sensitive-record read authority. They have not been removed from the case.</RestrictedActionNotice>}
-        <section aria-label="History" className="space-y-4">
-          <h2 className="font-semibold">History</h2>
+        <CaseActionBlock c={c} caseId={caseId} pendingApprovals={permissions.access.notesRead ? pendingApprovals : []} setTab={setActiveTab} offlineSample={offlineSample} />
+        {askNode}
+        <Disclosure title="Original intake request" summary="Submitted fields and request details">
+          <OriginalIntent c={c} />
+          {c.batchIntake ? <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} /> :
+            <RestrictedActionNotice>Submitted fields require current profile, notes and sensitive-record read authority. They have not been removed from the case.</RestrictedActionNotice>}
+        </Disclosure>
+        <Disclosure title="History" summary="Recorded case history" forceOpen={deepLinked} revealKey={search}>
           <ProgressHistory {...history} />
-        </section>
+        </Disclosure>
       </div>
     </CaseAccessProvider>;
   }
@@ -288,12 +299,14 @@ export function CaseDetailPage() {
         </div>
       )}
 
-      <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} />
+      <CaseHeader c={c} caseId={caseId} setTab={setActiveTab} hideAsk hideOriginalIntent />
       {c.controllerRetired && !c.fictionalOfflineIdentity && <div role="status" className="mb-6 rounded-md border p-4 text-sm">
         This case is retained historical evidence. Operations and outreach are retired; delivery outcomes and private records remain subject to current access and retention rules.
       </div>}
-      {!offlineSample && <EmployeeVaultPanel caseId={caseId} />}
-
+      <CaseActionBlock c={c} caseId={caseId} pendingApprovals={permissions.access.notesRead ? pendingApprovals : []} setTab={setActiveTab} offlineSample={offlineSample} />
+      {askNode}
+      <Disclosure title="Original intake request" summary="What was submitted, and the request summary" forceOpen={false}>
+      <OriginalIntent c={c} />
       {c.batchIntake && <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} />}
       {c.syntheticJourney && <SyntheticJourneySummary journey={c.syntheticJourney} />}
       {!c.syntheticJourney && c.fictionalOfflineIdentity && permissions.access.notesRead && c.planSummary && (
@@ -302,6 +315,11 @@ export function CaseDetailPage() {
           <p className="break-words">{caseSummary(c)}</p>
         </section>
       )}
+        {!c.batchIntake && !c.syntheticJourney && <p className="text-sm text-[var(--text-muted)]">No intake request details are recorded for this case.</p>}
+      </Disclosure>
+      <Disclosure title="Status, gateways and logistics" summary="Health, gateways, portal controls">
+      {!offlineSample && <EmployeeVaultPanel caseId={caseId} />}
+
       {offlineSample ? (
         !isFictionalOfflineExample(c) && <div role="status" className="mb-6 rounded-lg border p-4 text-sm">
           Read-only record — operational execution is not authorized.
@@ -322,8 +340,10 @@ export function CaseDetailPage() {
         </>
       )}
       <CaseHealthStrip c={c} pendingApprovals={pendingApprovals} offlineSample={offlineSample} />
+      </Disclosure>
+      <Disclosure title="Case workspace" summary="Overview, progress, documents, communications, audit" forceOpen={deepLinked} revealKey={search}>
 
-      <CaseTabs activeTab={activeTab} setTab={setActiveTab} offlineSample={offlineSample} />
+      <CaseTabs activeTab={activeTab} setTab={setActiveTab} offlineSample={offlineSample} hideAsk />
 
       <div className="pt-2">
         {activeTab === 'Overview' && (
@@ -338,6 +358,7 @@ export function CaseDetailPage() {
             records={records || []}
             setTab={setActiveTab}
             history={history}
+            actionsAbove
           />
         )}
 
@@ -357,10 +378,8 @@ export function CaseDetailPage() {
           : <RestrictedActionNotice>Audit notes are restricted by your current permissions.</RestrictedActionNotice>)}
         {activeTab === 'Transaction context' && <TransactionContextTab caseId={caseId} setTab={setActiveTab}
           availableTabs={['Overview', 'Progress', 'Documents', ...(permissions.access.notesRead ? ['Communications', 'Audit'] : [])]} />}
-        {activeTab === 'Ask AI' && (canAnalyze
-          ? <ExplainabilityTab key={`${getPinnedOrganizationIdForPage() || 'anon'}-${user?.id || 'anon'}-${caseId}`} caseId={caseId} userId={user?.id} />
-          : <RestrictedActionNotice>Ask AI requires current case and sensitive-field read permissions. Review only the case records available to your account.</RestrictedActionNotice>)}
       </div>
+      </Disclosure>
     </div>
     </CaseAccessProvider>
   );
