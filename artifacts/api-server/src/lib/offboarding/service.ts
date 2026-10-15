@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { PilotState } from "./exchange-contract";
 import { withSensitiveLifecycleFence, evaluateCaseDerivedLifecycleGateInTransaction } from "../onboarding/sensitive-lifecycle";
 import { acquireCaseDispatchMutationLock } from "../onboarding/dispatch-guard";
+import { assertNotDeletedSourceInTransaction } from "./deleted-source";
 import { appendProtectedAuditInTransaction } from "../onboarding/protected-audit";
 import { access, lockTenant, authority, confidentialRead, payrollRead, receipt, currentReceipt, type Tx } from "./authority";
 import { CLOSURE_BLOCKED, SENSITIVE_TRIGGERS, compilePlan, facts, initialState, object, text, SeparationError } from "./model";
@@ -26,6 +27,7 @@ export async function createSeparationInTransaction(tx: Tx, org: string, actor: 
     if (!lifecycle.allowed) throw new SeparationError(lifecycle.reason);
   }
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`separation:${org}:${f.employeeId}`}, 0))`);
+  await assertNotDeletedSourceInTransaction(tx, org, channel, sourceReference);
   const fingerprint = hash(f);
   const [previous] = await tx.select().from(offbSources).where(and(eq(offbSources.organizationId, org), eq(offbSources.channel, channel), eq(offbSources.sourceReference, sourceReference)));
   if (previous) {
