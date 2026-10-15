@@ -73,11 +73,21 @@ test("historical reply disclosure revocation discards older cached excerpts and 
   }
   let withdrawn = false;
   const endpoint = `/api/onboarding/action-center/cases/${data.caseId}/conversation`;
+  let holdPagination = false;
+  let paginationStarted!: () => void;
+  let releasePagination!: () => void;
+  const paginationHeld = new Promise<void>(resolve => { paginationStarted = resolve; });
+  const paginationReleased = new Promise<void>(resolve => { releasePagination = resolve; });
   // The live test server forbids all provider disclosure. A UI-only response
   // snapshot models a reply disclosed BEFORE revocation without opening that
   // boundary or sending any real data to a provider. All pagination, notes
   // authorization and grant withdrawal otherwise use the real persisted API.
   await page.route(`**${endpoint}*`, async route => {
+    if (holdPagination && new URL(route.request().url()).searchParams.has("before")) {
+      holdPagination = false;
+      paginationStarted();
+      await paginationReleased;
+    }
     const response = await route.fetch();
     if (response.ok() && new URL(route.request().url()).searchParams.has("before") && !withdrawn) {
       const body = await response.json();
@@ -106,12 +116,17 @@ test("historical reply disclosure revocation discards older cached excerpts and 
   await refreshed;
   await expect(page.getByText("FICTIONAL OLDER PRIVATE EXCERPT", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Fictional historical answer.", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Load older messages", exact: true }).click();
-  await expect(page.getByText("FICTIONAL OLDER PRIVATE EXCERPT", { exact: true })).toHaveCount(0);
-  const notesDenied = await page.request.post("/api/test/action-conversation-fixture", { data: { action: "revoke-notes", caseId: data.caseId } });
-  expect(notesDenied.ok()).toBeTruthy();
+  // Start pagination while its control is still authorized, then revoke before
+  // its real server read. Revoking first races both the in-flight previous page
+  // and background refresh, either of which can already remove the button.
+  holdPagination = true;
   const deniedPagination = page.waitForResponse(r => new URL(r.url()).pathname === endpoint && new URL(r.url()).searchParams.has("before"));
-  await page.getByRole("button", { name: "Load older messages", exact: true }).dispatchEvent("click");
+  await page.getByRole("button", { name: "Load older messages", exact: true }).click();
+  await paginationHeld;
+  try {
+    const notesDenied = await page.request.post("/api/test/action-conversation-fixture", { data: { action: "revoke-notes", caseId: data.caseId } });
+    expect(notesDenied.ok()).toBeTruthy();
+  } finally { releasePagination(); }
   expect((await deniedPagination).ok()).toBeFalsy();
   await expect(page.getByText("Conversation could not be loaded", { exact: false })).toBeVisible();
   await expect(page.getByText(/^Fictional historical annotation/)).toHaveCount(0);

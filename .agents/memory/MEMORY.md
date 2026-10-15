@@ -25,6 +25,7 @@
 - [Customer-facing copy](customer-facing-copy.md) — product screens must stand alone; never refer users to decks, slides, or other internal documents.
 - [OpenAPI integer persistence](openapi-integer-persistence.md) — generated Zod may accept fractional values for integer fields; enforce integrality before storing inputs used for derived snapshots.
 - [Versioned aggregate editing](versioned-aggregate-editing.md) — JSON aggregate editors need server version preconditions plus queued latest-state transforms, including archive and delete.
+- [Snapshot-backed form review](snapshot-backed-form-review.md) — saved details refresh independently of explicit choices; changed evidence invalidates review, never an unresolved retry payload.
 - [Intent taxonomy provenance](intent-taxonomy-provenance.md) — count reference outcomes separately from parents, aliases, custom rows, and candidates; type source edges by evidence strength.
 - [Connector effect fencing](connector-effect-fencing.md) — all future remote writes must use the durable journal; never reclaim an ambiguous non-idempotent dispatch.
 - [Human decision permissions](specialist-authority-trust.md) — specialist authority is retired; ordinary access is not professional qualification, and old receipts cannot release new effects.

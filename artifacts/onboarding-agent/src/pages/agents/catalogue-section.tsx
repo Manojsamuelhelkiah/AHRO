@@ -1,24 +1,46 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@clerk/react';
 import { getAgentCatalogue, getPinnedOrganizationIdForPage, type AgentCatalogue } from '@workspace/api-client-react';
 import { ShieldCheck, Lock, RotateCcw, Layers, CheckCircle2, Ban } from 'lucide-react';
 import { Button } from '@/components/ui-shared';
-import { RegistrationForm } from './registration-form';
+import { RegistrationForm, type Pending } from './registration-form';
 
 export function CatalogueSection({ searchTerm }: { searchTerm: string }) {
   const { userId, sessionId } = useAuth();
   const orgId = getPinnedOrganizationIdForPage() ?? '';
   const queryKey = useMemo(() => ['agent-catalogue', userId ?? '', sessionId ?? '', orgId] as const, [userId, sessionId, orgId]);
+  return <ScopedCatalogueSection key={JSON.stringify(queryKey)} queryKey={queryKey} searchTerm={searchTerm} />;
+}
+
+function ScopedCatalogueSection({ queryKey, searchTerm }: {
+  queryKey: readonly [string, string, string, string]; searchTerm: string;
+}) {
+  const client = useQueryClient();
+  // Keep only the frozen request outside the private subtree. Failed reads
+  // unmount all private display/draft state; scope changes unmount this too.
+  const [pending, setPending] = useState<Pending | null>(null);
+  const orgId = queryKey[3];
   const q = useQuery<AgentCatalogue>({
-    queryKey, enabled: !!userId && !!orgId, retry: 1, gcTime: 0, staleTime: 0, refetchInterval: 30_000,
+    queryKey, enabled: !!queryKey[1] && !!orgId, retry: 1, gcTime: 0, staleTime: 0, refetchInterval: 30_000,
     queryFn: async ({ signal }) => {
       const res = await getAgentCatalogue({ signal });
       if (res.organizationId !== orgId) throw new Error('Catalogue belongs to a different workspace.');
       return res;
     },
   });
-  // Never show private data after an error or while a different scope is loading.
+  const status = (q.error as { status?: number } | null)?.status;
+  const authorizationDenied = q.isError && (status === 401 || status === 403);
+  const managementEnded = authorizationDenied || (q.isSuccess && !q.data.canManage);
+  useEffect(() => {
+    if (!managementEnded) return;
+    setPending(null);
+    if (!authorizationDenied) return;
+    // Retain the error/retry state, but remove the old administrative snapshot
+    // from the active query as well as the DOM. Clearing data must not trigger
+    // an automatic new fetch or restore an earlier authorized response.
+    client.getQueryCache().find({ queryKey, exact: true })?.setState({ data: undefined, dataUpdatedAt: 0 });
+  }, [managementEnded, authorizationDenied, client, queryKey]);
   const cat = q.isError || q.isPending ? undefined : q.data;
   const [formSelection, setFormSelection] = useState<{ key: string; revision: number }>();
 
@@ -50,7 +72,7 @@ export function CatalogueSection({ searchTerm }: { searchTerm: string }) {
       )}
 
       {cat && (
-        <>
+        <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-[var(--radius-lg)] border border-[var(--status-green)] bg-[var(--status-green-bg)] p-4" data-testid="panel-runtime-implemented">
               <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--status-green-fg)]"><CheckCircle2 className="h-4 w-4" />Runtime metadata read - implemented</h3>
@@ -79,11 +101,7 @@ export function CatalogueSection({ searchTerm }: { searchTerm: string }) {
           )}
 
           {cat.canManage && (
-            <RegistrationForm key={`${queryKey.join('|')}|${cat.version}|${JSON.stringify([
-              cat.registrations.map(row => [row.catalogueKey, row.agentId, row.version, row.state]),
-              cat.principals.map(row => [row.id, row.ownerUserId, row.version, row.status]),
-              cat.owners.map(row => row.clerkUserId),
-            ])}`} catalogue={cat} queryScope={queryKey} selection={formSelection} />
+            <RegistrationForm catalogue={cat} queryScope={queryKey} selection={formSelection} retryState={{ pending, setPending }} />
           )}
 
           {cat.customMappings.length > 0 && (
@@ -153,7 +171,7 @@ export function CatalogueSection({ searchTerm }: { searchTerm: string }) {
               })}
             </div>
           )}
-        </>
+        </div>
       )}
     </section>
   );

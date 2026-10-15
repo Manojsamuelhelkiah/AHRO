@@ -15,6 +15,7 @@ const entryPoints = [
   .map((f) => path.join(dir, f));
 const integratedEntryPoints = [
   "src/components/client-workspace-navigation.integration.test.tsx",
+  "src/pages/agents/registration-form.integration.test.tsx",
   "src/pages/settings-access-governance.integration.test.tsx",
   "src/pages/settings-context-retention.integration.test.tsx",
   "src/pages/settings-context-manager.integration.test.tsx",

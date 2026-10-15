@@ -104,3 +104,15 @@ real provider causes missing-user failures and violates test isolation.
 **How to apply:** Keep identity reads behind the isolated test process boundary,
 allow only its owned principals, reject unknown identities, and leave production
 authentication and professional authority checks unchanged.
+
+For denied-pagination regressions, initiate and hold the browser request before
+revoking permission, then release it to the real server after revocation. Do
+not revoke first and assume the pagination control will remain present.
+
+**Why:** A prior in-flight read or background refresh can correctly fail closed
+and remove the control before the test clicks it, turning safe behavior into
+a timeout.
+
+**How to apply:** Synchronize the test at its browser request boundary, keep
+live polling and server authorization enabled, and assert the denied response
+and cleared content rather than relying on a stale control.

@@ -4,43 +4,76 @@ import { registerCatalogueAgent, type AgentCatalogue, type CatalogueAgentRegistr
 import { AlertTriangle, RotateCcw, Link2, PlusCircle } from 'lucide-react';
 import { Button, Input, Label } from '@/components/ui-shared';
 import { identityLabel } from '@/components/member-identity';
+import { PrincipalSummary, principalBlocker } from './principal-summary';
 
-type Pending = { payload: CatalogueAgentRegistrationInput; requestId: string };
+export type Pending = { payload: CatalogueAgentRegistrationInput; requestId: string };
 type Notice = { kind: 'ok' | 'conflict' | 'error' | 'unknown'; text: string };
 const selectCls = 'h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm focus:border-[var(--primary)] focus:outline-none';
 
-export function RegistrationForm({ catalogue, queryScope, selection }: { catalogue: AgentCatalogue; queryScope: readonly unknown[]; selection?: { key: string; revision: number } }) {
+export function RegistrationForm({ catalogue, queryScope, selection, retryState }: {
+  catalogue: AgentCatalogue; queryScope: readonly unknown[]; selection?: { key: string; revision: number };
+  retryState?: { pending: Pending | null; setPending: (value: Pending | null) => void };
+}) {
   const client = useQueryClient();
   const alive = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => { alive.current = true; return () => { alive.current = false; abortRef.current?.abort(); }; }, []);
 
-  const [catKey, setCatKey] = useState(selection?.key ?? catalogue.entries[0]?.key ?? '');
-  const [mode, setMode] = useState<'new' | 'bind'>('new');
-  const [name, setName] = useState('');
-  const [agentId, setAgentId] = useState('');
-  const [ownerUserId, setOwnerUserId] = useState('');
-  const [replaceAck, setReplaceAck] = useState(false);
+  const [localPending, setLocalPending] = useState<Pending | null>(null);
+  const pending = retryState ? retryState.pending : localPending;
+  const setPending = retryState?.setPending ?? setLocalPending;
+  const [catKey, setCatKey] = useState(pending?.payload.catalogueKey ?? selection?.key ?? catalogue.entries[0]?.key ?? '');
+  const [mode, setMode] = useState<'new' | 'bind'>(pending?.payload.agentId ? 'bind' : 'new');
+  const [name, setName] = useState(pending?.payload.name ?? '');
+  // No explicit choice means follow this role's current binding, never the
+  // first principal in the list. Explicit choices survive snapshot refreshes.
+  const [choice, setChoice] = useState<{ role: string; id: string } | null>(() =>
+    pending?.payload.agentId ? { role: pending.payload.catalogueKey, id: pending.payload.agentId } : null);
+  const [ownerUserId, setOwnerUserId] = useState(pending?.payload.ownerUserId ?? '');
+  const [ackEvidence, setAckEvidence] = useState<string | null>(null);
+  const [reviewRequired, setReviewRequired] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<Pending | null>(null);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(() => pending ? {
+    kind: 'unknown', text: `The outcome for ${pending.payload.catalogueKey} is unknown. Retry sends the identical request and request ID, so it cannot register twice.`,
+  } : null);
 
   // Card selection is navigation, never an alteration of an in-flight retry.
   // A revision lets a later click on the same card select it again.
   useEffect(() => {
-    if (selection && !pending && !busy) { setCatKey(selection.key); setReplaceAck(false); }
+    if (selection && !pending && !busy) {
+      setCatKey(selection.key); setChoice(null); setAckEvidence(null); setReviewRequired(false);
+    }
   }, [selection]);
 
   const entry = catalogue.entries.find(e => e.key === catKey);
   const existing = catalogue.registrations.find(r => r.catalogueKey === catKey);
+  const agentId = choice?.role === catKey ? choice.id : existing?.agentId ?? '';
   const principal = catalogue.principals.find(p => p.id === agentId);
-  const ownerFor = (id: string) => {
-    const m = catalogue.owners.find(o => o.clerkUserId === id);
-    return m ? identityLabel(m, catalogue.owners) : `Owner not in member list (${id})`;
-  };
-  const bindOwnerKnown = !!principal && catalogue.owners.some(o => o.clerkUserId === principal.ownerUserId);
   const noOwners = catalogue.owners.length === 0;
   const effectiveOwner = mode === 'bind' ? principal?.ownerUserId ?? '' : ownerUserId;
+  const blocker = mode === 'bind' ? principalBlocker(catalogue, catKey, agentId) : null;
+  const currentPrincipal = catalogue.principals.find(p => p.id === existing?.agentId);
+  const evidence = JSON.stringify([
+    entry, existing, currentPrincipal, mode,
+    mode === 'bind' ? [agentId, principal, blocker] : [name, ownerUserId],
+    catalogue.owners.filter(o => [effectiveOwner, currentPrincipal?.ownerUserId].includes(o.clerkUserId)),
+  ]);
+  const target = JSON.stringify([catKey, mode, mode === 'bind' ? choice?.id ?? null : [name, ownerUserId]]);
+  const previousEvidence = useRef({ target, evidence });
+  const changedEvidence = previousEvidence.current.target === target && previousEvidence.current.evidence !== evidence;
+  const replaceAck = ackEvidence === evidence;
+  useEffect(() => {
+    if (pending || busy) return;
+    if (previousEvidence.current.target === target && previousEvidence.current.evidence !== evidence) {
+      setAckEvidence(null); setReviewRequired(true);
+    }
+    previousEvidence.current = { target, evidence };
+  }, [target, evidence, pending, busy]);
+
+  function navigateRole(key: string) {
+    if (pending || busy) return;
+    setCatKey(key); setChoice(null); setAckEvidence(null); setReviewRequired(false);
+  }
 
   const payload = useMemo<CatalogueAgentRegistrationInput | null>(() => {
     if (!entry || !effectiveOwner) return null;
@@ -53,8 +86,8 @@ export function RegistrationForm({ catalogue, queryScope, selection }: { catalog
     return principal ? { ...base, agentId: principal.id, expectedPrincipalVersion: principal.version } : null;
   }, [entry, effectiveOwner, catalogue.organizationId, existing, mode, name, principal]);
 
-  const blocked = mode === 'new' ? noOwners : !!principal && !bindOwnerKnown;
-  const ready = !!payload && !blocked && (!existing || replaceAck) && !busy;
+  const blocked = mode === 'new' ? !catalogue.owners.some(o => o.clerkUserId === ownerUserId) : !!blocker;
+  const ready = !!payload && !blocked && !changedEvidence && !reviewRequired && (!existing || replaceAck) && !busy;
 
   async function send(p: Pending) {
     setBusy(true); setNotice(null);
@@ -62,7 +95,7 @@ export function RegistrationForm({ catalogue, queryScope, selection }: { catalog
     try {
       const res = await registerCatalogueAgent({ ...p.payload, requestId: p.requestId }, { signal: ctl.signal });
       if (!alive.current) return;
-      setPending(null); setReplaceAck(false); setName('');
+      setPending(null); setAckEvidence(null); setName('');
       setNotice({ kind: 'ok', text: `${res.createdPrincipal ? 'Created and registered' : 'Bound'} principal ${res.binding.agentId} for ${p.payload.catalogueKey} (binding version ${res.binding.version}).` });
       void client.invalidateQueries({ queryKey: queryScope });
     } catch (e) {
@@ -71,6 +104,7 @@ export function RegistrationForm({ catalogue, queryScope, selection }: { catalog
       const msg = (e as { data?: { message?: string } })?.data?.message || (e as Error)?.message || '';
       if (status === 409) {
         setPending(null);
+        setAckEvidence(null); setReviewRequired(true);
         setNotice({ kind: 'conflict', text: msg || 'Registration or principal changed since you loaded this page. Reload and review the current state before trying again.' });
       } else if (status && status >= 400 && status < 500) {
         setPending(null);
@@ -84,14 +118,17 @@ export function RegistrationForm({ catalogue, queryScope, selection }: { catalog
 
   function submit(ev: React.FormEvent) {
     ev.preventDefault();
+    if (busy) return;
     if (pending) return void send(pending);
     if (!ready || !payload) return;
     const p = { payload, requestId: crypto.randomUUID() };
+    if (mode === 'bind') setChoice({ role: catKey, id: agentId });
     setPending(p); void send(p);
   }
   function reload() {
-    setPending(null); setNotice(null); setReplaceAck(false);
-    void client.resetQueries({ queryKey: queryScope, exact: true });
+    // Unknown outcomes remain locked to the identical payload and request ID.
+    if (!pending) { setNotice(null); setAckEvidence(null); }
+    void client.invalidateQueries({ queryKey: queryScope, exact: true });
   }
 
   const locked = !!pending;
@@ -104,17 +141,18 @@ export function RegistrationForm({ catalogue, queryScope, selection }: { catalog
       <fieldset disabled={locked || busy} className="grid gap-4 md:grid-cols-2 min-w-0">
         <div className="md:col-span-2">
           <Label htmlFor="reg-role">Catalogue role</Label>
-          <select id="reg-role" data-testid="select-catalogue-role" className={selectCls} value={catKey} onChange={e => { setCatKey(e.target.value); setReplaceAck(false); }}>
+          <select id="reg-role" data-testid="select-catalogue-role" className={selectCls} value={catKey} onChange={e => navigateRole(e.target.value)}>
+            {!entry && <option value={catKey}>Role unavailable ({catKey})</option>}
             {catalogue.entries.map(e => <option key={e.key} value={e.key}>{e.name} (v{e.version})</option>)}
           </select>
           <p className="mt-1 text-[11px] text-[var(--text-muted)]">Current binding version: {existing ? existing.version : '0 (unregistered)'}</p>
         </div>
-        <div className="md:col-span-2 flex gap-2" role="radiogroup" aria-label="Registration mode">
+        <div className="md:col-span-2 flex flex-col sm:flex-row gap-2" role="radiogroup" aria-label="Registration mode">
           {(['new', 'bind'] as const).map(m => (
             <label key={m}
-              className={`flex-1 min-h-11 cursor-pointer inline-flex items-center justify-center gap-2 rounded-md border text-sm font-semibold focus-within:ring-2 focus-within:ring-[var(--primary)] ${mode === m ? 'border-[var(--primary)] bg-[var(--violet-light-bg)] text-[var(--violet-fg)]' : 'border-[var(--border)] text-[var(--text-secondary)]'}`}>
+              className={`flex-1 min-w-0 min-h-11 px-2 py-2 cursor-pointer inline-flex items-center justify-center gap-2 rounded-md border text-sm font-semibold focus-within:ring-2 focus-within:ring-[var(--primary)] ${mode === m ? 'border-[var(--primary)] bg-[var(--violet-light-bg)] text-[var(--violet-fg)]' : 'border-[var(--border)] text-[var(--text-secondary)]'}`}>
               <input type="radio" name="catalogue-registration-mode" checked={mode === m} data-testid={`radio-mode-${m}`}
-                onChange={() => { setMode(m); setReplaceAck(false); }} className="sr-only" />
+                onChange={() => { setMode(m); setChoice(null); setAckEvidence(null); setReviewRequired(false); }} className="sr-only" />
               {m === 'new' ? <PlusCircle className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
               {m === 'new' ? 'Create new principal' : 'Bind existing principal'}
             </label>
@@ -136,25 +174,24 @@ export function RegistrationForm({ catalogue, queryScope, selection }: { catalog
           </>
         ) : (
           <>
-            <div>
+            {existing && <div className="md:col-span-2 min-w-0">
+              <PrincipalSummary catalogue={catalogue} id={existing.agentId} title="Current role binding" testId="current-principal-detail" />
+              <p className="mt-1 text-xs break-words">Binding version {existing.version} · recorded principal version {existing.principalVersion} · {existing.state ?? 'registered'}</p>
+            </div>}
+            <div className="md:col-span-2 min-w-0">
               <Label htmlFor="reg-principal">Existing principal</Label>
-              <select id="reg-principal" data-testid="select-principal" className={selectCls} value={agentId} onChange={e => setAgentId(e.target.value)}>
+              <select id="reg-principal" data-testid="select-principal" className={selectCls} value={agentId}
+                onChange={e => { setChoice({ role: catKey, id: e.target.value }); setAckEvidence(null); setReviewRequired(false); }}>
                 <option value="">Select a principal</option>
-                {catalogue.principals.map(p => <option key={p.id} value={p.id}>{p.name} - {p.id}</option>)}
+                {agentId && !principal && <option value={agentId}>Unavailable principal · {agentId}</option>}
+                {catalogue.principals.map(p => <option key={p.id} value={p.id}>{p.name} - {p.id}{principalBlocker(catalogue, catKey, p.id) ? ' (not eligible)' : ''}</option>)}
               </select>
             </div>
-            <div className="text-sm">
-              <Label>Owner (kept as is)</Label>
-              <div className="min-h-10 rounded-md border border-dashed border-[var(--border)] px-3 py-2 text-xs break-words" data-testid="text-bound-owner">
-                {principal ? ownerFor(principal.ownerUserId) : 'Choose a principal'}
-              </div>
-            </div>
-            {principal && (
-              <div className="md:col-span-2 text-xs text-[var(--text-secondary)] space-y-0.5" data-testid="text-principal-detail">
-                <div>Principal ID: <code className="select-all break-all font-mono">{principal.id}</code></div>
-                <div>Status: {principal.status} - principal version {principal.version}</div>
-              </div>
-            )}
+            {agentId && <div className="md:col-span-2 min-w-0">
+              <PrincipalSummary catalogue={catalogue} id={agentId}
+                title={existing ? 'Candidate replacement — saved details' : 'Selected principal — saved details'} testId="text-principal-detail" />
+              {existing?.agentId === agentId && <p className="mt-1 text-xs">The selected principal is the current binding; submitting re-registers it at the reviewed version.</p>}
+            </div>}
           </>
         )}
       </fieldset>
@@ -164,15 +201,22 @@ export function RegistrationForm({ catalogue, queryScope, selection }: { catalog
           <AlertTriangle className="h-4 w-4 shrink-0" /> No eligible owners are available for this organization, so a new principal cannot be created. Ask an administrator to add a member first.
         </p>
       )}
-      {mode === 'bind' && principal && !bindOwnerKnown && (
-        <p role="alert" className="flex gap-2 rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-xs text-[var(--status-amber-fg)]">
-          <AlertTriangle className="h-4 w-4 shrink-0" /> This principal's owner ({principal.ownerUserId}) is not in the current member list. Binding is blocked until ownership is resolved elsewhere.
+      {mode === 'bind' && blocker && (
+        <p role="alert" data-testid="alert-principal-blocked" className="flex gap-2 rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-xs text-[var(--status-amber-fg)]">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> <span className="min-w-0 break-words">{blocker}</span>
         </p>
+      )}
+      {!pending && (reviewRequired || changedEvidence) && (
+        <div role="alert" className="text-xs" data-testid="alert-review-required">
+          <p>Relevant saved information changed. Review the current details{existing ? ' and acknowledge replacement again' : ' before continuing'}.</p>
+          {!existing && <Button type="button" variant="outline" size="sm" data-testid="button-review-details"
+            onClick={() => { setReviewRequired(false); previousEvidence.current = { target, evidence }; }}>I reviewed the current details</Button>}
+        </div>
       )}
       {existing && (
         <label className="flex items-start gap-3 rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-xs text-[var(--status-amber-fg)]">
-          <input type="checkbox" data-testid="check-replace" className="mt-0.5 h-4 w-4" checked={replaceAck} disabled={locked || busy} onChange={e => setReplaceAck(e.target.checked)} />
-          <span>I understand this replaces the existing registration for this role: principal <code className="break-all">{existing.agentId}</code> (principal version {existing.principalVersion}, state {existing.state ?? 'registered'}), expected binding version {existing.version}.</span>
+          <input type="checkbox" data-testid="check-replace" className="mt-0.5 h-4 w-4 shrink-0" checked={replaceAck} disabled={locked || busy} onChange={e => { setAckEvidence(e.target.checked ? evidence : null); setReviewRequired(false); }} />
+          <span className="min-w-0">I reviewed the saved details and understand this replaces the existing registration for this role: principal <code className="break-all">{existing.agentId}</code> (recorded principal version {existing.principalVersion}, state {existing.state ?? 'registered'}), expected binding version {existing.version}.</span>
         </label>
       )}
 
@@ -181,7 +225,7 @@ export function RegistrationForm({ catalogue, queryScope, selection }: { catalog
           className={`rounded-md border p-3 text-xs ${notice.kind === 'ok' ? 'border-[var(--status-green)] bg-[var(--status-green-bg)] text-[var(--status-green-fg)]' : 'border-[var(--status-red)] bg-[var(--status-red-bg)] text-[var(--status-red-fg)]'}`}>
           <p>{notice.text}</p>
           {(notice.kind === 'conflict' || notice.kind === 'unknown') && (
-            <Button type="button" variant="outline" size="sm" className="mt-2 h-9" onClick={reload} data-testid="button-reload-catalogue">
+            <Button type="button" variant="outline" size="sm" className="mt-2 min-h-9 h-auto whitespace-normal" disabled={busy} onClick={reload} data-testid="button-reload-catalogue">
               <RotateCcw className="h-4 w-4 mr-2" /> Reload and review current state
             </Button>
           )}
@@ -191,7 +235,10 @@ export function RegistrationForm({ catalogue, queryScope, selection }: { catalog
         <Button type="submit" disabled={pending ? busy : !ready} className="min-h-11" data-testid="button-submit-registration">
           {busy ? 'Submitting...' : pending ? 'Retry same request' : existing ? 'Replace registration' : mode === 'new' ? 'Create and register' : 'Bind and register'}
         </Button>
-        {pending && !busy && <span className="text-[11px] text-[var(--text-muted)] break-all">Pending role {pending.payload.catalogueKey} · Request ID {pending.requestId}</span>}
+        {pending && <div className="min-w-0 text-[11px] text-[var(--text-muted)] break-all">
+          <p>Pending role {pending.payload.catalogueKey} · Request ID {pending.requestId}</p>
+          {pending.payload.agentId && <p>Identical retry: principal {pending.payload.agentId} · reviewed principal version {pending.payload.expectedPrincipalVersion} · owner {pending.payload.ownerUserId} · expected binding version {pending.payload.expectedBindingVersion}. Refreshed saved details do not change this request.</p>}
+        </div>}
       </div>
     </form>
   );
