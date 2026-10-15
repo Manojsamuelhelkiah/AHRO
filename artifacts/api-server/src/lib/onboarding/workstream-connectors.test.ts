@@ -1,3 +1,5 @@
+import { bindNewCaseInTransaction } from "../flow-manager/manager";
+import { backfillDocumentPacks } from "./documents";
 import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
@@ -199,10 +201,11 @@ beforeEach(async () => {
     lifecycleStage: "plan-generated",
     orchestrationStatus: "running",
     offerAcceptanceComplete: true,
-    readiness: [],
+    readiness: [{ key: "profile", label: "Profile", status: "ready" }],
     workstreams: [],
   }).returning({ id: onbCases.id });
   unitCaseId = created.id;
+  await db.transaction(tx => bindNewCaseInTransaction(tx, unitOrganizationId, created.id, "onboarding"));
   await establishLiveGovernanceFixture(unitCaseId);
 });
 
@@ -246,12 +249,13 @@ async function createDatabaseCase(lifecycleStage: string) {
       orchestrationStatus: "running",
       offerAcceptanceComplete: true,
       createdByUserId: "database-case-requestor",
-      readiness: [],
+      readiness: [{ key: "profile", label: "Profile", status: "ready" }],
       workstreams: [],
       processPolicySnapshot: unitPolicySnapshot,
     })
     .returning();
   createdCaseIds.push(created.id);
+  await db.transaction(tx => bindNewCaseInTransaction(tx, unitOrganizationId, created.id, "onboarding"));
   const authorityId = `workstream-hr-${created.id}`;
   await db.insert(onbAuthorityGovernance).values({
     organizationId: unitOrganizationId,
@@ -352,6 +356,7 @@ async function createApprovedInternalTransferCase() {
     workstreams: [],
   }).returning();
   createdCaseIds.push(created.id);
+  await db.transaction(tx => bindNewCaseInTransaction(tx, unitOrganizationId, created.id, "onboarding"));
   const authorityId = `workstream-legal-${created.id}`;
   await db.insert(onbAuthorityGovernance).values({
     organizationId: unitOrganizationId,
@@ -470,6 +475,22 @@ describe("workstream connector runtime enforcement", () => {
       }],
       readiness: [{ key: "safety-sign-off", label: "Safety", status: "pending" }],
     })), false);
+  });
+  test("document recovery skips a prerequisite hold without changing progress and still recovers an eligible case", async () => {
+    const held = await createDatabaseCase("plan-generated");
+    await db.update(onbCases).set({
+      checklistSnapshot: [{
+        id: "safety-sign-off", label: "Safety", order: 0, enabled: true, mandatory: true,
+        enforcementStage: "before-workstreams", evidenceRequired: true,
+      }],
+      readiness: [{ key: "safety-sign-off", label: "Safety", status: "pending" }],
+    }).where(eq(onbCases.id, held.id));
+    const [before] = await db.select().from(onbCases).where(eq(onbCases.id, held.id));
+    assert.equal(await backfillDocumentPacks({ organizationId: unitOrganizationId, caseId: held.id }), 0);
+    assert.deepEqual((await db.select().from(onbCases).where(eq(onbCases.id, held.id)))[0], before);
+    assert.equal((await db.select().from(onbDocuments).where(eq(onbDocuments.caseId, held.id))).length, 0);
+    const eligible = await createDatabaseCase("plan-generated");
+    assert.ok(await backfillDocumentPacks({ organizationId: unitOrganizationId, caseId: eligible.id }) > 0);
   });
   test("the default writers seed documents and BGV but do not release access before trusted clearance", async () => {
     const c = await createDatabaseCase("plan-generated");

@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { getOrganizationId } from "../lib/organization-scope";
 import { actionSeparation, createSeparations, listSeparations, separationDetail } from "../lib/offboarding/service";
 import { SeparationError } from "../lib/offboarding/model";
+import { FlowTransitionError } from "../lib/flow-manager/errors";
 import { listPolicies, savePolicy, decidePolicy } from "../lib/offboarding/policy";
 import { configureMailbox, convertMailbox, mailboxReadiness, reviewMailbox } from "../lib/hro-mailbox-ingress";
 import { logger } from "../lib/logger";
@@ -11,7 +12,7 @@ const router: IRouter = Router();
 const handle = (fn: (req: Request, res: Response) => Promise<unknown>) => async (req: Request, res: Response, next: (e?: unknown) => void) => {
   res.setHeader("Cache-Control", "no-store");
   try { await fn(req, res); } catch (e) {
-    if (e instanceof SeparationError) res.status(e.status).json({ message: e.message });
+    if (e instanceof SeparationError || e instanceof FlowTransitionError) res.status(e.status).json({ message: e.message });
     else {
       // Driver errors can contain opaque source facts or evidence in SQL
       // parameters. Never send them to generic error logging.

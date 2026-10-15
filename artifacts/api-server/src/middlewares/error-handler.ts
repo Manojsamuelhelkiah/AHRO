@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { RetiredCaseCapabilityError } from "../lib/retired-case-capabilities";
 import { InputValidationError } from "../lib/validate-inputs";
 import { logger } from "../lib/logger";
+import { FlowTransitionError } from "../lib/flow-manager/errors";
 
 export const CUSTOM_INTENT_STORAGE_UNAVAILABLE_CODE = "CUSTOM_INTENT_STORAGE_UNAVAILABLE";
 export const CUSTOM_INTENT_STORAGE_UNAVAILABLE_MESSAGE =
@@ -35,6 +36,10 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
+  if (err instanceof FlowTransitionError) {
+    res.status(409).json({ code: err.code, message: err.message });
+    return;
+  }
   if (err instanceof RetiredCaseCapabilityError) {
     res.status(410).json({ code: err.code, message: err.message });
     return;

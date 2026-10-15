@@ -43,6 +43,26 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /onboarding/cases/{caseId}/flow:
+    get:
+      operationId: getCaseExecutableFlow
+      tags: [onboarding]
+      summary: Read the bound executable definition and permission-scoped progress without starting work
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Read-only structural progress; possible actions are not authorization guarantees
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CaseExecutableFlow" }
+        "403":
+          description: Current case-read permission required
+        "404":
+          description: Case not found in the selected organization
   /onboarding/case-list-visibility:
     put:
       operationId: updateCaseListVisibility
@@ -7406,6 +7426,99 @@ components:
         type: integer
         minimum: 1
   schemas:
+    ExecutableFlowStage:
+      type: object
+      required: [id, label, role, applies, prerequisites, completed]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        role: { type: string }
+        applies: { type: string }
+        completed: { type: string }
+        prerequisites: { type: array, items: { type: string } }
+    ExecutableFlowAction:
+      type: object
+      required: [id, stage, handler, requires, authority, evidence]
+      properties:
+        id: { type: string }
+        stage: { type: string }
+        handler: { type: string }
+        requires: { type: array, items: { type: string } }
+        authority: { type: array, items: { type: string } }
+        evidence: { type: array, items: { type: string } }
+        reworkTo: { type: string }
+    ExecutableFlowDefinition:
+      type: object
+      required: [id, version, family, stages, actions]
+      properties:
+        id: { type: string }
+        version: { type: integer }
+        family: { type: string }
+        stages: { type: array, items: { $ref: "#/components/schemas/ExecutableFlowStage" } }
+        actions: { type: array, items: { $ref: "#/components/schemas/ExecutableFlowAction" } }
+        continuations:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+    CaseExecutableFlowStage:
+      type: object
+      required: [id, label, role, prerequisites, status, blockers]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        role: { type: string }
+        prerequisites: { type: array, items: { type: string } }
+        status: { type: string }
+        blockers: { type: array, items: { type: string } }
+    CaseExecutableFlowAction:
+      type: object
+      required: [id, stage, handler, eligible, blockers, requiredAuthority, requiredEvidence]
+      properties:
+        id: { type: string }
+        stage: { type: string }
+        handler: { type: string }
+        eligible: { type: boolean }
+        blockers: { type: array, items: { type: string } }
+        requiredAuthority: { type: array, items: { type: string } }
+        requiredEvidence: { type: array, items: { type: string } }
+    CaseExecutableFlowTask:
+      type: object
+      required: [id, label, role, status, prerequisites, blockers]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        role: { type: string }
+        status: { type: string }
+        prerequisites: { type: array, items: { type: string } }
+        blockers: { type: array, items: { type: string } }
+    CaseExecutableFlowHistory:
+      type: object
+      required: [actionId, outcome, reason, definitionId, definitionVersion, occurredAt]
+      properties:
+        actionId: { type: string }
+        outcome: { type: string }
+        reason: { type: string }
+        definitionId: { type: string }
+        definitionVersion: { type: integer }
+        occurredAt: { type: string, format: date-time }
+    CaseExecutableFlow:
+      type: object
+      required: [caseId, family, mode, compatibilityReason, informationalNotice, progressRedacted, stages, actions, tasks, history]
+      properties:
+        caseId: { type: integer }
+        family: { type: string }
+        mode: { type: string }
+        compatibilityReason: { type: string }
+        definitionId: { type: string }
+        definitionVersion: { type: integer }
+        definition: { $ref: "#/components/schemas/ExecutableFlowDefinition" }
+        informationalNotice: { type: string }
+        progressRedacted: { type: boolean }
+        stages: { type: array, items: { $ref: "#/components/schemas/CaseExecutableFlowStage" } }
+        actions: { type: array, items: { $ref: "#/components/schemas/CaseExecutableFlowAction" } }
+        tasks: { type: array, items: { $ref: "#/components/schemas/CaseExecutableFlowTask" } }
+        history: { type: array, items: { $ref: "#/components/schemas/CaseExecutableFlowHistory" } }
     CaseListVisibilitySelection:
       type: object
       additionalProperties: false

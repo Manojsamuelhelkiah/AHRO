@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "start:production": "node --enable-source-maps ./start-production.mjs",
     "typecheck": "tsc -b tsconfig.json",
+    "test:case-flows": "node ./run-case-flow-tests.mjs",
     "validate:routes": "tsc -b tsconfig.json --pretty false",
     "test": "pnpm run test:policy-quality && pnpm run test:post-merge && node ./run-tests.mjs && pnpm run test:agent-catalogue",
     "test:agent-catalogue": "TEST_FILE=src/routes/agent-catalogue.test.ts node ./run-tests.mjs",

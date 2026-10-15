@@ -64,7 +64,7 @@ export async function issueCandidatePortalLink(input: {
     mutate: () => withCaseDispatchGuard(
       input.caseId,
       () => issueCandidatePortalLinkUnsafe(input),
-      { onOffline: () => issueCandidatePortalLinkUnsafe(input) },
+      { onOffline: () => issueCandidatePortalLinkUnsafe(input), flowAction: "notification" },
     ),
   }));
 }

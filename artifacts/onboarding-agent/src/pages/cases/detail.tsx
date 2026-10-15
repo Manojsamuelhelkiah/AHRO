@@ -47,6 +47,7 @@ import { HroIntakeRequestPanel } from '../../components/hro-intake-request-panel
 import { AskCaseSection } from './detail/ask-case-section';
 import { Disclosure } from './detail/disclosure';
 import { CaseActionBlock } from './detail/case-action-block';
+import { CaseFlowPanel } from '../../components/case-flow-panel';
 import { CaseAccessProvider, RestrictedActionNotice, type CaseAccessPermissions } from './detail/case-access';
 
 export function CaseDetailPage() {
@@ -274,6 +275,9 @@ export function CaseDetailPage() {
         <Disclosure title="History" summary="Recorded case history" forceOpen={deepLinked} revealKey={search}>
           <ProgressHistory {...history} />
         </Disclosure>
+        <Disclosure title="Flow" summary="Review-only execution status" testId="disclosure-flow">
+          <CaseFlowPanel caseId={caseId} />
+        </Disclosure>
       </div>
     </CaseAccessProvider>;
   }
@@ -379,6 +383,9 @@ export function CaseDetailPage() {
         {activeTab === 'Transaction context' && <TransactionContextTab caseId={caseId} setTab={setActiveTab}
           availableTabs={['Overview', 'Progress', 'Documents', ...(permissions.access.notesRead ? ['Communications', 'Audit'] : [])]} />}
       </div>
+      </Disclosure>
+      <Disclosure title="Flow" summary="Read-only stages, tasks, blockers and recorded history" testId="disclosure-flow">
+        <CaseFlowPanel caseId={caseId} />
       </Disclosure>
     </div>
     </CaseAccessProvider>

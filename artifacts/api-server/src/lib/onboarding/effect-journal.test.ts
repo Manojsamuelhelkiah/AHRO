@@ -1,11 +1,12 @@
-import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
+import { deleteTestOrganizations, requireOwnedOrganizationTestSchema } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { db } from "@workspace/db";
 import { onbApprovals, onbAuthorityAssignments, onbAuthorityGovernance, onbCases, onbCommunications, onbEffectJournal, onbEvents, onbGovernanceDecisionReviews, onbGovernanceDecisions, onbGovernanceRequirements, onbSensitiveLifecyclePolicies, organizationMembershipsTable, organizationsTable } from "@workspace/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { addCandidateReplyReference, sendOutbound } from "./channels";
-import { createApproval, defaultReadiness, reconcileDecidedApprovals } from "./engine";
+import { createApproval, defaultReadiness, reconcileDecidedApprovals as reconcileDomainApprovals } from "./engine";
+import { recordHumanPermissionDecision } from "../human-permissions";
 import { checklistStageBlockers } from "./settings";
 import {
   claimEffectDispatch,
@@ -26,6 +27,35 @@ const approvedAuthority = {
   decidedAuthorityId: authorityId,
   decidedAuthorityRevision: 1,
 };
+
+/** Replace only explicit legacy fixture markers with genuinely reviewed,
+ * current permission receipts. Deliberately missing-evidence rows stay missing. */
+async function seedFixtureDecisionReceipts(caseId: number) {
+  const rows = await db.select().from(onbApprovals).where(and(
+    eq(onbApprovals.caseId, caseId), eq(onbApprovals.decidedAuthorityId, authorityId), eq(onbApprovals.status, "approved"),
+  ));
+  if (!rows.length) return;
+  await db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${DEMO_ORGANIZATION_ID}))`);
+    await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
+    for (const approval of rows) {
+      const receipt = await recordHumanPermissionDecision(tx, {
+        organizationId: DEMO_ORGANIZATION_ID, caseId, actorUserId: authorityUserId,
+        requiredKeys: ["tool.approval.decide", "flow.case.edit"], decision: "approved",
+        reviewedRevision: approval.version,
+      });
+      await tx.update(onbApprovals).set({
+        decidedBy: authorityUserId, decidedAt: new Date(),
+        decidedAuthorityId: `human-permission/v1:approval:${approval.id}`,
+        decidedAuthorityRevision: approval.version, permissionDecision: receipt.authorization,
+      }).where(and(eq(onbApprovals.id, approval.id), eq(onbApprovals.decidedAuthorityId, authorityId)));
+    }
+  });
+}
+async function reconcileDecidedApprovals(...args: Parameters<typeof reconcileDomainApprovals>) {
+  await seedFixtureDecisionReceipts(args[0]);
+  return reconcileDomainApprovals(...args);
+}
 const identity = (caseId: number, suffix: string, providerIdempotency = false) => {
   const logicalOperationKey = `effect-journal-test:${Date.now()}:${suffix}`;
   keys.push(logicalOperationKey);
@@ -42,6 +72,7 @@ const identity = (caseId: number, suffix: string, providerIdempotency = false) =
 
 describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
   before(async () => {
+    await requireOwnedOrganizationTestSchema();
     await db.insert(organizationsTable).values({
       id: DEMO_ORGANIZATION_ID,
       name: "Effect journal test",
@@ -55,7 +86,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       approvedByUserId: "effect-journal-test", approvedAt: new Date(), governanceSource: "test", revision: 1,
     }).onConflictDoUpdate({ target: onbAuthorityGovernance.organizationId, set: { status: "governance-approved" } });
     await db.insert(organizationMembershipsTable).values({
-      organizationId: DEMO_ORGANIZATION_ID, clerkUserId: authorityUserId, role: "member",
+      organizationId: DEMO_ORGANIZATION_ID, clerkUserId: authorityUserId, role: "admin",
     }).onConflictDoNothing();
     await db.insert(onbAuthorityAssignments).values({
       id: authorityId, organizationId: DEMO_ORGANIZATION_ID, personUserId: authorityUserId,
@@ -281,6 +312,7 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       recommendation: "Proceed", rationale: "Fixture", resumeAction: "continue-after-intake",
       status: "approved", ...approvedAuthority,
     });
+    await seedFixtureDecisionReceipts(caseId);
     for (const kind of ["revoked", "withdrawn"] as const) {
       // Restore the same approved waiting state for each competing authority
       // change, then make the change while holding the shared tenant fence.
@@ -294,11 +326,13 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       const change = db.transaction(async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${DEMO_ORGANIZATION_ID}))`);
         if (kind === "revoked") {
-          await tx.update(onbAuthorityAssignments).set({ status: "revoked" })
-            .where(eq(onbAuthorityAssignments.id, authorityId));
+          await tx.update(organizationMembershipsTable).set({ revokedAt: new Date() })
+            .where(and(eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+              eq(organizationMembershipsTable.clerkUserId, authorityUserId)));
         } else {
-          await tx.update(onbAuthorityGovernance).set({ status: "withdrawn" })
-            .where(eq(onbAuthorityGovernance.organizationId, DEMO_ORGANIZATION_ID));
+          await tx.update(organizationMembershipsTable).set({ role: "member" })
+            .where(and(eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+              eq(organizationMembershipsTable.clerkUserId, authorityUserId)));
         }
         entered();
         await unblock;
@@ -311,11 +345,13 @@ describe("durable connector effect journal (real DB)", { skip: !hasDb }, () => {
       await change;
       assert.equal(await reconciled, false);
       if (kind === "revoked") {
-        await db.update(onbAuthorityAssignments).set({ status: "active" })
-          .where(eq(onbAuthorityAssignments.id, authorityId));
+        await db.update(organizationMembershipsTable).set({ revokedAt: null })
+          .where(and(eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+            eq(organizationMembershipsTable.clerkUserId, authorityUserId)));
       } else {
-        await db.update(onbAuthorityGovernance).set({ status: "governance-approved" })
-          .where(eq(onbAuthorityGovernance.organizationId, DEMO_ORGANIZATION_ID));
+        await db.update(organizationMembershipsTable).set({ role: "admin" })
+          .where(and(eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
+            eq(organizationMembershipsTable.clerkUserId, authorityUserId)));
       }
     }
     await db.delete(onbApprovals).where(eq(onbApprovals.caseId, caseId));

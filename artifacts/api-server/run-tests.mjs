@@ -18,6 +18,12 @@ const requestedTestFile = process.env.TEST_FILE?.trim();
 // Only suites proven to create workspace leftovers, plus workspace bootstrap/
 // membership regressions. Broad API-suite isolation is a separate deliverable.
 const ownedWorkspaceSuites = new Set([
+  "src/lib/flow-manager/contract.test.ts",
+  "src/lib/onboarding/channel-flow-action.test.ts",
+  "src/lib/flow-manager/manager.test.ts",
+  "src/lib/onboarding/effect-journal.test.ts",
+  "src/lib/onboarding/gateway-guards.test.ts",
+  "src/lib/onboarding/engine-document-gate.test.ts",
   "src/lib/onboarding/case-list-visibility.test.ts",
   "src/routes/action-center-case-types.test.ts",
   "src/routes/action-center.test.ts",
@@ -55,6 +61,9 @@ const ownedWorkspaceSuites = new Set([
   "src/routes/organizations-membership.test.ts",
   "src/routes/organizations.test.ts",
 ]);
+if (process.env.REQUIRE_ISOLATED_TEST_SCHEMA === "true" && !ownedWorkspaceSuites.has(requestedTestFile)) {
+  throw new Error("Selected regression suite is not registered for disposable-schema isolation");
+}
 if (ownedWorkspaceSuites.has(requestedTestFile) && !process.argv.includes("--isolated-child")) {
   const owned = await createIsolatedTestDatabase(process.env.DATABASE_URL);
   let child;

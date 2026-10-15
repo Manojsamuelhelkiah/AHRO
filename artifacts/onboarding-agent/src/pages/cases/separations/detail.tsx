@@ -8,6 +8,7 @@ import { useGetSeparationCase, useApplySeparationAction, useListSeparationPolici
 import type { SeparationAction, SeparationDetail, SeparationTask, SeparationReceipt } from '@workspace/api-client-react';
 import { Card, Input, Button } from '@/components/ui-shared';
 import { ArrowLeft } from 'lucide-react';
+import { CaseFlowPanel } from '../../../components/case-flow-panel';
 import { Disclosure } from '../detail/disclosure';
 import { ExchangePanel } from './exchange-panel';
 import { caseListReference } from '../case-presentation';
@@ -302,6 +303,9 @@ export function SeparationDetailPage() {
             </div>
             <aside className="space-y-4"><Card className="p-4 text-xs text-[var(--text-muted)]">Final Closure and Activity 12 are unavailable. No override exists.</Card></aside>
           </div>
+          </Disclosure>
+          <Disclosure title="Flow" summary="Read-only stages, tasks, blockers and recorded history" testId="disclosure-flow">
+            <CaseFlowPanel caseId={caseId} />
           </Disclosure>
         </>
       )}

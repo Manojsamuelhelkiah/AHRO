@@ -45,6 +45,8 @@ import {
   WORKFORCE_CONTINUATION_SETTING_PREFIX,
 } from "./operational-requests";
 import { SYNTHETIC_OFFLINE_MARKER } from "./synthetic-offline";
+import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
+import { recordHumanPermissionDecision } from "../human-permissions";
 import { SENSITIVE_DATA_CLASSES } from "./sensitive-lifecycle";
 import {
   governanceSnapshotForNewCase,
@@ -96,6 +98,12 @@ function caseValues(organizationId: string, name: string, notes: string | null =
     joiningDate: "2030-01-01",
     workforceContext: { workCountry: "US" },
     notes,
+    // A released rule-generated plan is the entry boundary for these domain
+    // task tests. Pending acceptance/intake belongs to gateway tests.
+    offerAcceptanceComplete: true,
+    lifecycleStage: "plan-generated",
+    orchestrationStatus: "checklist-blocked",
+    orchestrationCheckpoint: "blocked:before-workstreams",
     readiness: [
       { key: "access", label: "Access", status: "pending" },
       { key: "assets", label: "Assets", status: "pending" },
@@ -113,14 +121,11 @@ async function establishLiveGovernanceFixture(
   );
   for (const decision of decisions) {
     const reviewer = `operational-fixture:${decision.accountableRole}`;
-    const [authority] = await db.insert(onbGovernanceAuthorityAssignments).values({
-      organizationId,
-      authorityRole: decision.accountableRole,
-      assigneeUserId: reviewer,
-      verificationStatus: "verified",
-      verifiedByUserId: "operational-fixture",
-      verificationReference: reviewer,
-    }).returning({ id: onbGovernanceAuthorityAssignments.id });
+    await db.insert(organizationMembershipsTable).values({ organizationId, clerkUserId: reviewer, role: "admin" }).onConflictDoNothing();
+    const authority = await db.transaction(tx => recordHumanPermissionDecision(tx, {
+      organizationId, actorUserId: reviewer, requiredKeys: ["tool.policy.manage"],
+      decision: "explicit-policy-review", reviewedRevision: decision.revision,
+    }));
     await db.insert(onbGovernanceDecisionReviews).values({
       organizationId,
       decisionKey: decision.key,
@@ -196,7 +201,7 @@ async function seedCurrentExecutionApprovals(caseId: number): Promise<void> {
     await db.insert(organizationMembershipsTable).values({
       organizationId: orgA,
       clerkUserId: reviewer,
-      role: "member",
+      role: "admin",
     }).onConflictDoNothing();
     await db.insert(onbAuthorityAssignments).values({
       id: authorityId,
@@ -212,7 +217,7 @@ async function seedCurrentExecutionApprovals(caseId: number): Promise<void> {
       source: "fixture",
       governanceDecisionRef: "OPERATIONAL-FIXTURE",
     });
-    await db.insert(onbApprovals).values({
+    const [approval] = await db.insert(onbApprovals).values({
       organizationId: orgA,
       caseId,
       agent: "workstreams",
@@ -226,7 +231,15 @@ async function seedCurrentExecutionApprovals(caseId: number): Promise<void> {
       decidedAuthorityId: authorityId,
       decidedAuthorityRevision: 1,
       idempotencyKey: `orchestration:${caseId}:approval:execution:${connector}`,
-    });
+    }).returning();
+    const decision = await db.transaction(tx => recordHumanPermissionDecision(tx, {
+      organizationId: orgA, caseId, actorUserId: reviewer, requiredKeys: ["tool.approval.decide", "flow.case.edit"],
+      decision: "approved", reviewedRevision: approval.version,
+    }));
+    await db.update(onbApprovals).set({
+      decidedBy: reviewer, decidedAt: new Date(), decidedAuthorityId: `human-permission/v1:approval:${approval.id}`,
+      decidedAuthorityRevision: approval.version, permissionDecision: decision.authorization,
+    }).where(eq(onbApprovals.id, approval.id));
   }
   if (caseId !== caseA) {
     await db.insert(onbAuthorityAssignments).values({
@@ -294,7 +307,7 @@ async function call(
   init?: RequestInit,
   role = "owner",
 ) {
-  return fetch(`${baseUrl}${path}`, {
+  const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       "content-type": "application/json",
@@ -304,6 +317,8 @@ async function call(
       ...(init?.headers ?? {}),
     },
   });
+  if (response.status === 409) console.info("Isolated fixture conflict:", path, await response.clone().text());
+  return response;
 }
 
 before(async () => {
@@ -381,23 +396,7 @@ before(async () => {
     approvedPolicyVersion: 1,
   });
   liveGovernanceSnapshot = await establishLiveGovernanceFixture(orgA);
-  await db.insert(onbSensitiveLifecyclePolicies).values(
-    [orgA, orgB].flatMap((organizationId) => SENSITIVE_DATA_CLASSES.map((dataClass) => ({
-      organizationId,
-      dataClass,
-      jurisdiction: "US",
-      revision: 1,
-      retentionDays: 365,
-      purpose: `Operational request ${dataClass} lifecycle`,
-      lawfulBasis: "Test-approved operational lifecycle basis",
-      providerSharingApproved: false,
-      permittedProviders: [],
-      policyReference: `operational-${dataClass}`,
-      approvalReference: `operational-${dataClass}`,
-      approvedByUserId: user,
-      approvedAuthorityAssignmentId: 1,
-    }))),
-  );
+  await Promise.all([orgA, orgB].map(organizationId => seedApprovedSensitiveLifecyclePolicies(organizationId)));
   [caseA, caseB, offlineCase, workforceCase, allNonblockingCase, officeNoSiteCase] = (await db.insert(onbCases).values([
     caseValues(orgA, "Operational Alpha"),
     caseValues(orgB, "Operational Beta"),
@@ -410,7 +409,7 @@ before(async () => {
       joiningDate: "2020-01-02",
       offerAcceptanceComplete: true,
       readiness: [
-        { key: "profile", label: "Profile", status: "pending" },
+        { key: "profile", label: "Profile", status: "ready" },
         { key: "documentation", label: "Documentation", status: "pending" },
         { key: "learning", label: "Learning", status: "pending" },
         { key: "checkpoints", label: "Checkpoints", status: "pending" },
@@ -986,7 +985,7 @@ test("requires integer action versions and serializes same-version simulated mut
     row.idempotencyKey === "operational:" + caseA + ":documentation:action:assets-concurrent-a" ||
     row.idempotencyKey === "operational:" + caseA + ":documentation:action:assets-concurrent-b",
   )!;
-  assert.match(assetsCommunication.body, /AI agent identity: .*id: documentation/);
+  assert.match(assetsCommunication.body, /AI agent role: .*id: documentation.*invocation not confirmed/);
   assert.match(assetsCommunication.body, /origin: internal/);
   const assetsRead = await call(
     `/onboarding/cases/${caseA}/operational-requests`,

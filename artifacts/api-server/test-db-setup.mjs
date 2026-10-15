@@ -16,6 +16,9 @@ const pgcryptoReplayMigration = {
   hash: "078aec2d9f6153ea7e3af2b1265ea1a8a4472abe239ae3e06e0c1bbb496b5e90",
 };
 const reviewedAutomaticPolicyExceptionHashes = new Set([
+  // Additive executable-flow metadata and conservative legacy compatibility
+  // holds; immutable definition/binding triggers never alter domain evidence.
+  "2883bc4f8f40359b77f9bc4f0b015d979f358dacc6f4b6af39e8354aaf3c5503",
   // Immutable provenance migration; retain origins and narrowly revoke legacy
   // notes-only Demo grants without deleting case, file, audit or effect evidence.
   "cd6e274df06fa68863a1220b2c2f29634b6fbc6f9663f4ab7d2e876f69ba7105",

@@ -10,6 +10,7 @@ import {
   DEFAULT_SMOKE_WEB_URL,
   DEFAULT_SMOKE_API_URL,
 } from "./smoke-dependencies.mjs";
+import { verifyIsolatedTestDatabase } from "../../api-server/isolated-test-database.mjs";
 
 const workspaceRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const startupTimeoutMs = Number(
@@ -123,7 +124,14 @@ const [pageUrl, healthUrl] = await Promise.all([
 
 const apiUrl = new URL("/api/intents", healthUrl);
 
-await reconcileDevelopmentDatabase();
+if (process.env.INTENT_ROUTING_SMOKE_OWNED_SCHEMA) {
+  // The isolated runner already replayed all checked-in migrations with
+  // Drizzle's ledger. Verify that exact receipt instead of reapplying them
+  // through the separate development reconciliation ledger.
+  await verifyIsolatedTestDatabase(process.env.DATABASE_URL, process.env.INTENT_ROUTING_SMOKE_OWNED_SCHEMA);
+} else {
+  await reconcileDevelopmentDatabase();
+}
 const smokeIdentity = await ensureDevelopmentSmokeMembership();
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret) {

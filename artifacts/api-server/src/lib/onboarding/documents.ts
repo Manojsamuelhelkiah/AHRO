@@ -1,4 +1,5 @@
 import { isRestrictedHistoricalCase as isHistoricalTestRecord } from "./operational-eligibility";
+import { FlowTransitionError } from "../flow-manager/errors";
 
 import { db } from "@workspace/db";
 import { onbCases, onbDocuments } from "@workspace/db/schema";
@@ -64,9 +65,20 @@ export function documentPackFor(c: Pick<DocumentSeedCase, "workerCategory" | "ge
 
 /** Seed the pack for one case. Idempotent per (caseId, key). Returns only rows
  * actually inserted, so recovery reporting never counts a gated no-op. */
-export async function seedDocumentsForCase(c: DocumentSeedCase): Promise<number> {
+export async function seedDocumentsForCase(
+  c: DocumentSeedCase,
+  authorityTx?: Parameters<Parameters<typeof db.transaction>[0]>[0],
+): Promise<number> {
+  // A connector's authority transaction already fences this parent. Read it
+  // on that connection; a second SHARE lock would wait on our own NO KEY
+  // UPDATE lock. Keep child writes independently committed before confirming
+  // the durable effect journal, rather than moving confirmation ahead of commit.
+  const [fencedCurrent] = authorityTx ? await authorityTx.select().from(onbCases).where(and(
+    eq(onbCases.id, c.id), eq(onbCases.organizationId, c.organizationId),
+  )).for("no key update") : [];
+  if (authorityTx && !fencedCurrent) return 0;
   return db.transaction(async tx => {
-  const [current] = await tx.select().from(onbCases).where(and(
+  const [current] = fencedCurrent ? [fencedCurrent] : await tx.select().from(onbCases).where(and(
     eq(onbCases.id, c.id), eq(onbCases.organizationId, c.organizationId),
   )).for("share");
   if (!current) return 0;
@@ -125,7 +137,7 @@ export async function backfillDocumentPacks(scope?: {
       ...(scope?.organizationId ? [eq(onbCases.organizationId, scope.organizationId)] : []),
       ...(scope?.caseId ? [eq(onbCases.id, scope.caseId)] : []),
     ));
-  const { dispatchDocumentPackRecovery } = await import("./workstream-connectors");
+  const { dispatchDocumentPackRecovery, WorkstreamPrerequisiteHeldError } = await import("./workstream-connectors");
   let insertedDocuments = 0;
   for (const c of missing) {
     if (isHistoricalTestRecord(c) || isSyntheticOfflineCase(c) || (await getUatCaseIsolation(c)).isolated) continue;
@@ -137,6 +149,11 @@ export async function backfillDocumentPacks(scope?: {
       );
       insertedDocuments += documents.length;
     } catch (error) {
+      if (error instanceof FlowTransitionError || error instanceof WorkstreamPrerequisiteHeldError) {
+        // Preserve the hold without abandoning other independently eligible
+        // cases or creating a new human approval for an unmet prerequisite.
+        continue;
+      }
       if (error instanceof SensitiveLifecycleConflictError) {
         // A missing/blocked lifecycle jurisdiction is a restricted state, not
         // completion. Skip only this legacy case so another eligible tenant's

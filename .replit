@@ -32,12 +32,12 @@ args = "agent-catalogue-setup"
 name = "intent-routing-smoke"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "NODE_ENV=development pnpm --filter @workspace/cost-explorer run smoke:intent-routing"
-
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "NODE_ENV=development artifacts/onboarding-agent/node_modules/.bin/tsx scripts/isolated-intent-smoke.mjs"
 
 [[workflows.workflow]]
 name = "onboarding-demo-browser"

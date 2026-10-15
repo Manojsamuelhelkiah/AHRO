@@ -1,4 +1,6 @@
 import { db } from "@workspace/db";
+import { guardDomainAction, recordTransitionInTransaction, readBoundDefinition } from "../flow-manager/manager";
+import type { ContinuationHandler } from "../flow-manager/contract";
 import { operationalEligibilityInTransaction } from "./operational-eligibility";
 import {
   onbApprovals,
@@ -12,7 +14,7 @@ import {
   type OnbRecordsEvidenceItem,
   type OnbWorkstreamRow,
 } from "@workspace/db/schema";
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { withHroCaseContext, recordHroContextStep } from "../hro-context/manager";
 import { currentHroContext } from "../hro-context/core";
 import { prepareOnboardingPlanEvidence } from "../transaction-context/consumers";
@@ -76,6 +78,20 @@ import { withCaseDerivedLifecycleWrite } from "./sensitive-lifecycle";
 import { isSeparationOrLegacyExit } from "./separation-isolation";
 type CaseRow = typeof onbCases.$inferSelect;
 
+async function validateEngineAction(caseId: number, action: string, claim?: OrchestrationClaim) {
+  return db.transaction(async tx => {
+    const [current] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
+    if (!current) throw new Error(`case ${caseId} not found`);
+    if (claim && (current.orchestrationClaimOwner !== claim.owner || current.orchestrationClaimToken !== claim.token ||
+      (claim.generation !== undefined && current.workforceContextVersion !== claim.generation))) {
+      throw new Error("Orchestration claim was fenced by a newer worker");
+    }
+    return guardDomainAction(tx, current, action,
+      `engine:${action}:${current.orchestrationClaimToken}:${current.orchestrationCheckpoint ?? "initial"}`,
+      claim ? { version: claim.token, generation: claim.generation ?? current.workforceContextVersion } : undefined);
+  });
+}
+
 export function checkpointSkipsPlanApproval(checkpoint: string | null | undefined): boolean {
   return checkpoint === "plan-approved";
 }
@@ -126,10 +142,12 @@ export async function logEvent(
 
 async function updateCase(caseId: number, patch: Partial<typeof onbCases.$inferInsert>) {
   const c = await getCase(caseId);
-  await withCaseDerivedLifecycleWrite({ organizationId: c.organizationId, caseId }, (tx) => tx
-    .update(onbCases)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, c.organizationId))));
+  await withCaseDerivedLifecycleWrite({ organizationId: c.organizationId, caseId }, async (tx, current) => {
+    await guardDomainAction(tx, current, patch.lifecycleStage === "profile-validated" ? "intake" : "reconcile",
+      `engine-update:${current.orchestrationClaimToken}:${randomUUID()}`);
+    await tx.update(onbCases).set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(onbCases.id, caseId), eq(onbCases.organizationId, c.organizationId)));
+  });
 }
 
 /**
@@ -437,19 +455,42 @@ async function enforceChecklistGate(
   return false;
 }
 
-type OrchestrationClaim = { owner: string; token: number };
+type OrchestrationClaim = { owner: string; token: number; generation?: number };
 
 async function fencedCaseUpdate(
   caseId: number,
   claim: OrchestrationClaim,
   patch: Partial<typeof onbCases.$inferInsert>,
 ): Promise<void> {
-  const [updated] = await db.update(onbCases).set({ ...patch, updatedAt: new Date() }).where(and(
-    eq(onbCases.id, caseId),
-    eq(onbCases.orchestrationClaimOwner, claim.owner),
-    eq(onbCases.orchestrationClaimToken, claim.token),
-  )).returning({ id: onbCases.id });
-  if (!updated) throw new Error("Orchestration claim was fenced by a newer worker");
+  await db.transaction(async tx => {
+    const [current] = await tx.select().from(onbCases).where(and(
+      eq(onbCases.id, caseId), eq(onbCases.orchestrationClaimOwner, claim.owner),
+      eq(onbCases.orchestrationClaimToken, claim.token),
+    )).for("update");
+    if (!current) throw new Error("Orchestration claim was fenced by a newer worker");
+    if (claim.generation !== undefined && claim.generation !== current.workforceContextVersion) {
+      throw new Error("Orchestration claim was fenced by a newer evidence generation");
+    }
+    const checkpointActions: Record<string, string> = {
+      plan: "plan", "workstreams-complete": "workstreams",
+      "communications-complete": "communications", "review-complete": "review",
+    };
+    const action = patch.orchestrationCheckpoint ? checkpointActions[patch.orchestrationCheckpoint] : undefined;
+    if (action) {
+      const validated = await guardDomainAction(tx, current, action,
+        `checkpoint-guard:${claim.token}:${patch.orchestrationCheckpoint}`);
+      await recordTransitionInTransaction(tx, {
+        organizationId: current.organizationId, caseId, actionId: action,
+        operationKey: `checkpoint:${claim.token}:${patch.orchestrationCheckpoint}`,
+        definition: validated.definition, version: claim.token, generation: current.workforceContextVersion,
+        outcome: "recorded",
+      });
+    }
+    await tx.update(onbCases).set({ ...patch, updatedAt: new Date() }).where(and(
+      eq(onbCases.id, caseId), eq(onbCases.orchestrationClaimOwner, claim.owner),
+      eq(onbCases.orchestrationClaimToken, claim.token),
+    ));
+  });
   if (patch.orchestrationCheckpoint && currentHroContext()) {
     await recordHroContextStep("checkpoint-recorded", { reference: patch.orchestrationCheckpoint });
   }
@@ -463,6 +504,7 @@ async function renewOrchestrationClaim(caseId: number, claim: OrchestrationClaim
     eq(onbCases.id, caseId),
     eq(onbCases.orchestrationClaimOwner, claim.owner),
     eq(onbCases.orchestrationClaimToken, claim.token),
+    ...(claim.generation === undefined ? [] : [eq(onbCases.workforceContextVersion, claim.generation)]),
     sql`${onbCases.orchestrationClaimUntil} > now()`,
   )).returning({ id: onbCases.id });
   if (!renewed) throw new Error("Orchestration lease expired or was fenced");
@@ -499,11 +541,26 @@ async function mergeManagedReadiness(
     if (
       claim &&
       (current.orchestrationClaimOwner !== claim.owner ||
-        current.orchestrationClaimToken !== claim.token)
+        current.orchestrationClaimToken !== claim.token ||
+        (claim.generation !== undefined && current.workforceContextVersion !== claim.generation))
     ) {
       throw new Error("Orchestration claim was fenced by a newer worker");
     }
     const readiness = current.readiness.map((item) => ({ ...item }));
+    const stageActions: Record<string, string> = {
+      "profile-validated": "intake", "plan-generated": "plan", preboarding: "workstreams",
+    };
+    const stageAction = patch.lifecycleStage && stageActions[patch.lifecycleStage];
+    if (stageAction) {
+      const validated = await guardDomainAction(tx, current, stageAction,
+        `lifecycle-guard:${current.orchestrationClaimToken}:${patch.lifecycleStage}`);
+      await recordTransitionInTransaction(tx, {
+        organizationId: current.organizationId, caseId, actionId: stageAction,
+        operationKey: `lifecycle:${current.orchestrationClaimToken}:${patch.lifecycleStage}`,
+        definition: validated.definition, version: current.orchestrationClaimToken,
+        generation: current.workforceContextVersion, outcome: "recorded",
+      });
+    }
     for (const key of managedKeys) {
       const next = desired.find((item) => item.key === key);
       const existing = readiness.find((item) => item.key === key);
@@ -548,6 +605,7 @@ function setWorkstream(
 /* ------------------------------------------------------------------ */
 
 async function runIntake(caseId: number, claim?: OrchestrationClaim): Promise<"continue" | "paused"> {
+  await validateEngineAction(caseId, "intake", claim);
   if (!(await enforceOfferAcceptanceGate(caseId, claim))) return "paused";
   const c = await getCase(caseId);
   const write = (patch: Partial<typeof onbCases.$inferInsert>) =>
@@ -765,6 +823,7 @@ async function runPlanGeneration(
   resumingAfterPlanApproval = false,
   claim?: OrchestrationClaim,
 ): Promise<"continue" | "paused"> {
+  await validateEngineAction(caseId, "plan", claim);
   const c = await getCase(caseId);
   const write = (patch: Partial<typeof onbCases.$inferInsert>) =>
     claim ? fencedCaseUpdate(caseId, claim, patch) : updateCase(caseId, patch);
@@ -902,6 +961,7 @@ export async function runWorkstreams(
 async function runWorkstreamsInContext(
   caseId: number, claim?: OrchestrationClaim,
 ): Promise<"paused" | "complete"> {
+  await validateEngineAction(caseId, "workstreams", claim);
   const c = await getCase(caseId);
   // Ordinary provider effects each need their own reviewed specialist
   // decision. Gate A/plan approvals only control progression; they never
@@ -1138,6 +1198,7 @@ async function runWorkstreamsInContext(
 /* ------------------------------------------------------------------ */
 
 async function runCommunications(caseId: number) {
+  await validateEngineAction(caseId, "communications");
   const c = await getCase(caseId);
 
   const draft = await llmComplete(
@@ -1207,6 +1268,7 @@ async function runCommunications(caseId: number) {
 /* ------------------------------------------------------------------ */
 
 async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim) {
+  await validateEngineAction(caseId, "review", claim);
   if (!(await enforceOfferAcceptanceGate(caseId, claim))) return false;
   const c = await getCase(caseId);
 
@@ -1216,10 +1278,14 @@ async function runAnalyticsAndReview(caseId: number, claim?: OrchestrationClaim)
     if (
       claim &&
       (current.orchestrationClaimOwner !== claim.owner ||
-        current.orchestrationClaimToken !== claim.token)
+        current.orchestrationClaimToken !== claim.token ||
+        (claim.generation !== undefined && current.workforceContextVersion !== claim.generation))
     ) {
       throw new Error("Orchestration claim was fenced by a concurrent checklist transition");
     }
+    await guardDomainAction(tx, current, "review",
+      `review-write:${current.orchestrationClaimToken}:${current.workforceContextVersion}`,
+      claim ? { version: claim.token, generation: claim.generation ?? current.workforceContextVersion } : undefined);
     const malwareBlockers = documentationGateConfigured(current)
       ? await latestRequiredUploadMalwareBlockers(tx, current.organizationId, caseId)
       : [];
@@ -1355,6 +1421,8 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
     // Enrollment is additive: a legacy complete case must not be replayed by
     // the approval recovery worker merely because it has an old approved row.
     if (c.lifecycleStage === "complete") return false;
+    const flow = await guardDomainAction(tx, c, "readiness",
+      `readiness:${c.orchestrationClaimToken}:${c.workforceContextVersion}`);
     const [approval] = await tx.select().from(onbApprovals).where(and(
       eq(onbApprovals.organizationId, c.organizationId),
       eq(onbApprovals.caseId, caseId),
@@ -1493,6 +1561,12 @@ export async function completeDay1ReadinessGate(caseId: number): Promise<boolean
     }).onConflictDoNothing({
       target: [onbEvents.organizationId, onbEvents.idempotencyKey],
     });
+    await recordTransitionInTransaction(tx, {
+      organizationId: c.organizationId, caseId, actionId: "readiness",
+      operationKey: `readiness-recorded:${approval.id}:${approvalVersion(approval.version)}`,
+      definition: flow.definition, version: c.orchestrationClaimToken,
+      generation: c.workforceContextVersion, outcome: "recorded",
+    });
     return true;
   });
 }
@@ -1508,24 +1582,67 @@ async function runFromPlan(
   if (!claim) throw new Error("A durable orchestration claim is required");
   if (!(await enforceOfferAcceptanceGate(caseId, claim))) return;
   await fencedCaseUpdate(caseId, claim, { orchestrationStatus: "running" });
-  const plan = await runPlanGeneration(caseId, resumingAfterPlanApproval, claim);
-  if (plan === "paused") return;
-  await renewOrchestrationClaim(caseId, claim);
-  if (!(await enforceChecklistGate(caseId, "before-workstreams", claim))) return;
-  if ((await runWorkstreams(caseId, claim)) === "paused") return;
-  await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
-  if (!(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return;
-  await renewOrchestrationClaim(caseId, claim);
-  await runCommunications(caseId);
-  await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "communications-complete" });
-  if (!(await enforceChecklistGate(caseId, "before-day1-review", claim))) return;
-  await renewOrchestrationClaim(caseId, claim);
-  if (!(await runAnalyticsAndReview(caseId, claim))) return;
-  await fencedCaseUpdate(caseId, claim, {
-    orchestrationCheckpoint: "review-complete",
-    orchestrationClaimOwner: null,
-    orchestrationClaimUntil: null,
-  });
+  await runBoundContinuation(caseId, "plan", claim, resumingAfterPlanApproval);
+}
+
+/**
+ * Existing coordinator, not another scheduler. The immutable definition owns
+ * executable ordering; registered handlers retain all live domain gates and
+ * journal/claim semantics. Parallel task completion remains domain-owned.
+ */
+async function runBoundContinuation(caseId: number, checkpoint: string, claim: OrchestrationClaim, planApproved = false): Promise<boolean> {
+  const c = await getCase(caseId);
+  const { definition } = await readBoundDefinition(db, c.organizationId, caseId);
+  const sequence = definition?.continuations?.[checkpoint];
+  if (!definition || !sequence) throw new Error("No registered executable continuation for this checkpoint");
+  let started = false;
+  const handlers: Record<ContinuationHandler, () => Promise<boolean>> = {
+    "onboarding.plan": async () => { started = true; return (await runPlanGeneration(caseId, planApproved, claim)) !== "paused"; },
+    "onboarding.workstreams": async () => {
+      if (!(await enforceChecklistGate(caseId, "before-workstreams", claim))) return false;
+      started = true;
+      if ((await runWorkstreams(caseId, claim)) === "paused") return false;
+      await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
+      return true;
+    },
+    "onboarding.connector": async () => {
+      started = true;
+      await validateEngineAction(caseId, "connector", claim);
+      const outcome = await dispatchWorkstreamConnectorMutations(await getCase(caseId));
+      if (outcome.releaseHeld) return false;
+      await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
+      return true;
+    },
+    "onboarding.communications": async () => {
+      if (!(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return false;
+      started = true;
+      await runCommunications(caseId);
+      await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "communications-complete" });
+      return true;
+    },
+    "onboarding.review": async () => {
+      if (!(await enforceChecklistGate(caseId, "before-day1-review", claim))) return false;
+      started = true;
+      if (!(await runAnalyticsAndReview(caseId, claim))) {
+        // A durable Gate C human handoff is not a successful automatic resume,
+        // even when earlier handlers in this continuation made progress.
+        started = false;
+        return false;
+      }
+      await fencedCaseUpdate(caseId, claim, {
+        orchestrationCheckpoint: "review-complete", orchestrationClaimOwner: null, orchestrationClaimUntil: null,
+      });
+      return true;
+    },
+  };
+  for (const actionId of sequence) {
+    const action = definition.actions.find(a => a.id === actionId)!;
+    const handler = handlers[action.handler as ContinuationHandler];
+    if (!handler) throw new Error(`Unregistered coordinator handler: ${action.handler}`);
+    await renewOrchestrationClaim(caseId, claim);
+    if (!(await handler())) return started;
+  }
+  return started;
 }
 
 /** Fire-and-forget orchestration for a freshly created case. */
@@ -1541,7 +1658,11 @@ export function startOrchestration(caseId: number) {
       if (offlineCase?.operationalActivation && !(await db.transaction(tx =>
         operationalEligibilityInTransaction(tx, offlineCase, { requireStarted: true }))).allowed) return;
       const owner = randomUUID();
-      const [claimed] = await db.update(onbCases)
+      const claimed = await db.transaction(async tx => {
+        const [current] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
+        if (!current || current.orchestrationStatus !== "idle") return undefined;
+        await guardDomainAction(tx, current, "start", `start:${current.orchestrationClaimToken}`);
+        const [acquired] = await tx.update(onbCases)
         .set({
           orchestrationStatus: "running",
           orchestrationCheckpoint: "initial",
@@ -1551,9 +1672,11 @@ export function startOrchestration(caseId: number) {
           updatedAt: new Date(),
         })
         .where(and(eq(onbCases.id, caseId), eq(onbCases.orchestrationStatus, "idle")))
-        .returning({ token: onbCases.orchestrationClaimToken });
+        .returning({ token: onbCases.orchestrationClaimToken, generation: onbCases.workforceContextVersion });
+        return acquired;
+      });
       if (!claimed) return;
-      claim = { owner, token: claimed.token };
+      claim = { owner, token: claimed.token, generation: claimed.generation };
       if (!(await enforceOfferAcceptanceGate(caseId, claim))) return;
       const intake = await runIntake(caseId, claim);
       if (intake === "continue") {
@@ -1608,6 +1731,8 @@ async function resumeChecklistOrchestrationInContext(caseId: number): Promise<bo
   if (offlineCase && (isHistoricalTestRecord(offlineCase) || isSyntheticOfflineCase(offlineCase) || isRetiredControllerCase(offlineCase) || (await getUatCaseIsolation(offlineCase)).isolated)) return false;
   if (offlineCase?.operationalActivation && !(await db.transaction(tx =>
     operationalEligibilityInTransaction(tx, offlineCase, { requireStarted: true }))).allowed) return false;
+  const flow = await validateEngineAction(caseId, "reconcile");
+  const continuationCheckpoints = Object.keys(flow.definition.continuations ?? {});
   const owner = randomUUID();
   const [claimed] = await db.update(onbCases)
     .set({
@@ -1629,23 +1754,11 @@ async function resumeChecklistOrchestrationInContext(caseId: number): Promise<bo
           ),
         ),
       ),
-      sql`${onbCases.orchestrationCheckpoint} in (
-        'blocked:before-workstreams',
-        'blocked:before-employee-communications',
-        'blocked:before-day1-review',
-        'blocked:re-review',
-        'waiting:standard-operations-release',
-        'initial',
-        'plan',
-        'intake-approved',
-        'plan-approved',
-        'workstreams-complete',
-        'communications-complete'
-      )`,
+      inArray(onbCases.orchestrationCheckpoint, continuationCheckpoints),
     ))
     .returning();
   if (!claimed) return false;
-  const claim = { owner, token: claimed.orchestrationClaimToken };
+  const claim: OrchestrationClaim = { owner, token: claimed.orchestrationClaimToken, generation: claimed.workforceContextVersion };
   const checkpoint = claimed.orchestrationCheckpoint;
   try {
     await renewOrchestrationClaim(caseId, claim);
@@ -1701,60 +1814,9 @@ async function resumeChecklistOrchestrationInContext(caseId: number): Promise<bo
         });
         return false;
       }
-      if (!(await runAnalyticsAndReview(caseId, claim))) return false;
-      await fencedCaseUpdate(caseId, claim, {
-        orchestrationCheckpoint: "review-complete",
-        orchestrationClaimOwner: null,
-        orchestrationClaimUntil: null,
-      });
-      return true;
+      return runBoundContinuation(caseId, checkpoint, claim);
     }
-    if (checkpoint === "blocked:before-workstreams") {
-      if (!(await enforceChecklistGate(caseId, "before-workstreams", claim))) return false;
-      if ((await runWorkstreams(caseId, claim)) === "paused") return true;
-      await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
-      if (!(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return true;
-    }
-    if (checkpoint === "waiting:standard-operations-release") {
-      // This checkpoint is reached only after the pre-workstreams checklist
-      // gate has passed and independent setup already ran. Re-running the
-      // workstream preparation would also attempt to rebase already-claimed
-      // human workforce tasks after a date correction. Retry only the
-      // journal-fenced provider mutations; each repeats current authority and
-      // Standard Operations checks immediately before its write.
-      const outcome = await dispatchWorkstreamConnectorMutations(await getCase(caseId));
-      if (outcome.releaseHeld) return true;
-      await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "workstreams-complete" });
-      if (!(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return true;
-    }
-    if (
-      checkpoint === "blocked:before-workstreams" ||
-      checkpoint === "waiting:standard-operations-release" ||
-      checkpoint === "blocked:before-employee-communications" ||
-      checkpoint === "workstreams-complete"
-    ) {
-      if (checkpoint !== "blocked:before-workstreams" &&
-          checkpoint !== "waiting:standard-operations-release" &&
-          !(await enforceChecklistGate(caseId, "before-employee-communications", claim))) return false;
-      await renewOrchestrationClaim(caseId, claim);
-      await runCommunications(caseId);
-      await fencedCaseUpdate(caseId, claim, { orchestrationCheckpoint: "communications-complete" });
-      if (!(await enforceChecklistGate(caseId, "before-day1-review", claim))) return true;
-    }
-    if (
-      checkpoint === "blocked:before-day1-review" ||
-      checkpoint === "communications-complete"
-    ) {
-      if (!(await enforceChecklistGate(caseId, "before-day1-review", claim))) return false;
-    }
-    await renewOrchestrationClaim(caseId, claim);
-    if (!(await runAnalyticsAndReview(caseId, claim))) return false;
-    await fencedCaseUpdate(caseId, claim, {
-      orchestrationCheckpoint: "review-complete",
-      orchestrationClaimOwner: null,
-      orchestrationClaimUntil: null,
-    });
-    return true;
+    return runBoundContinuation(caseId, checkpoint!, claim);
   } catch (error) {
     await db.update(onbCases).set({
       orchestrationStatus: "checklist-blocked",
@@ -1796,6 +1858,8 @@ export async function reconcileDecidedApprovals(
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${tenant.organizationId}))`);
     const [c] = await tx.select().from(onbCases).where(eq(onbCases.id, caseId)).for("update");
     if (!c || isSeparationOrLegacyExit(c) || c.orchestrationStatus !== "waiting-approval") return null;
+    await guardDomainAction(tx, c, "reconcile",
+      `approval-continuation:${c.orchestrationClaimToken}:${c.orchestrationCheckpoint ?? "legacy"}`);
     const legacyNullCheckpoint = c.orchestrationCheckpoint === null;
     let resumeAction =
       c.orchestrationCheckpoint === "waiting:plan"
@@ -1947,11 +2011,11 @@ export async function reconcileDecidedApprovals(
     }).where(and(
       eq(onbCases.id, caseId),
       eq(onbCases.orchestrationStatus, "waiting-approval"),
-    )).returning({ token: onbCases.orchestrationClaimToken });
-    return row ? { checkpoint, token: row.token } : null;
+    )).returning({ token: onbCases.orchestrationClaimToken, generation: onbCases.workforceContextVersion });
+    return row ? { checkpoint, token: row.token, generation: row.generation } : null;
   });
   if (!claimed) return false;
-  const claim = { owner, token: claimed.token };
+  const claim = { owner, token: claimed.token, generation: claimed.generation };
   if (claimed.checkpoint === "intake-approved") {
     const current = await getCase(caseId);
     const readiness = current.readiness.map((item) => ({ ...item }));

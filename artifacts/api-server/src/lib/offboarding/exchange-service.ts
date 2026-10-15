@@ -1,3 +1,4 @@
+import { guardSeparationAction } from "../flow-manager/manager";
 import { randomBytes, randomUUID } from "node:crypto";
 import { clerkClient } from "@clerk/express";
 import { and, eq, desc, sql, inArray } from "drizzle-orm";
@@ -342,6 +343,8 @@ export async function queueExchangeInTransaction(tx: Tx, pilot: PilotRow, task: 
   if (recent.filter(m => Date.now() - m.createdAt.getTime() < 3600000).length >= 12 ||
       (kind === "request" && recent.some(m => m.taskId === task.id && Date.now() - m.createdAt.getTime() < 60000))) throw new SeparationError("Communication rate limit reached. Wait before requesting another message.");
   const reference = `OX-${randomBytes(24).toString("hex")}`, payload = contextualRequest({ reference, caseId: pilot.caseId, task, previous, escalation: kind === "escalation" });
+  await guardSeparationAction(tx, pilot.organizationId, pilot.caseId, "exchange",
+    `exchange-queue:${pilot.version}:${task.id}:${task.revision}:${kind}`);
   const [message] = await tx.insert(offbExchanges).values({
     id: randomUUID(), organizationId: pilot.organizationId, caseId: pilot.caseId, taskId: task.id,
     generation: pilot.generation, taskRevision: task.revision, enrollmentRevision: enrollment.revision,

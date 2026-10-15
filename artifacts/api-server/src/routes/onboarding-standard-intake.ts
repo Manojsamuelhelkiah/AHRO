@@ -1,3 +1,4 @@
+import { bindNewCaseInTransaction } from "../lib/flow-manager/manager";
 import { onboardingOriginalIntent } from "../lib/onboarding/original-intent";
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -317,6 +318,7 @@ async function commitOne(
         detail: `Source ${caller.sourceIdentity} supplied ${event.eventType}; its acceptance evidence reference is retained in the restricted intake register. The case is held for review and no messages or provider work were started.`,
         idempotencyKey: `standard-intake:${caller.sourceId}:${event.sourceEventId}`,
       }).onConflictDoNothing();
+      await bindNewCaseInTransaction(tx, organizationId, created.id, "onboarding");
       return {
         sourceEventId: event.sourceEventId, status: "created", caseId: created.id,
         profileId: policy.profile.profileId, profileVersion: policy.profile.profileVersion,

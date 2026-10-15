@@ -3,7 +3,7 @@ import { onbCases, onbCommunications, onbEffectJournal } from "@workspace/db/sch
 import { and, eq, sql } from "drizzle-orm";
 import { recordGuardrailEvent } from "./guardrails";
 import { ReplitConnectors } from "@replit/connectors-sdk";
-import { candidateEmailDeliveryDecision, candidateEmailMaySend, isRetryableCandidateEmail } from "./channel-routing";
+import { candidateEmailDeliveryDecision, candidateEmailMaySend, candidateEmailFlowAction, isRetryableCandidateEmail } from "./channel-routing";
 import { isValidEmail } from "./settings";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isRestrictedControllerCase as isRetiredControllerCase, isRestrictedOfflineCase as isSyntheticOfflineCase,
@@ -495,6 +495,7 @@ export async function sendOutbound(opts: {
     withSensitiveLifecycleFence(caseForFence.organizationId, () => sendOutboundUnsafe(opts)),
     {
       operation: opts.channel === "email" ? "candidate-email" : undefined,
+      flowAction: candidateEmailFlowAction(opts.caseId, opts.channel, opts.idempotencyKey),
       onOffline: () => withSensitiveLifecycleFence(caseForFence.organizationId, () => sendOutboundUnsafe(opts)),
       isUnknownResult: (result) => result.status === "sending",
     },
@@ -897,6 +898,7 @@ export async function sendAdministrativeEmail(opts: {
     sendAdministrativeEmailUnsafe(opts),
     {
       onOffline: () => sendAdministrativeEmailUnsafe(opts),
+      flowAction: "administrative",
       isUnknownResult: (result) => result.status === "sending",
     },
   );
@@ -1141,11 +1143,15 @@ export async function retryCandidateEmail(
   send: typeof sendEmail = sendEmail,
   claimLiveSend: () => boolean = withinRateLimit,
 ): Promise<RetryEmailResult> {
+  const [source] = await db.select({ channel: onbCommunications.channel, key: onbCommunications.idempotencyKey })
+    .from(onbCommunications).where(and(eq(onbCommunications.caseId, caseId), eq(onbCommunications.id, communicationId)));
+  const flowAction = candidateEmailFlowAction(caseId, source?.channel ?? "", source?.key);
   const guarded = await withCaseDispatchGuard(
     caseId,
-    () => retryCandidateEmailUnsafe(caseId, communicationId, reviewer, send, claimLiveSend),
+    () => retryCandidateEmailUnsafe(caseId, communicationId, reviewer, send, claimLiveSend, flowAction),
     {
       operation: "candidate-email",
+      flowAction,
       onOffline: async () => ({ ok: false as const, code: "not-retryable" as const, reason: SYNTHETIC_OFFLINE_WARNING }),
       isUnknownResult: (result) =>
         result.ok && result.communication.status === "sending",
@@ -1164,6 +1170,7 @@ async function retryCandidateEmailUnsafe(
   reviewer: string,
   send: typeof sendEmail = sendEmail,
   claimLiveSend: () => boolean = withinRateLimit,
+  flowAction: "offer" | "notification" = "notification",
 ): Promise<RetryEmailResult> {
   const [existing] = await db
     .select({ communication: onbCommunications, candidate: onbCases })
@@ -1172,6 +1179,10 @@ async function retryCandidateEmailUnsafe(
     .where(and(eq(onbCommunications.id, communicationId), eq(onbCommunications.caseId, caseId)));
   if (!existing) return { ok: false, code: "not-found", reason: "Communication not found." };
   const msg = existing.communication;
+  // Recheck the trusted source inside the existing dispatch fence. A changed
+  // record must never inherit a different action from the earlier lookup.
+  if (candidateEmailFlowAction(caseId, msg.channel, msg.idempotencyKey) !== flowAction)
+    return { ok: false, code: "not-retryable", reason: "The communication changed; refresh before retrying." };
   if (!evidenceBelongsToOperationalGeneration(existing.candidate, msg.createdAt, msg.id, "communications"))
     return { ok: false, code: "not-retryable", reason: "Retained source communications cannot be replayed after activation." };
   if (isRetiredControllerCase(existing.candidate)) {

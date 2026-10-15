@@ -5,6 +5,89 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface ExecutableFlowStage {
+  id: string;
+  label: string;
+  role: string;
+  applies: string;
+  completed: string;
+  prerequisites: string[];
+}
+
+export interface ExecutableFlowAction {
+  id: string;
+  stage: string;
+  handler: string;
+  requires: string[];
+  authority: string[];
+  evidence: string[];
+  reworkTo?: string;
+}
+
+export type ExecutableFlowDefinitionContinuations = {[key: string]: string[]};
+
+export interface ExecutableFlowDefinition {
+  id: string;
+  version: number;
+  family: string;
+  stages: ExecutableFlowStage[];
+  actions: ExecutableFlowAction[];
+  continuations?: ExecutableFlowDefinitionContinuations;
+}
+
+export interface CaseExecutableFlowStage {
+  id: string;
+  label: string;
+  role: string;
+  prerequisites: string[];
+  status: string;
+  blockers: string[];
+}
+
+export interface CaseExecutableFlowAction {
+  id: string;
+  stage: string;
+  handler: string;
+  eligible: boolean;
+  blockers: string[];
+  requiredAuthority: string[];
+  requiredEvidence: string[];
+}
+
+export interface CaseExecutableFlowTask {
+  id: string;
+  label: string;
+  role: string;
+  status: string;
+  prerequisites: string[];
+  blockers: string[];
+}
+
+export interface CaseExecutableFlowHistory {
+  actionId: string;
+  outcome: string;
+  reason: string;
+  definitionId: string;
+  definitionVersion: number;
+  occurredAt: string;
+}
+
+export interface CaseExecutableFlow {
+  caseId: number;
+  family: string;
+  mode: string;
+  compatibilityReason: string;
+  definitionId?: string;
+  definitionVersion?: number;
+  definition?: ExecutableFlowDefinition;
+  informationalNotice: string;
+  progressRedacted: boolean;
+  stages: CaseExecutableFlowStage[];
+  actions: CaseExecutableFlowAction[];
+  tasks: CaseExecutableFlowTask[];
+  history: CaseExecutableFlowHistory[];
+}
+
 export type CaseListVisibilitySelectionCaseFamily = typeof CaseListVisibilitySelectionCaseFamily[keyof typeof CaseListVisibilitySelectionCaseFamily];
 
 

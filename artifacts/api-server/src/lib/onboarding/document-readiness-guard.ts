@@ -14,7 +14,7 @@ import { documentMalwareGateSql } from "./document-malware-gate";
  * so the result is serialized with a replacement commit.
  */
 export async function latestRequiredUploadMalwareBlockers(
-  tx: OnboardingDbTransaction,
+  tx: Pick<OnboardingDbTransaction, "select">,
   organizationId: string,
   caseId: number,
 ): Promise<number[]> {
@@ -23,7 +23,7 @@ export async function latestRequiredUploadMalwareBlockers(
 
 /** Display-only batch read. Mutations still require the caller's case lock. */
 export async function requiredUploadMalwareBlockersForCases(
-  tx: OnboardingDbTransaction,
+  tx: Pick<OnboardingDbTransaction, "select">,
   organizationId: string,
   caseIds: readonly number[],
 ): Promise<Map<number, number[]>> {

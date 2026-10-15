@@ -1,3 +1,4 @@
+import { bindNewCaseInTransaction } from "./flow-manager/manager";
 import { templateOriginalIntent } from "./onboarding/original-intent";
 import { randomBytes, randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -324,6 +325,7 @@ export async function convertEmailRequest(org: string, actor: string, id: string
         orchestrationStatus: specialist ? "hro-request-pending-review" : "batch-intake-pending-review", createdByUserId: actor,
       }).returning();
       await requireReview(tx, org, actor, true, { ...row, caseId: created.id });
+      if (!specialist) await bindNewCaseInTransaction(tx, org, created.id, "onboarding");
       caseId = created.id; caseKind = specialist ? "service-request" : "onboarding";
     }
     await tx.insert(onbEvents).values({

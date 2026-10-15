@@ -1,3 +1,7 @@
+import { guardDomainAction } from "../flow-manager/manager";
+
+/** A current prerequisite hold, not an infrastructure failure or new approval. */
+export class WorkstreamPrerequisiteHeldError extends Error {}
 import { db, onbCases } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { type OnbChecklistTemplateItem, type OnbReadinessItemRow } from "@workspace/db/schema";
@@ -356,7 +360,7 @@ async function productionWrite(
     mutation.connector === "documents" &&
     mutation.operation === "send-envelope"
   ) {
-    await seedDocumentsForCase(documentSeedFrom(mutation.payload, _c.organizationId));
+    await seedDocumentsForCase(documentSeedFrom(mutation.payload, _c.organizationId), tx);
     return;
   }
   const system = systemForMutation(mutation);
@@ -454,7 +458,7 @@ export async function dispatchCaseConnectorMutation(input: {
     input.c.id,
   );
   if (!workstreamPolicyGateOpen(input.c)) {
-    throw new Error("Workstream connector dispatch blocked by an unmet before-workstreams policy gate.");
+    throw new WorkstreamPrerequisiteHeldError("Workstream connector dispatch blocked by an unmet before-workstreams policy gate.");
   }
   if (!(await mutationMayDispatch(input.c, input.mutation))) {
     throw new Error("Payroll connector dispatch blocked by incomplete runtime prerequisites.");
@@ -539,6 +543,8 @@ export async function dispatchCaseConnectorMutation(input: {
         if (!liveCase || liveCase.organizationId !== c.organizationId) {
           throw new ConnectorDispatchRejectedError(mutation.connector, "case_not_found");
         }
+        await guardDomainAction(authorityTx, liveCase, "connector",
+          `connector:${proposal.logicalOperationKey}:${liveCase.orchestrationClaimToken}`);
         await assertStandardOperationsReleaseAllowed(
           mutation,
           c.organizationId,

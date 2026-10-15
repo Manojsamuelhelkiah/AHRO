@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { guardDomainAction } from "../flow-manager/manager";
 import { hasHumanPermissions } from "../human-permissions";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -564,6 +565,8 @@ async function lockAndLoad(
   if (isHistoricalTestRecord(caseRow) || isSyntheticOfflineCase(caseRow)) {
     throw new OperationalRequestOfflineError();
   }
+  await guardDomainAction(tx, caseRow, "workforce",
+    `workforce:${caseRow.orchestrationClaimToken}:${randomUUID()}`);
   const [stored] = await tx
     .select({ value: onbSettings.value })
     .from(onbSettings)
@@ -1248,6 +1251,26 @@ export async function getOperationalRequests(
     parseState(stored?.value ?? null),
     isHistoricalTestRecord(caseRow) || isSyntheticOfflineCase(caseRow),
   );
+}
+
+/** Safe metadata for the shared evaluator; reuse the caller's connection. */
+export async function readOperationalFlowTasks(tx: Pick<OperationalTransaction, "select">, organizationId: string, caseId: number, generation: number) {
+  const [stored] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+    eq(onbSettings.organizationId, organizationId), eq(onbSettings.key, settingKey(caseId)),
+  ));
+  const state = parseState(stored?.value ?? null);
+  return state.requests.filter(t => t.runtimeSchemaVersion === "workforce-step-runtime/v1").map(t => ({
+    id: t.id, label: t.label, role: t.responsibleRole ?? t.owner,
+    status: t.workforceContextVersion !== generation ? "review-required" : t.status,
+    prerequisites: t.prerequisites ?? [],
+    blockers: [
+      ...(t.workforceContextVersion !== generation ? ["Task belongs to an earlier workforce evidence generation"] : []),
+      ...(!t.assignedTo ? ["Accountable member assignment required"] : []),
+      ...(t.prerequisites ?? []).filter(id => !state.requests.some(p =>
+        p.id === id && p.status === "completed" && p.workforceContextVersion === generation)).map(id => `Prerequisite: ${id}`),
+      ...(t.status === "blocked" ? ["Review the authorized domain task details"] : []),
+    ],
+  }));
 }
 
 export async function initializeOperationalRequests(input: {

@@ -14,6 +14,7 @@ import { eq } from "drizzle-orm";
 import { verifyProtectedAudit } from "./lib/onboarding/protected-audit";
 import { enforceRegulatedProductionStartupGuard } from "./lib/regulated-production-startup-guard";
 import { startSensitiveLifecycleDeletionWorker } from "./lib/onboarding/sensitive-lifecycle";
+import { initializeExecutableFlows } from "./lib/flow-manager/manager";
 
 const rawPort = process.env["PORT"];
 const validationMode = process.env["API_VALIDATION_MODE"] === "true";
@@ -41,6 +42,10 @@ await enforceRegulatedProductionStartupGuard(process.env, {
   },
   verifyProtectedAudit,
 });
+
+// Metadata only. Existing domain workers are not started until immutable
+// definitions and conservative compatibility identities have been checked.
+if (!validationMode) await initializeExecutableFlows();
 
 app.listen(port, (err) => {
   if (err) {

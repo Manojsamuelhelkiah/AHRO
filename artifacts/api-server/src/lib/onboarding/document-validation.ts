@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { observationMayRequestContinuation } from "../flow-manager/manager";
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
   db,
@@ -59,6 +60,7 @@ export async function reconcileDocumentationReadiness(organizationId: string, ca
   // function changes only the documentation item, rewriting that envelope
   // must not restore text minimized by lifecycle deletion.
   await withCaseDerivedLifecycleWrite({ organizationId, caseId }, async (tx, c) => {
+    const flowMayContinue = await observationMayRequestContinuation(tx, organizationId, caseId);
     const required = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId), eq(onbDocuments.required, true), currentOperationalRecordSql(onbDocuments.organizationId, onbDocuments.caseId, onbDocuments.createdAt)));
     const verified = await tx.select({ id: onbDocuments.id }).from(onbDocuments).where(and(eq(onbDocuments.organizationId, organizationId), eq(onbDocuments.caseId, caseId), eq(onbDocuments.required, true), eq(onbDocuments.status, "verified"), documentMalwareGateSql(), currentOperationalRecordSql(onbDocuments.organizationId, onbDocuments.caseId, onbDocuments.createdAt)));
     const bgvChecks = await tx.select().from(onbSystemChecks).where(and(
@@ -79,18 +81,15 @@ export async function reconcileDocumentationReadiness(organizationId: string, ca
         ? "Trusted BGV clearance is present and every required document is verified."
         : "Every required document is verified; BGV is not applicable."
       : `${bgvApplicable && !bgvClear ? "Trusted BGV clearance is pending; simulated or unproven status is excluded. " : ""}Required document verification: ${verified.length}/${required.length}.`;
-    const promoted =
-      ready &&
-      mandatoryChecklistReady({ ...c, readiness }) &&
-      c.lifecycleStage === "preboarding" &&
-      c.orchestrationStatus === "idle" &&
-      !c.orchestrationCheckpoint;
+    // Evidence is retainable, not an alternative stage-advancement route.
+    // Only the existing manager-guarded coordinator can enter readiness review.
     const blockedStage = c.orchestrationCheckpoint?.replace("blocked:", "") as
       | "before-workstreams"
       | "before-employee-communications"
       | "before-day1-review"
       | undefined;
     checklistResumeReady =
+      flowMayContinue &&
       c.orchestrationStatus === "checklist-blocked" &&
       (blockedStage === "before-workstreams" ||
         blockedStage === "before-employee-communications" ||
@@ -99,7 +98,6 @@ export async function reconcileDocumentationReadiness(organizationId: string, ca
     await tx.update(onbCases).set({
       readiness,
       updatedAt: new Date(),
-      ...(promoted ? { lifecycleStage: "day1-review" } : {}),
     }).where(and(eq(onbCases.organizationId, organizationId), eq(onbCases.id, caseId)));
   });
   if (checklistResumeReady) {

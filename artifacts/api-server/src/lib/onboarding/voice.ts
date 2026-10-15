@@ -874,6 +874,7 @@ export async function startVoiceCall(opts: {
     startVoiceCallUnsafe(opts),
     {
       onOffline: () => startVoiceCallUnsafe(opts),
+      flowAction: "notification",
       isUnknownResult: (result) => result.status === "failed" && result.note.includes("unknown"),
     },
   );

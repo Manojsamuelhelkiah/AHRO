@@ -37,3 +37,4 @@ export * from "./offline-preparation";
 export * from "./transaction-handoff";
 export * from "./action-conversations";
 export * from "./case-list-visibility";
+export * from "./case-flows";

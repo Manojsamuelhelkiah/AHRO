@@ -1023,6 +1023,13 @@
       "when": 1791936000009,
       "tag": "0119_case_list_deletion_compatibility",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1791936000010,
+      "tag": "0120_case_flow_contract",
+      "breakpoints": true
     }
   ]
 }

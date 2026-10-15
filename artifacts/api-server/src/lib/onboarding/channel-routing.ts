@@ -58,6 +58,11 @@ export function candidateEmailFailureFeedback(email: string, reason: string | nu
   return reason;
 }
 
+/** The persisted server-owned Gateway A email key, not an AI-selected action. */
+export function candidateEmailFlowAction(caseId: number, channel: string, idempotencyKey?: string | null): "offer" | "notification" {
+  return channel === "email" && idempotencyKey === `gateway-a:${caseId}:offer-package:email` ? "offer" : "notification";
+}
+
 export function isRetryableCandidateEmail(input: {
   channel: string;
   direction: string;

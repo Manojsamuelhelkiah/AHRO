@@ -9,6 +9,81 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Read the bound executable definition and permission-scoped progress without starting work
+ */
+export const GetCaseExecutableFlowParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const GetCaseExecutableFlowResponse = zod.object({
+  "caseId": zod.number(),
+  "family": zod.string(),
+  "mode": zod.string(),
+  "compatibilityReason": zod.string(),
+  "definitionId": zod.string().optional(),
+  "definitionVersion": zod.number().optional(),
+  "definition": zod.object({
+  "id": zod.string(),
+  "version": zod.number(),
+  "family": zod.string(),
+  "stages": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "role": zod.string(),
+  "applies": zod.string(),
+  "completed": zod.string(),
+  "prerequisites": zod.array(zod.string())
+})),
+  "actions": zod.array(zod.object({
+  "id": zod.string(),
+  "stage": zod.string(),
+  "handler": zod.string(),
+  "requires": zod.array(zod.string()),
+  "authority": zod.array(zod.string()),
+  "evidence": zod.array(zod.string()),
+  "reworkTo": zod.string().optional()
+})),
+  "continuations": zod.record(zod.string(), zod.array(zod.string())).optional()
+}).optional(),
+  "informationalNotice": zod.string(),
+  "progressRedacted": zod.boolean(),
+  "stages": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "role": zod.string(),
+  "prerequisites": zod.array(zod.string()),
+  "status": zod.string(),
+  "blockers": zod.array(zod.string())
+})),
+  "actions": zod.array(zod.object({
+  "id": zod.string(),
+  "stage": zod.string(),
+  "handler": zod.string(),
+  "eligible": zod.boolean(),
+  "blockers": zod.array(zod.string()),
+  "requiredAuthority": zod.array(zod.string()),
+  "requiredEvidence": zod.array(zod.string())
+})),
+  "tasks": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "role": zod.string(),
+  "status": zod.string(),
+  "prerequisites": zod.array(zod.string()),
+  "blockers": zod.array(zod.string())
+})),
+  "history": zod.array(zod.object({
+  "actionId": zod.string(),
+  "outcome": zod.string(),
+  "reason": zod.string(),
+  "definitionId": zod.string(),
+  "definitionVersion": zod.number(),
+  "occurredAt": zod.coerce.date()
+}))
+})
+
+
+/**
  * @summary Change only the shared Demo Cases working list; never case operations
  */
 

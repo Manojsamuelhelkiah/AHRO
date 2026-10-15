@@ -8,6 +8,7 @@ import { appendProtectedAuditInTransaction } from "../onboarding/protected-audit
 import { access, lockTenant, authority, confidentialRead, payrollRead, receipt, currentReceipt, type Tx } from "./authority";
 import { CLOSURE_BLOCKED, SENSITIVE_TRIGGERS, compilePlan, facts, initialState, object, text, SeparationError } from "./model";
 import { db, offbCases, offbSources, offbPolicies, offbCheckpoints, offbExchangePilots, onbCases, organizationsTable, type SeparationCase, type SeparationPolicy, type SeparationState } from "@workspace/db";
+import { bindNewCaseInTransaction, guardSeparationAction, recordTransitionInTransaction } from "../flow-manager/manager";
 export const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 async function checkpoint(tx: Tx, row: SeparationCase, actor: string, action: string) {
   await tx.insert(offbCheckpoints).values({ organizationId: row.organizationId, caseId: row.id, version: row.version, generation: row.generation, status: row.status, facts: row.facts, state: row.state, actor, action }).onConflictDoNothing();
@@ -51,6 +52,7 @@ export async function createSeparationInTransaction(tx: Tx, org: string, actor: 
     // Empty email, no onboarding defaults, no candidate contact or derived release readiness.
     const [envelope] = await tx.insert(onbCases).values({ originalIntent: { label: "Controlled separation request", source: "separation-intake" }, organizationId: org, hireType: "separation", workerName: f.workerName, workerEmail: "", workerCategory: f.workerCategory, role: f.role, department: f.department, geography: f.country, legalEntity: f.legalEntity, managerName: f.manager, recruiterName: "", joiningDate: f.lastWorkingDay, lifecycleStage: "separation-held", orchestrationStatus: "separation-only", workforceContext: { workCountry: f.country }, readiness: [], workstreams: [], checklistSnapshot: [], processPolicySnapshot: { lifecycle: "separation", closureSpecification: "pending" }, createdByUserId: actor }).returning();
     [row] = await tx.insert(offbCases).values({ id: envelope.id, organizationId: org, employeeId: f.employeeId, activeKey: f.employeeId, facts: f, state: initialState() }).returning();
+    await bindNewCaseInTransaction(tx, org, envelope.id, "separation");
     await access(tx, org, actor, true, envelope.id);
   }
   if ((channel === "security-request" || channel === "compliance-request") && !row.state.sensitiveTriggers.includes("unknown")) {
@@ -176,6 +178,13 @@ export async function actionSeparation(org: string, actor: string, id: number, i
     await acquireCaseDispatchMutationLock(tx, org, id);
     const row = await load(tx, org, actor, id, true);
     if (row.version !== b.expectedVersion) throw new SeparationError("Case changed; reload before deciding.");
+    const flowAction = action === "screen" ? "screen" : action === "classify" ? "classify"
+      : action === "adopt-policy" ? "plan"
+        : ["assign", "task-evidence", "task-blocked"].includes(action)
+          ? row.state.gatewayA === "restricted" ? "restricted-task" : "task"
+          : action === "emergency-security-plan" ? "restricted-task" : "reconcile";
+    const flow = await guardSeparationAction(tx, org, id, flowAction,
+      `separation:${row.version}:${action}`, { version: row.version, generation: row.generation });
     const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, { organizationId: org, jurisdiction: row.facts.country });
     if (!lifecycle.allowed) throw new SeparationError(lifecycle.reason);
     const s: SeparationState = structuredClone(row.state);
@@ -376,6 +385,11 @@ export async function actionSeparation(org: string, actor: string, id: number, i
       }
     }
     await checkpoint(tx, updated, actor, action);
+    await recordTransitionInTransaction(tx, {
+      organizationId: org, caseId: id, actionId: flowAction,
+      operationKey: `separation-recorded:${updated.version}:${action}`, definition: flow.definition,
+      version: updated.version, generation: updated.generation, outcome: "recorded",
+    });
     await audit(tx, org, actor, action, id, row.version + 1);
     return { caseId: id, version: row.version + 1, status, closureBlocker: CLOSURE_BLOCKED };
   }));

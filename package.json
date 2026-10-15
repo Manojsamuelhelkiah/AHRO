@@ -13,6 +13,7 @@
     "validate:release": "pnpm run test:build-config && pnpm run test:policy-quality && pnpm run typecheck && pnpm run test:browser-regression && pnpm --filter @workspace/onboarding-agent test",
     "test:deployment-build": "env -u PORT -u BASE_PATH CI=true NODE_ENV=production pnpm run build",
     "typecheck:libs": "tsc --build",
+    "test:case-flows": "pnpm --filter @workspace/api-server run test:case-flows",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,

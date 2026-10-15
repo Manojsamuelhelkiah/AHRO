@@ -1,4 +1,5 @@
 import { onboardingCaseCandidateSql } from "./separation-isolation";
+import { observationMayRequestContinuation } from "../flow-manager/manager";
 import { db } from "@workspace/db";
 import { runPolicyDriftTick } from "../hr-policy-evaluation";
 import { randomUUID } from "node:crypto";
@@ -360,12 +361,13 @@ async function completeCheckUnlocked(
       .from(onbCases)
       .where(and(eq(onbCases.id, check.caseId), eq(onbCases.organizationId, check.organizationId)))
       .for("update");
-    let promoted = false;
     if (c && trustedCompletion) {
+      const flowMayContinue = await observationMayRequestContinuation(tx, c.organizationId, c.id);
       // A trusted source update can satisfy a held IAM/payroll release even
       // when no checklist boundary itself was waiting. Resume only the exact
       // durable Standard Operations checkpoint; it cannot promote Gate C.
       standardOperationsReleaseResumeReady =
+        flowMayContinue &&
         c.orchestrationStatus === "checklist-blocked" &&
         c.orchestrationCheckpoint === "waiting:standard-operations-release";
       const readiness = c.readiness as OnbReadinessItemRow[];
@@ -383,21 +385,15 @@ async function completeCheckUnlocked(
           item.status = "ready";
           item.note = noteBySystem[def.key];
         }
-        const allReady = mandatoryChecklistReady({ ...c, readiness });
-        // A gated case must resume through the exact orchestration boundary so
-        // analytics/review work cannot be skipped. Direct promotion is retained
-        // only for compatible idle/pre-migration cases.
-        promoted =
-          allReady &&
-          c.lifecycleStage === "preboarding" &&
-          c.orchestrationStatus === "idle" &&
-          !c.orchestrationCheckpoint;
+        // Source observations update evidence, never advance executable stages.
+        // The existing coordinator resumes only from its bound checkpoint.
         const blockedStage = c.orchestrationCheckpoint?.replace("blocked:", "") as
           | "before-workstreams"
           | "before-employee-communications"
           | "before-day1-review"
           | undefined;
         checklistResumeReady =
+          flowMayContinue &&
           c.orchestrationStatus === "checklist-blocked" &&
           (blockedStage === "before-workstreams" ||
             blockedStage === "before-employee-communications" ||
@@ -408,7 +404,6 @@ async function completeCheckUnlocked(
           .set({
             readiness,
             updatedAt: new Date(),
-            ...(promoted ? { lifecycleStage: "day1-review" } : {}),
           })
           .where(and(eq(onbCases.id, check.caseId), eq(onbCases.organizationId, check.organizationId)));
       }
@@ -429,21 +424,6 @@ async function completeCheckUnlocked(
           ? `${def.label} (${check.externalRef}) reported done via ${source}. Checklist item "${def.readinessKey}" marked ready by the System Watcher.`
           : `${def.label} (${check.externalRef}) reported done via ${source}, but its simulated notification is communications/status telemetry only; canonical readiness and orchestration were not changed.`,
       },
-      ...(promoted
-        ? [
-            {
-              caseId: check.caseId,
-              organizationId: check.organizationId,
-              agent: WATCHER_AGENT,
-              engine: "system" as const,
-              hitlPattern: "notify-only",
-              ruleRef: "4.7 Readiness Rule 10",
-              title: "All readiness checkpoints confirmed by source systems",
-              detail:
-                "Every checklist item is now ready — external systems have confirmed BGV, access and payroll where applicable. Case promoted to Day-1 review.",
-            },
-          ]
-        : []),
     ];
     await tx.insert(onbEvents).values(events);
   });

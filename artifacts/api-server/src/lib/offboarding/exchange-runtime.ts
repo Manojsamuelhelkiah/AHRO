@@ -1,3 +1,4 @@
+import { guardSeparationAction, observationMayRequestContinuation } from "../flow-manager/manager";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { ReplitConnectors } from "@replit/connectors-sdk";
@@ -90,6 +91,8 @@ export async function dispatchExchange(id: string): Promise<void> {
     await namedOperator(tx, prepared.organizationId, message.operator, message.caseId);
     await agentGate(tx, prepared.organizationId, message.operator, message.agentId, message.caseId);
     await policyGate(tx, row);
+    await guardSeparationAction(tx, prepared.organizationId, prepared.caseId, "exchange",
+      `exchange-dispatch:${id}`, { version: row.version, generation: row.generation });
     await privacyGate(prepared.organizationId, row.facts.country, true);
     const binding = e.recipients.find(r => r.taskId === task.id);
     if (!binding || (message.kind === "escalation" ? binding.escalationAddress !== message.recipient || binding.escalationMemberId !== message.memberId : binding.address !== message.recipient || binding.memberId !== message.memberId)) throw new SeparationError("Exact approved recipient binding required.");
@@ -275,7 +278,9 @@ async function recordExchangeReply(input: { outbound: ExchangeRow; msg: GmailMes
         explanation: blocker ? "Received your response; no completion was applied." : observation.explanation,
         question: blocker ? "Please provide an explicit task-specific source attestation, or use authenticated review if your ownership or permissions need correction." : observation.question };
       if (task.status === "resolved") response.explanation = `Recorded source confirmation for ${task.confirmed.join(", ")}. No real account or physical-return outcome was established.`;
-      try { await queueExchangeInTransaction(tx, saved, task, task.status === "resolved" ? "receipt" : "follow-up", response); } catch (err) { if (!(err instanceof SeparationError)) throw err; }
+      if (await observationMayRequestContinuation(tx, outbound.organizationId, outbound.caseId)) {
+        try { await queueExchangeInTransaction(tx, saved, task, task.status === "resolved" ? "receipt" : "follow-up", response); } catch (err) { if (!(err instanceof SeparationError)) throw err; }
+      }
     }
   }));
 }
@@ -331,7 +336,9 @@ async function scheduleOutstanding() {
           const client = await requireClientEmailEnabled(tx, p.organizationId);
           const escalate = overdue && (state.enrollment.escalationEnabled ?? true) &&
             (!client.clientControlConfigured || client.escalationEnabled);
-          await queueExchangeInTransaction(tx, pilot, task, escalate ? "escalation" : "follow-up", uncertainObservation("The requested source confirmation remains outstanding."));
+          if (await observationMayRequestContinuation(tx, pilot.organizationId, pilot.caseId)) {
+            await queueExchangeInTransaction(tx, pilot, task, escalate ? "escalation" : "follow-up", uncertainObservation("The requested source confirmation remains outstanding."));
+          }
         }
       }));
     } catch { logger.warn({ caseId: p.caseId, component: "offboarding-exchanges" }, "Conversation continuation blocked by current admission checks"); }

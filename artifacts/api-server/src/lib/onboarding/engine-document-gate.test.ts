@@ -1,4 +1,4 @@
-import { deleteTestOrganizations } from "../../test-support/organization-fixtures";
+import { deleteTestOrganizations, requireOwnedOrganizationTestSchema } from "../../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -23,6 +23,7 @@ let sequence = 0;
 
 describe("live document malware gate in orchestration", { skip: !hasDb }, () => {
   before(async () => {
+    await requireOwnedOrganizationTestSchema();
     sequence = 0;
     await db.insert(organizationsTable).values({
       id: organizationId, name: organizationId, slug: organizationId,

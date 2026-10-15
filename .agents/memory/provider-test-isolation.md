@@ -59,3 +59,14 @@ what the original worker already sent.
 **How to apply:** Keep a surviving parent-side transport ledger, confirm a real
 hard-kill exit, and inspect both immediate recovery and recovery after the
 ambiguity window without refunding or rewriting budget reservations.
+
+HTTP smoke checks must use an API process initialized with the owned test
+connection, not a healthy shared Preview API.
+
+**Why:** Changing the test client's connection does not change the server's
+already-created pool. Shared authentication can make an accidental Preview
+fallback succeed against the wrong tenant inventory.
+
+**How to apply:** Establish the disposable schema before importing the app,
+hold the dedicated API listener for the whole check, force its URL rather than
+probing Preview, and verify the original tenant inventory after disposal.

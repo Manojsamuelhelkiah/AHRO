@@ -1,3 +1,4 @@
+import { bindNewCaseInTransaction } from "../lib/flow-manager/manager";
 import { randomUUID } from "node:crypto";
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
@@ -351,6 +352,7 @@ export async function createHeldBatch(req: Request, res: Response, next: NextFun
             organizationId, batchId, personKey: person.personKey, caseId: created.id,
             workforceContextSnapshot: workforceContext, processPolicySnapshot,
           });
+          if (!specialistRequest) await bindNewCaseInTransaction(tx, organizationId, created.id, "onboarding");
           results.push({ personKey: person.personKey, caseId: created.id, status: "created", profileId: profile.profileId, profileVersion: profile.profileVersion });
         }
         return { batchId, name: existing?.name ?? name, retry: Boolean(existing), results };

@@ -7,6 +7,32 @@ import { fileURLToPath } from "node:url";
 
 export const quoteIdentifier = value => `"${value.replaceAll('"', '""')}"`;
 
+/** Verify a freshly replayed owned schema; never adopt a shared API ledger. */
+export async function verifyIsolatedTestDatabase(connectionString, schema) {
+  assert(/^intent_smoke_[0-9]+_[a-f0-9]{32}$/.test(schema), "Unrecognized smoke schema owner");
+  const pool = new Pool({ connectionString });
+  try {
+    const actual = (await pool.query("SELECT current_schema() AS s, current_setting('search_path') AS p")).rows[0];
+    assert.equal(actual.s, schema, "Smoke database scope changed");
+    assert.ok([schema, quoteIdentifier(schema)].includes(actual.p), "Shared-schema search-path fallback is forbidden");
+    const expected = readMigrationFiles({
+      migrationsFolder: fileURLToPath(new URL("../../lib/db/drizzle", import.meta.url)),
+    }).map(m => ({ hash: m.hash, created_at: String(m.folderMillis) }));
+    const recorded = (await pool.query(
+      `SELECT hash, created_at::text FROM ${quoteIdentifier(schema)}.__drizzle_migrations ORDER BY id`,
+    )).rows;
+    assert.deepEqual(recorded, expected, "Owned schema does not contain the exact checked-in migration replay");
+    const escaped = await pool.query(`
+      SELECT c.conname FROM pg_constraint c
+      JOIN pg_class child ON child.oid=c.conrelid JOIN pg_namespace cn ON cn.oid=child.relnamespace
+      JOIN pg_class parent ON parent.oid=c.confrelid JOIN pg_namespace pn ON pn.oid=parent.relnamespace
+      WHERE c.contype='f' AND cn.nspname=$1 AND pn.nspname<>$1`, [schema]);
+    assert.equal(escaped.rowCount, 0, "Smoke foreign keys escaped their owned schema");
+  } finally {
+    await pool.end();
+  }
+}
+
 /** No shared search_path fallback, including in historical qualified FKs. */
 export async function createIsolatedTestDatabase(connectionString, prefix = "workspace_regression") {
   if (process.env.NODE_ENV === "production") throw new Error("Test database requires a non-production process");

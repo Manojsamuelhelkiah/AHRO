@@ -9,13 +9,16 @@ import { getUatCaseIsolation } from "./uat-isolation";
 import { evaluateCaseDerivedLifecycleGateInTransaction, jurisdictionForWorkforceContext } from "./sensitive-lifecycle";
 import { hasHumanPermissions } from "../human-permissions";
 import { isSeparationOrLegacyExit } from "./separation-isolation";
+import { guardDomainAction } from "../flow-manager/manager";
 
 type DispatchGuardContext = {
   caseId: number;
   organizationId: string;
+  flowAction: NonNullable<DispatchGuardOptions<unknown>["flowAction"]>;
 };
 
 type DispatchGuardOptions<T> = {
+  flowAction?: "offer" | "notification" | "connector" | "administrative";
   /** Retained caller compatibility; never overrides historical isolation. */
   operation?: "candidate-email";
   /**
@@ -102,6 +105,16 @@ export async function withCaseDispatchGuard<T>(
 ): Promise<T | undefined> {
   const inherited = dispatchContext.getStore();
   if (inherited?.caseId === caseId) {
+    const requested = options.flowAction ?? "connector";
+    const nestedActions = {
+      connector: ["connector", "notification", "administrative"],
+      notification: ["notification", "administrative"],
+      offer: ["offer", "administrative"],
+      administrative: ["administrative"],
+    };
+    if (!nestedActions[inherited.flowAction].includes(requested)) {
+      throw new Error("Nested provider dispatch cannot change its guarded executable action");
+    }
     const [caseRow] = await db
       .select()
       .from(onbCases)
@@ -168,6 +181,8 @@ export async function withCaseDispatchGuard<T>(
     if (!caseRow) return { kind: "missing" as const };
     const eligibility = await operationalEligibilityInTransaction(tx, caseRow, { requireStarted: true });
     if (!eligibility.allowed) return { kind: "missing" as const };
+    await guardDomainAction(tx, caseRow, options.flowAction ?? "connector",
+      `dispatch:${options.flowAction ?? "connector"}:${randomUUID()}`);
     const activation = activationRecord(caseRow);
     if (activation) {
       const collection = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
@@ -201,9 +216,10 @@ export async function withCaseDispatchGuard<T>(
 
   if (acquired.kind === "missing") return undefined;
 
-  const context = {
+  const context: DispatchGuardContext = {
     caseId: acquired.caseRow.id,
     organizationId: acquired.caseRow.organizationId,
+    flowAction: options.flowAction ?? "connector",
   };
   return dispatchContext.run(context, async () => {
     try {

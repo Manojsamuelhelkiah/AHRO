@@ -61,6 +61,7 @@ import type {
   AgentInvocationFailure,
   AgentInvocationInput,
   AgentInvocationResponse,
+  CaseExecutableFlow,
   CaseListVisibilityInput,
   CatalogueAgentRegistrationInput,
   CatalogueRegistrationResult,
@@ -458,6 +459,83 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetCaseExecutableFlowUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/onboarding/cases/${caseId}/flow`
+}
+
+/**
+ * @summary Read the bound executable definition and permission-scoped progress without starting work
+ */
+export const getCaseExecutableFlow = async (caseId: number, options?: RequestInit): Promise<CaseExecutableFlow> => {
+
+  return customFetch<CaseExecutableFlow>(getGetCaseExecutableFlowUrl(caseId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCaseExecutableFlowQueryKey = (caseId: number,) => {
+    return [
+    `/api/onboarding/cases/${caseId}/flow`
+    ] as const;
+    }
+
+
+export const getGetCaseExecutableFlowQueryOptions = <TData = Awaited<ReturnType<typeof getCaseExecutableFlow>>, TError = ErrorType<void>>(caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCaseExecutableFlow>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCaseExecutableFlowQueryKey(caseId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCaseExecutableFlow>>> = ({ signal }) => getCaseExecutableFlow(caseId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCaseExecutableFlow>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCaseExecutableFlowQueryResult = NonNullable<Awaited<ReturnType<typeof getCaseExecutableFlow>>>
+export type GetCaseExecutableFlowQueryError = ErrorType<void>
+
+
+/**
+ * @summary Read the bound executable definition and permission-scoped progress without starting work
+ */
+
+export function useGetCaseExecutableFlow<TData = Awaited<ReturnType<typeof getCaseExecutableFlow>>, TError = ErrorType<void>>(
+ caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCaseExecutableFlow>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCaseExecutableFlowQueryOptions(caseId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getUpdateCaseListVisibilityUrl = () => {
 

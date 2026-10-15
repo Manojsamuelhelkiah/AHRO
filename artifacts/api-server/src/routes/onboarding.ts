@@ -1,3 +1,6 @@
+import { bindNewCaseInTransaction } from "../lib/flow-manager/manager";
+import { projectCaseFlow } from "../lib/flow-manager/projection";
+import { GetCaseExecutableFlowResponse } from "@workspace/api-zod";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { actionCenterFamily, actionCenterFamilies } from "../lib/onboarding/action-center-family";
 import { caseListVisibilityProjection, updateCaseListVisibility, CaseListVisibilityError } from "../lib/onboarding/case-list-visibility";
@@ -1128,6 +1131,7 @@ async function insertCaseAndStart(
       caseId: inserted.id,
       ...logisticsForCase(logisticsDefault, inserted.joiningDate),
     });
+    if (!options?.syntheticOffline) await bindNewCaseInTransaction(tx, organizationId, inserted.id, "onboarding");
     await options?.onInserted?.(tx, inserted);
     return inserted;
   }));
@@ -1598,6 +1602,23 @@ router.post("/onboarding/cases", async (req, res, next) => {
     }
     next(err);
   }
+});
+
+router.get("/onboarding/cases/:id/flow", async (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) { res.status(400).json({ message: "A valid case id is required." }); return; }
+    const organizationId = getOrganizationId(req);
+    const [row] = await db.select().from(onbCases).where(and(eq(onbCases.organizationId, organizationId), eq(onbCases.id, id)));
+    if (!row) { res.status(404).json({ message: "Case not found" }); return; }
+    const caseAccess = await caseGovernanceAccessForRequest(req, row);
+    if (!caseFlowReadRequired(res, caseAccess)) return;
+    const sensitive = await sensitiveAccessForCase(req, row);
+    const privateProgress = caseAccess.profileRead && caseAccess.notesRead && caseAccess.readinessRead &&
+      sensitive.identity && sensitive.medical && sensitive.payroll && sensitive.bgv;
+    res.json(GetCaseExecutableFlowResponse.parse(await projectCaseFlow(db, organizationId, id, privateProgress)));
+  } catch (error) { next(error); }
 });
 
 router.get("/onboarding/cases/:id", async (req, res, next) => {
