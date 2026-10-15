@@ -157,3 +157,32 @@
     transition-duration: 150ms;
   }
 }
+
+/* Cases-only density and disclosure styles; other suite pages retain their layout. */
+.cases-page :is(button, a, input, select, summary):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.cases-page .case-list-disclosure summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+.cases-page .case-list-facts {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1023px) {
+  .cases-page #cases-filters-panel :is(button, input, select) { min-height: 40px; }
+  .cases-page :is(.case-list-facts, [role="link"]) { overflow-wrap: anywhere; }
+}
+@media (min-width: 1024px) {
+  .cases-page .case-list-disclosure summary { min-height: 32px; }
+  .cases-page .case-list-disclosure[open] .case-list-facts {
+    position: absolute;
+    right: 36px;
+    z-index: 20;
+    width: min(440px, calc(100vw - 72px));
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+}

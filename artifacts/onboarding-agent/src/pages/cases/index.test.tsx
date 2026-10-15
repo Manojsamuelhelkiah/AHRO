@@ -156,10 +156,10 @@ test("CasesPage renders program rows/cards without counting program go as case c
     assert.match(mounted.container.textContent ?? "", /Showing 0 individual cases · 1 programs/);
   }
   await act(async () => setValue(input, ""));
-  const family = Array.from(mounted.container.querySelectorAll("button")).find((b) => b.textContent?.startsWith("Onboarding "));
+  const family = mounted.container.querySelector('button[aria-label^="Onboarding:"]') as HTMLButtonElement;
   await act(async () => family!.click());
   assert.equal(mounted.container.querySelectorAll("[data-program-id]").length, 0);
-  const programTab = Array.from(mounted.container.querySelectorAll("button")).find((b) => b.textContent?.startsWith("Workforce Transfer Programs "));
+  const programTab = mounted.container.querySelector('button[aria-label^="Workforce Transfer Programs:"]') as HTMLButtonElement;
   await act(async () => programTab!.click());
   assert.match(mounted.container.textContent ?? "", /Showing 0 individual cases · 1 programs/);
 });
@@ -175,10 +175,52 @@ test("Cases URL selects Offboarding envelopes once and type navigation preserves
   assert.doesNotMatch(mounted.container.textContent ?? "", /Individual Worker/);
   assert.equal(mounted.container.querySelectorAll('tr[aria-label^="Open case HRO-2026-00359"]').length, 1);
   assert.match(mounted.container.textContent ?? "", /Showing 1 individual cases/);
-  const all = Array.from(mounted.container.querySelectorAll("button")).find(button => button.textContent?.startsWith("All Cases "));
+  const all = mounted.container.querySelector('button[aria-label^="All Cases:"]') as HTMLButtonElement;
   await act(async () => all!.click());
   assert.match(mounted.container.textContent ?? "", /Individual Worker/);
   assert.equal(testWindow.location.search, "?source=email");
+  assert.equal(testWindow.location.hash, "#saved");
+});
+
+test("compact families expose canonical names and unknown program counts without fabricated zeroes", async t => {
+  pinOrganizationIdForPage("cases-test");
+  let resolvePrograms!: (response: Response) => void;
+  installFetch(({ url }) => url.includes("workforce-transfers")
+    ? new Promise<Response>(resolve => { resolvePrograms = resolve; })
+    : jsonResponse([caseFixture]));
+  const mounted = await mountCases();
+  t.after(mounted.cleanup);
+  const families = mounted.container.querySelector('[aria-label="Case families"]')!;
+  assert.equal(families.querySelectorAll("button").length, 14);
+  const program = families.querySelector('button[aria-label^="Workforce Transfer Programs:"]')!;
+  assert.match(program.getAttribute("aria-label")!, /programs loading/);
+  assert.equal(program.querySelector('[aria-hidden]')?.textContent, "…");
+  await eventually(() => assert.equal(families.querySelector('button[aria-label^="Onboarding:"]')?.textContent, "Onboarding1"), "individual counts load independently");
+  const selector = mounted.container.querySelector('select[aria-label="Case family"]') as HTMLSelectElement;
+  assert.equal(selector.options.length, 14);
+  await act(async () => { resolvePrograms(jsonResponse({ message: "Private failure" }, 403)); });
+  await eventually(() => assert.equal(program.querySelector('[aria-hidden]')?.textContent, "!"), "unavailable badge");
+  assert.match(program.getAttribute("aria-label")!, /program results unavailable/);
+  assert.doesNotMatch(mounted.container.textContent!, /Private failure/);
+});
+
+test("narrow family selector preserves URL context and case information discloses full list values", async t => {
+  pinOrganizationIdForPage("cases-test");
+  const intent = "A long originating request that remains available in the full-value disclosure";
+  installFetch(({ url }) => jsonResponse(url.includes("workforce-transfers") ? [] : [
+    { ...caseFixture, originalIntent: intent, currentActionOwner: "Recorded owner" },
+  ]));
+  const mounted = await mountCases(undefined, "/cases?source=email#saved");
+  t.after(mounted.cleanup);
+  await eventually(() => assert.ok(mounted.container.querySelector('summary[aria-label^="More information"]')), "case information disclosure");
+  const details = mounted.container.querySelector("details.case-list-disclosure")!;
+  assert.match(details.textContent!, /Recorded owner/);
+  assert.match(details.textContent!, /2031-01-01/);
+  assert.match(details.textContent!, /worker@example.test/);
+  assert.match(details.textContent!, new RegExp(intent));
+  const family = mounted.container.querySelector('select[aria-label="Case family"]') as HTMLSelectElement;
+  await act(async () => setValue(family, "Payroll"));
+  assert.equal(testWindow.location.search, "?source=email&caseType=Payroll");
   assert.equal(testWindow.location.hash, "#saved");
 });
 

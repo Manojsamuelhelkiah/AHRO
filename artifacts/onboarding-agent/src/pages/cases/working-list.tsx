@@ -43,17 +43,20 @@ export function useWorkingList(rows: OnbCase[] | undefined, organizationId: stri
     } finally { if (scope.current === submittedOrganization) setPendingId(null); }
   };
   const hiddenCount = rows?.filter(row => row.workingListHidden).length ?? 0;
-  const controls = organizationId === 'demo' ? <div className="space-y-2">
-    <label className="flex flex-wrap items-center gap-2 text-sm">Cases list
-      <select aria-label="Cases list visibility" className="rounded border bg-[var(--surface)] p-2" value={view}
+  const controls = organizationId === 'demo' ? <>
+    <label className="flex flex-wrap items-center gap-2 text-xs font-medium">Cases list
+      <select aria-label="Cases list visibility" className="min-h-10 rounded-md border bg-[var(--surface)] px-2 text-xs lg:min-h-8" value={view}
         onChange={event => setView(event.target.value as WorkingListView)}>
         <option value="working">Working cases</option>
         <option value="hidden">Hidden cases ({rows ? hiddenCount : 'unavailable'})</option>
       </select>
     </label>
-    <p className="text-xs text-[var(--text-muted)]">Uncheck a case to hide it; check it in Hidden cases to restore it. This shared Demo Organization preference changes only the Cases working list. It does not change case status, operations, alerts, evidence, permissions, Action Center or Dashboard/Analytics totals.</p>
-    {message && <p role="status" className="text-sm">{message}</p>}
-  </div> : null;
+    <details className="basis-full text-xs text-[var(--text-secondary)]">
+      <summary className="inline-flex min-h-10 cursor-pointer items-center rounded font-medium lg:min-h-6">How hiding works — list visibility only</summary>
+      <p className="pb-2">Uncheck a case to hide it; check it in Hidden cases to restore it. This shared Demo Organization preference changes only the Cases working list. It does not change case status, operations, alerts, evidence, permissions, Action Center or Dashboard/Analytics totals.</p>
+    </details>
+    {message && <p role="status" className="basis-full text-sm">{message}</p>}
+  </> : null;
   const checkbox = (row: OnbCase) => row.canManageWorkingList ? (
     <label className="inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center lg:min-h-0 lg:min-w-0 lg:p-2"
       onClick={event => event.stopPropagation()}>

@@ -28,7 +28,7 @@ test('Cases retains separate program summaries, filters, accessible detail links
     await route.fulfill(mode === 'denied' ? { status: 403, json: { message: 'sensitive server error not for display' } }
       : { json: mode === 'empty' ? [] : [program] });
   });
-  for (const width of [390, 768, 1280]) {
+  for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/cases');
     await expect(page.getByText('Showing 1 individual cases · 1 programs.', { exact: false })).toBeVisible();
@@ -49,7 +49,8 @@ test('Cases retains separate program summaries, filters, accessible detail links
     await expect(item).toBeVisible();
     await expect(page.getByText('Showing 0 individual cases · 1 programs.', { exact: false })).toBeVisible();
     await search.fill('');
-    await page.getByRole('button', { name: /^Workforce Transfer Programs/ }).click();
+    if (width < 1024) await page.getByRole('combobox', { name: 'Case family', exact: true }).selectOption('Workforce Transfer Programs');
+    else await page.getByRole('button', { name: /^Workforce Transfer Programs/ }).click();
     await expect(page.getByText('Showing 0 individual cases · 1 programs.', { exact: false })).toBeVisible();
     await page.getByRole('button', { name: /^Filters/ }).click();
     const panel = page.getByRole('dialog', { name: 'Case filters' });

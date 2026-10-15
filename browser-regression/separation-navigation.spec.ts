@@ -76,8 +76,13 @@ test('single Cases destination preserves legacy and operational deep links acros
     await expect(caseLink()).toContainText(`S${envelope.id}`);
     await expect(caseRow(50402)).toHaveCount(0);
     await expect(page.getByTestId('panel-provision-exchanges')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /^Offboarding \d+ cases$/ })).toHaveAttribute('aria-pressed', 'true');
-    await page.getByRole('button', { name: /^All Cases\s/ }).click();
+    if (width < 1024) {
+      await expect(page.getByRole('combobox', { name: 'Case family', exact: true })).toHaveValue('Offboarding');
+      await page.getByRole('combobox', { name: 'Case family', exact: true }).selectOption('All Cases');
+    } else {
+      await expect(page.getByRole('button', { name: /^Offboarding:/ })).toHaveAttribute('aria-pressed', 'true');
+      await page.getByRole('button', { name: /^All Cases:/ }).click();
+    }
     await expect(page.getByRole('heading', { name: 'HR Operations Cases' })).toBeVisible();
     await expect(caseRow(50402)).toHaveCount(1);
     await page.goBack();
@@ -86,7 +91,8 @@ test('single Cases destination preserves legacy and operational deep links acros
     await page.getByRole('combobox', { name: 'Work item type' }).selectOption('Onboarding');
     await expect(page.getByRole('heading', { name: 'Onboarding Cases' })).toBeVisible();
     await page.getByRole('button', { name: 'Done', exact: true }).click();
-    await page.getByRole('button', { name: /^Offboarding \d+ cases$/ }).click();
+    if (width < 1024) await page.getByRole('combobox', { name: 'Case family', exact: true }).selectOption('Offboarding');
+    else await page.getByRole('button', { name: /^Offboarding:/ }).click();
     const nav = width < 768 ? page.getByRole('navigation', { name: 'Primary navigation' }) : page.locator('aside nav');
     await expect(nav.getByRole('link', { name: 'Cases', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(nav.getByRole('link', { name: 'Separations', exact: true })).toHaveCount(0);

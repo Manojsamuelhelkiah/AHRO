@@ -8,9 +8,9 @@ import {
 } from '@workspace/api-client-react';
 import type { OnbCase as ApiOnbCase } from '@workspace/api-client-react';
 import { Link, useLocation, useSearch } from 'wouter';
-import { Card, Button, Input, cn, Label, PageHeader } from '@/components/ui-shared';
+import { Card, Button, Input, cn, Label } from '@/components/ui-shared';
 import { format } from 'date-fns';
-import { Plus, Search, SlidersHorizontal, Bot, User, Users, X, FlaskConical, Check, AlertTriangle, Clock, Presentation, ShieldCheck } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal, Bot, User, Users, X, Check, AlertTriangle, Clock, ShieldCheck } from 'lucide-react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useClientOperationsSettings } from '../settings-client-operations';
 import { BatchIntakeForm } from './batch-intake';
@@ -88,28 +88,39 @@ const PAGE_CONTEXT: Record<CaseTypeFilter, { title: string; subtitle: string }> 
 /* ------------------------------ status badge ------------------------------ */
 
 const STATUS_STYLES: Record<HroStatus, { bg: string; fg: string; dot?: boolean }> = {
-  'New': { bg: 'var(--primary-light)', fg: 'var(--primary-dark)' },
-  'In Progress': { bg: 'var(--primary-light)', fg: 'var(--primary)', dot: true },
-  'Waiting': { bg: 'var(--surface-alt)', fg: 'var(--text-muted)' },
-  'Human Review': { bg: 'var(--surface-soft)', fg: 'var(--status-amber)' },
-  'Blocked': { bg: 'var(--surface-soft)', fg: 'var(--status-red)' },
-  'Completed': { bg: 'var(--surface-soft)', fg: 'var(--status-green)' },
-  'Rejected': { bg: 'var(--surface-soft)', fg: 'var(--status-red)' },
+  'New': { bg: 'var(--status-info-bg)', fg: 'var(--primary-dark)' },
+  'In Progress': { bg: 'var(--status-info-bg)', fg: 'var(--status-info-fg)', dot: true },
+  'Waiting': { bg: 'var(--status-gray-bg)', fg: 'var(--status-gray-fg)' },
+  'Human Review': { bg: 'var(--status-amber-bg)', fg: 'var(--status-amber-fg)' },
+  'Blocked': { bg: 'var(--status-red-bg)', fg: 'var(--status-red-fg)' },
+  'Completed': { bg: 'var(--status-green-bg)', fg: 'var(--status-green-fg)' },
+  'Rejected': { bg: 'var(--status-red-bg)', fg: 'var(--status-red-fg)' },
 };
 
 function HroStatusBadge({ status }: { status: HroStatus }) {
   const s = STATUS_STYLES[status];
   return (
-    <span style={{ backgroundColor: s.bg, color: s.fg, fontSize: 'var(--text-xs)', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
-      {s.dot && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--primary)' }} />}
+    <span style={{ backgroundColor: s.bg, color: s.fg, fontSize: 'var(--text-xs)', fontWeight: 600, padding: '2px 8px', borderRadius: '20px', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+      {s.dot && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--primary)' }} />}
       {status}
     </span>
   );
 }
 
+const FAMILY_TINTS = [
+  ['#EEF0FE', '#3730C9'], ['#F3E8FF', '#7E22CE'], ['#E6F4FA', '#0B6585'], ['#E7FBF1', '#067647'],
+  ['#FEF4E6', '#9A4A07'], ['#FCE9F3', '#A3195B'], ['#EAEFF9', '#2B4A8B'], ['#F0F4E3', '#4F6B12'],
+  ['#E5F5F3', '#11665D'], ['#FBEDE5', '#9A4420'], ['#EFEAFA', '#61418A'], ['#EBF3FB', '#285A85'],
+];
+function familyTint(type: string) {
+  const index = CASE_TYPES.indexOf(type as CaseTypeFilter) - 1;
+  return FAMILY_TINTS[Math.max(0, index)];
+}
+
 function CaseTypeBadge({ type }: { type: string }) {
+  const [bg, fg] = familyTint(type);
   return (
-    <span style={{ backgroundColor: 'var(--surface-alt)', color: 'var(--text-secondary)', border: '1px solid var(--border)', fontSize: '10px', fontWeight: 600, padding: '2px 7px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+    <span style={{ backgroundColor: bg, color: fg, fontSize: 'var(--text-xs)', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>
       {type === 'Employee Changes' ? 'Employee Change' : type}
     </span>
   );
@@ -331,36 +342,31 @@ export function CasesPage() {
     setLocation(caseListPath(params.toString(), 'All Cases', window.location.hash));
   };
 
-  const selectStyle = 'flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]';
+  const selectStyle = 'flex h-10 lg:h-[32px] min-w-0 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]';
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {opsSettings.isError && <p role="alert" data-testid="text-date-format-warning" className="mb-2 text-xs text-[var(--status-amber-fg)]">Client date format could not be loaded; dates use the product format (MMM d, yyyy). <button className="underline" onClick={() => void opsSettings.refetch()}>Retry</button></p>}
-      <PageHeader title={context.title} subtitle={context.subtitle}>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Link href="/email-intake"><Button variant="outline" className="gap-2" data-testid="link-email-intake">Email intake</Button></Link>
+    <div className="cases-page space-y-3 w-full min-w-0" data-testid="cases-page">
+      {opsSettings.isError && <p role="alert" data-testid="text-date-format-warning" className="text-xs text-[var(--status-amber-fg)]">Client date format could not be loaded; dates use the product format (MMM d, yyyy). <button className="underline min-h-10 px-2" onClick={() => void opsSettings.refetch()}>Retry</button></p>}
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-3">
+        <div className="min-w-0">
+          <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 650, color: 'var(--text-primary)', lineHeight: 1.2, margin: 0, letterSpacing: '-0.01em' }}>{context.title}</h1>
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '2px 0 0' }}>{context.subtitle}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/email-intake"><Button size="sm" variant="outline" className="gap-1.5 h-10 lg:h-8" data-testid="link-email-intake">Email intake</Button></Link>
           {!organization.data?.demoProfile && <>
-          <Button onClick={() => typeFilter === 'Offboarding' ? setLocation('/cases/separations/new') : setShowNew(!showNew)} className="gap-2">
+          <Button size="sm" onClick={() => typeFilter === 'Offboarding' ? setLocation('/cases/separations/new') : setShowNew(!showNew)} className="gap-1.5 h-10 lg:h-8">
             <Plus className="h-4 w-4" /> New Case
           </Button>
-          <Button variant="outline" onClick={() => typeFilter === 'Offboarding' ? setLocation('/cases/separations/intake') : setShowBatch(!showBatch)} className="gap-2">
+          <Button size="sm" variant="outline" onClick={() => typeFilter === 'Offboarding' ? setLocation('/cases/separations/intake') : setShowBatch(!showBatch)} className="gap-1.5 h-10 lg:h-8">
             <Users className="h-4 w-4" /> Batch Intake
           </Button>
-           {typeFilter !== 'Offboarding' && <Button variant="outline" onClick={() => setShowStandardIntake(!showStandardIntake)} className="gap-2">
+           {typeFilter !== 'Offboarding' && <Button size="sm" variant="outline" onClick={() => setShowStandardIntake(!showStandardIntake)} className="gap-1.5 h-10 lg:h-8">
              <ShieldCheck className="h-4 w-4" /> Trusted Intake
            </Button>}
           </>}
-        </div>
-      </PageHeader>
-      {workingList.controls}
-      {workingList.view !== 'hidden' && <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={showHistory} onChange={event => setShowHistory(event.target.checked)} />
-        Show all historical test records
-      </label>}
-      {workingList.view === 'hidden' && <p className="text-sm">Hidden cases include individually hidden working and historical records. Existing history restrictions still apply. Check a case to restore it; restored historical records may require the history filter.</p>}
-      {showHistory && workingList.view !== 'hidden' && <p role="status" className="rounded border p-3 text-sm">
-        Historical test records are read-only and non-operational. Stored status and evidence describe history, not current business activity or readiness.
-      </p>}
 
+        </div>
+      </header>
 
       {typeFilter !== 'Offboarding' && showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
        {typeFilter !== 'Offboarding' && showBatch && <BatchIntakeForm onClose={() => setShowBatch(false)} />}
@@ -368,13 +374,13 @@ export function CasesPage() {
 
       <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'visible' }}>
         {/* search + filters row */}
-        <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4" style={{ color: 'var(--text-muted)' }} />
-            <Input aria-label="Search cases and programs" className="pl-9" placeholder="Search cases, workers, programs, entities, or ID..." value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0' }} className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] sm:max-w-md">
+            <Search className="absolute left-2.5 top-3 lg:top-2.5 h-4 w-4" style={{ color: 'var(--text-muted)' }} />
+            <Input aria-label="Search cases and programs" className="pl-9 h-10 lg:h-8" placeholder="Search cases, workers, programs, entities, or ID..." value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           <div className="relative" ref={filtersRef}>
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowFilters((v) => !v)} aria-expanded={showFilters} aria-haspopup="dialog" aria-controls="cases-filters-panel">
+            <Button variant="outline" size="sm" className="gap-2 h-10 lg:h-8" onClick={() => setShowFilters((v) => !v)} aria-expanded={showFilters} aria-haspopup="dialog" aria-controls="cases-filters-panel">
               <SlidersHorizontal className="h-3.5 w-3.5" />
               Filters
               {activeFilterCount > 0 && (
@@ -382,10 +388,10 @@ export function CasesPage() {
               )}
             </Button>
             {showFilters && (
-              <div id="cases-filters-panel" role="dialog" aria-label="Case filters" style={{ position: 'absolute', top: 'calc(100% + 6px)', width: '300px', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md, 0 8px 24px rgba(16,24,40,0.12))', padding: 'var(--space-lg)', zIndex: 30 }} className="space-y-3 left-0 sm:left-auto sm:right-0 max-h-[70vh] overflow-y-auto">
+              <div id="cases-filters-panel" role="dialog" aria-label="Case filters" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md, 0 8px 24px rgba(16,24,40,0.12))', padding: 'var(--space-lg)', zIndex: 40 }} className="space-y-3 fixed left-3 right-3 top-[10dvh] max-h-[80dvh] sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+6px)] sm:w-80 sm:max-h-[70dvh] overflow-y-auto">
                 <div className="flex items-center justify-between">
                   <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Filters</span>
-                  <button onClick={() => setShowFilters(false)} style={{ color: 'var(--text-muted)' }} aria-label="Close filters"><X className="h-4 w-4" /></button>
+                  <button onClick={() => setShowFilters(false)} className="flex h-10 w-10 items-center justify-center" style={{ color: 'var(--text-muted)' }} aria-label="Close filters"><X className="h-4 w-4" /></button>
                 </div>
                 <div className="text-xs text-[var(--text-muted)]">Case status, agent, priority, classification, and checklist filters apply to individual cases only and exclude programs.</div>
                 <div className="space-y-1">
@@ -453,7 +459,18 @@ export function CasesPage() {
               </div>
             )}
           </div>
+          {workingList.view !== 'hidden' && <label className="inline-flex min-h-10 items-center gap-2 text-xs font-medium text-[var(--text-secondary)] cursor-pointer lg:min-h-8">
+            <input type="checkbox" aria-label="Show all historical test records" className="h-4 w-4" checked={showHistory} onChange={event => setShowHistory(event.target.checked)} />
+            History
+          </label>}
+          {workingList.controls}
         </div>
+        {(workingList.view === 'hidden' || showHistory) && <div className="space-y-1 border-b border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-secondary)]">
+          {workingList.view === 'hidden' && <p>Hidden cases include individually hidden working and historical records. Existing history restrictions still apply. Check a case to restore it; restored historical records may require the history filter.</p>}
+          {showHistory && workingList.view !== 'hidden' && <p role="status" className="rounded bg-[var(--status-amber-bg)] px-2 py-1 text-[var(--status-amber-fg)]">
+            Historical test records are read-only and non-operational. Stored status and evidence describe history, not current business activity or readiness.
+          </p>}
+        </div>}
 
         {checklistProfileId && (
           <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--primary-light)] px-[var(--space-lg)] py-2 text-xs text-[var(--primary)]">
@@ -463,40 +480,52 @@ export function CasesPage() {
         )}
 
         {/* case-type tabs */}
-        <div style={{ padding: '8px var(--space-lg)', borderBottom: '1px solid var(--border)' }} className="flex flex-wrap items-center gap-1">
+        <div className="border-b border-[var(--border)] px-3 py-2 lg:hidden">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            Family
+            <select aria-label="Case family" value={typeFilter} onChange={event => setTypeFilter(event.target.value as WorkItemFilter)} className={selectStyle}>
+              {workTypes.map(type => <option key={type} value={type}>{type} ({typeCountLabel(type)})</option>)}
+            </select>
+          </label>
+        </div>
+        <div role="group" aria-label="Case families" style={{ padding: '6px 12px', borderBottom: '1px solid var(--border)' }} className="hidden lg:flex flex-wrap items-center gap-1">
           {workTypes.map((t) => {
             const active = typeFilter === t;
+            const isProg = t === PROGRAM_FILTER;
+            const unavailable = isProg && (transferQuery.isError || !organizationId);
+            const loading = isProg && !unavailable && transferQuery.isPending;
+            const badge = isProg ? (unavailable ? '!' : loading ? '…' : String(programs?.length ?? 0)) : t === 'All Cases' ? String(counts.all) : String(caseTypeCounts[t]);
+            const [tbg, tfg] = isProg ? ['#F3E8FF', '#7E22CE'] : t === 'All Cases' ? ['#EEF0FE', '#3730C9'] : familyTint(t);
             return (
               <button
                 key={t}
                 aria-pressed={active}
+                aria-label={`${t}: ${typeCountLabel(t)}`}
+                title={`${t}: ${typeCountLabel(t)}`}
                 onClick={() => setTypeFilter(t)}
-                className="shrink-0 transition-colors"
+                className="inline-flex min-h-10 shrink-0 items-center gap-1.5 hover:bg-[var(--surface-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] lg:min-h-7"
                 style={{
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: active ? 600 : 500,
-                  padding: '5px 10px',
-                  borderRadius: '999px',
-                  backgroundColor: active ? 'var(--primary-light)' : 'transparent',
-                  color: active ? 'var(--primary)' : 'var(--text-secondary)',
-                  border: active ? '1px solid var(--primary)' : '1px solid transparent',
-                  whiteSpace: 'nowrap',
+                  fontSize: 'var(--text-sm)', fontWeight: active ? 650 : 500, padding: '0 8px', borderRadius: '999px',
+                  backgroundColor: active ? 'var(--surface-selected)' : 'transparent',
+                  color: active ? 'var(--primary-dark)' : 'var(--text-secondary)',
+                  border: active ? '1px solid var(--primary)' : '1px solid transparent', whiteSpace: 'nowrap',
                 }}
               >
-                {t} <span style={{ marginLeft: '4px', fontWeight: 700 }}>{typeCountLabel(t)}</span>
+                {isProg ? 'Transfer programs' : t === 'All Cases' ? 'All' : t === 'Employee Changes' ? 'Changes' : t}
+                <span aria-hidden style={{ backgroundColor: tbg, color: tfg, borderRadius: '999px', fontSize: 'var(--text-xs)', fontWeight: 700, padding: '0 6px', lineHeight: '16px' }}>{badge}</span>
               </button>
             );
           })}
         </div>
 
-        <div role="status" className="px-4 py-2 text-xs border-b border-[var(--border)]">
+        <div role="status" className="px-3 py-1.5 text-xs text-[var(--text-secondary)] border-b border-[var(--border)]">
           Showing {filtered.length} individual cases · {transferQuery.isError || !organizationId ? 'program results unavailable' : transferQuery.isPending ? 'programs loading' : `${filteredPrograms.length} programs`}.
           {' '}Status counts and completion metrics cover individual cases only.
         </div>
         {(transferQuery.isError || !organizationId) ? (
-          <div role="alert" className="px-4 py-3 text-sm border-b border-[var(--border)]">
+          <div role="alert" className="px-3 py-2 text-xs border-b border-[var(--border)] bg-[var(--status-amber-bg)] text-[var(--status-amber-fg)]">
             Transfer program results are unavailable. Your access or the service may need attention; individual cases remain available.
-            <Button variant="outline" size="sm" className="ml-2" disabled={transferQuery.isFetching || !organizationId} onClick={() => transferQuery.refetch()}>Retry programs</Button>
+            <Button variant="outline" size="sm" className="ml-2 h-10 lg:h-7" disabled={transferQuery.isFetching || !organizationId} onClick={() => transferQuery.refetch()}>Retry programs</Button>
           </div>
         ) : transferQuery.isPending ? (
           <div role="status" className="px-4 py-3 text-sm">Loading transfer programs… Individual cases load independently.</div>
@@ -509,7 +538,7 @@ export function CasesPage() {
 
         {/* compact summary counts */}
         {!isLoading && !isError && (cases?.length ?? 0) > 0 && (
-          <div style={{ padding: '8px var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }} className="flex items-center gap-4 flex-wrap">
+          <div style={{ padding: '2px 12px', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }} className="flex items-center gap-x-4 flex-wrap">
             {([
               ['Individual cases', counts.all, '' as const],
               ['In Progress', counts.inProgress, 'In Progress' as const],
@@ -525,7 +554,7 @@ export function CasesPage() {
                   <button
                     key={label}
                     onClick={() => setFilters({ ...filters, status: statusValue })}
-                    className="flex items-center gap-1.5"
+                    className="flex min-h-10 items-center gap-1.5 hover:text-[var(--primary)] lg:min-h-7"
                     style={{ fontSize: 'var(--text-xs)', fontWeight: active ? 700 : 500, color: active ? 'var(--primary)' : 'var(--text-secondary)' }}
                   >
                     {label}
@@ -540,16 +569,16 @@ export function CasesPage() {
         <div className="overflow-x-auto hidden lg:block">
           <table className="w-full min-w-[960px] table-fixed text-left" style={{ borderCollapse: 'collapse' }}>
             <colgroup>
-              {[23, 16, 13, 10, 10, 11, 11, 6].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}
+              {[26, 13, 12, 10, 9, 11, 11, 8].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}
             </colgroup>
             <thead>
               <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
-                {['Case / Original intent', 'Worker / Population', 'Work Item Type', 'Effective Date', 'Business Stages', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
+                {['Case / Original intent', 'Worker / Population', 'Family', 'Effective Date', 'Business Stages', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
                   <th
                     key={h}
                     className={cn((h === 'Effective Date' || h === 'Owner / Agent' || h === 'Business Stages') && 'hidden lg:table-cell')}
                     title={h === 'Business Stages' ? 'Offer intake · Background checks · Day-1 readiness' : h}
-                    style={{ padding: '10px 8px', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: i === 7 ? 'right' : 'left' }}
+                    style={{ padding: '6px 8px', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: i === 7 ? 'right' : 'left' }}
                   >
                     {h}
                   </th>
@@ -607,7 +636,7 @@ export function CasesPage() {
                       style={{ borderBottom: '1px solid var(--border)' }}
                       tabIndex={0}
                       aria-label={`Open case ${caseIdOf(c)} — Original intent: ${originalIntentOf(c)} — ${caseTitleOf(c)} for ${caseWorkerName(c)}`}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--primary-light)')}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-selected)')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                       onKeyDown={(e) => {
                         if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
@@ -616,12 +645,12 @@ export function CasesPage() {
                         }
                       }}
                       onClick={(e) => {
-                        if (!(e.target as HTMLElement).closest('a, button, input, label')) {
+                        if (!(e.target as HTMLElement).closest('a, button, input, label, details')) {
                           setLocation(`/cases/${c.id}`);
                         }
                       }}
                     >
-                      <td style={{ padding: '10px 8px' }}>
+                      <td style={{ padding: '6px 8px' }}>
                         <div className="flex min-w-0 items-center gap-2">
                           {workingList.checkbox(c)}
                           <span className="shrink-0 whitespace-nowrap" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</span>
@@ -629,30 +658,33 @@ export function CasesPage() {
                           {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} title="Email source history" aria-label={`Email source history for ${caseIdOf(c)}`} className="shrink-0 text-xs underline">Email</Link>}
                         </div>
                       </td>
-                      <td style={{ padding: '10px 8px' }}>
+                      <td style={{ padding: '6px 8px' }}>
                         <div className="truncate" title={[caseWorkerName(c), c.workerEmail, workforceLabel(c).replace(/-/g, ' '), c.workforceContext?.siteExposure === true ? 'Site exposure' : c.workforceContext?.siteExposure === false ? 'No site exposure' : null, c.workforceContext?.safetyCritical === true ? 'Safety-critical' : c.workforceContext?.safetyCritical === false ? 'Not safety-critical' : null].filter(Boolean).join(' · ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>{caseWorkerName(c)}</div>
                       </td>
-                      <td style={{ padding: '10px 8px' }}>
+                      <td style={{ padding: '6px 8px' }}>
                         <div className="truncate" title={caseTypeOf(c)}><CaseTypeBadge type={caseTypeOf(c)} /></div>
                       </td>
-                      <td className="hidden lg:table-cell whitespace-nowrap" style={{ padding: '10px 8px', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                      <td className="hidden lg:table-cell whitespace-nowrap" style={{ padding: '6px 8px', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
                         {confirmedCaseDate(c) ? format(new Date(confirmedCaseDate(c)!), caseDateFormat) : 'Not confirmed'}
                       </td>
-                      <td className="hidden lg:table-cell" style={{ padding: '10px 8px' }}>
+                      <td className="hidden lg:table-cell" style={{ padding: '6px 8px' }}>
                         {c.syntheticJourney ? <span className="block truncate text-xs text-[var(--text-muted)]" title={`${c.syntheticJourney.qualifier} — ${c.syntheticJourney.rationale}`}>
                           {c.syntheticJourney.stages[c.syntheticJourney.stages.length - 1]?.title}</span>
                           : c.gateways ? <CompactGates gateways={c.gateways} inline /> : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>N/A</span>}
                       </td>
-                      <td style={{ padding: '10px 8px' }}>
+                      <td style={{ padding: '6px 8px' }}>
                         <div className="truncate" title={c.syntheticJourney ? c.syntheticJourney.qualifier : status}><HroStatusBadge status={status} /></div>
                       </td>
-                      <td className="hidden lg:table-cell" style={{ padding: '10px 8px' }}>
+                      <td className="hidden lg:table-cell" style={{ padding: '6px 8px' }}>
                         <OwnerCell owner={owner} />
                       </td>
-                      <td style={{ padding: '10px 8px', textAlign: 'right' }}>
-                        <Link href={`/cases/${c.id}`} aria-label={`View details for case ${caseIdOf(c)}`} className="whitespace-nowrap hover:underline" style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--primary)' }} onClick={(e) => e.stopPropagation()}>
-                          View
-                        </Link>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                        <div className="flex items-center justify-end gap-2">
+                          <CaseListDisclosure c={c} dateFormat={caseDateFormat} />
+                          <Link href={`/cases/${c.id}`} aria-label={`View details for case ${caseIdOf(c)}`} className="whitespace-nowrap hover:underline inline-flex items-center min-h-8" style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--primary)' }} onClick={(e) => e.stopPropagation()}>
+                            View
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -683,12 +715,12 @@ export function CasesPage() {
               return (
                 <div
                   key={c.id}
-                  className="w-full text-left"
+                  className="w-full min-w-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                   role="link"
                   aria-label={`Open case ${caseIdOf(c)} for ${caseWorkerName(c)}`}
                   tabIndex={0}
-                  style={{ padding: '12px var(--space-lg)', borderBottom: '1px solid var(--border)' }}
-                  onClick={event => { if (!(event.target as HTMLElement).closest('a, input, label')) setLocation(`/cases/${c.id}`); }}
+                  style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}
+                  onClick={event => { if (!(event.target as HTMLElement).closest('a, input, label, details')) setLocation(`/cases/${c.id}`); }}
                   onKeyDown={event => { if (event.target === event.currentTarget && event.key === 'Enter') setLocation(`/cases/${c.id}`); }}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -696,18 +728,23 @@ export function CasesPage() {
                     <span className="min-w-0 truncate" title={caseTitleOf(c)} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
                     <HroStatusBadge status={status} />
                   </div>
-                  <p className="mt-1 break-words text-sm text-[var(--text-secondary)]"><span className="font-semibold">Original intent:</span> {originalIntentOf(c)}</p>
+                  <p className="mt-1 line-clamp-2 break-words text-sm text-[var(--text-secondary)]"><span className="font-semibold">Original intent:</span> {originalIntentOf(c)}</p>
                   {isFictionalOfflineExample(c) && c.planSummary && <p title={caseSummary(c)} className="mt-1 line-clamp-1 text-xs text-[var(--text-muted)]">{caseSummary(c)}</p>}
                   <div className="flex items-center justify-between gap-2 mt-1">
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{caseWorkerName(c)}</span>
+                    <span className="min-w-0 break-words" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{caseWorkerName(c)}</span>
                     <CaseTypeBadge type={caseTypeOf(c)} />
                   </div>
                   <div className="flex items-center justify-between gap-2 mt-1">
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</div>
                     {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} className="text-xs underline">Email source history</Link>}
-                    {!c.syntheticJourney && c.gateways && <CompactGates gateways={c.gateways} />}
+                    {!c.syntheticJourney && c.gateways && <CompactGates gateways={c.gateways} inline />}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
+                    <span className="min-w-0 break-words">{ownerOf(c).name}</span>
+                    <span>Effective: {confirmedCaseDate(c) ? format(new Date(confirmedCaseDate(c)!), caseDateFormat) : 'Not confirmed'}</span>
                   </div>
                    <WorkforceTags c={c} />
+                  <CaseListDisclosure c={c} dateFormat={caseDateFormat} mobile />
                 </div>
               );
             })
@@ -717,6 +754,31 @@ export function CasesPage() {
       </div>
     </div>
   );
+}
+
+/** Optional full-value disclosure: no hidden reasoning or new evidence, only list fields. */
+function CaseListDisclosure({ c, dateFormat, mobile = false }: { c: OnbCase; dateFormat: string; mobile?: boolean }) {
+  return <details className={cn("case-list-disclosure text-left text-xs", mobile && "mt-1")}
+    onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
+    <summary aria-label={`More information for case ${caseIdOf(c)}`} className="cursor-pointer rounded px-1 font-semibold text-[var(--primary-dark)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]">
+      {mobile ? 'Case information' : 'Info'}
+    </summary>
+    <div className={cn("case-list-facts space-y-2 break-words rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-[var(--text-secondary)]", !mobile && "shadow-lg")}>
+      <p className="font-semibold">{caseIdOf(c)} · {caseTitleOf(c)}</p>
+      <p><strong>Original intent:</strong> {originalIntentOf(c)}</p>
+      <p><strong>Worker:</strong> {caseWorkerName(c)} · {c.workerEmail}</p>
+      <p><strong>Family:</strong> {caseTypeOf(c)} · <strong>Status:</strong> {statusOf(c)}</p>
+      <p><strong>Owner:</strong> {ownerOf(c).name} · {ownerOf(c).kind}</p>
+      <p><strong>Effective date:</strong> {confirmedCaseDate(c) ? format(new Date(confirmedCaseDate(c)!), dateFormat) : 'Not confirmed'}</p>
+      <WorkforceTags c={c} />
+      {isFictionalOfflineExample(c) && c.planSummary && <p>{caseSummary(c)}</p>}
+      {c.syntheticJourney ? <p>{c.syntheticJourney.qualifier} — {c.syntheticJourney.rationale}</p>
+        : c.gateways && <div className="space-y-1">{(['a', 'b', 'c'] as const).map(key => {
+          const gate = c.gateways?.[key];
+          return gate && <p key={key}><strong>{ONBOARDING_STAGE_NAMES[key]}:</strong> {stageStatusText(gate.status)} — {lifecycleStageText(gate.reason || gate.label)}</p>;
+        })}</div>}
+    </div>
+  </details>;
 }
 
 function OwnerCell({ owner }: { owner: { name: string; kind: 'AI Agent' | 'Human Reviewer' } }) {

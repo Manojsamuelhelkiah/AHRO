@@ -116,3 +116,15 @@ a timeout.
 **How to apply:** Synchronize the test at its browser request boundary, keep
 live polling and server authorization enabled, and assert the denied response
 and cleared content rather than relying on a stale control.
+
+For server-confirmed controlled checkboxes, use a click followed by an assertion
+on the refreshed result rather than Playwright's immediate check/uncheck state
+postcondition.
+
+**Why:** A deliberate non-optimistic checkbox can correctly retain its old value
+until the response and refetch finish. Playwright may report that the click did
+not change state even when the request succeeded.
+
+**How to apply:** Keep the product's server-confirmed behavior. Assert the final
+visible row or confirmed checkbox state with a retrying expectation; do not add
+optimistic writes merely to satisfy the test helper.
