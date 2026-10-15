@@ -70,6 +70,7 @@ import {
   SYNTHETIC_OFFLINE_MARKER,
 } from "../lib/onboarding/synthetic-offline";
 import { setOnboardingConnectorProxyForTests } from "../lib/onboarding/channels";
+import { recordHumanPermissionDecision } from "../lib/human-permissions";
 import {
   governanceSnapshotForNewCase,
   withGovernanceDecisionSnapshot,
@@ -452,6 +453,13 @@ before(async () => {
     approvedAt: new Date(),
     approvedPolicyVersion: 1,
   });
+  // Read-only disclosure fixture: explicitly withhold these fields instead
+  // of relying on retired specialist qualifications to restrict a reader.
+  await db.insert(accessNamedGrants).values(["data.identity.read", "data.medical.read"].map(resourceKey => ({
+    organizationId: orgA, principalType: "human" as const, principalId: memberA, scope: "tenant" as const,
+    resourceType: "field" as const, resourceKey, source: "named" as const, effect: "deny" as const,
+    createdByUserId: ownerA,
+  })));
   await db.insert(accessUserGroups).values({
     id: offlineAccessUserGroupId,
     organizationId: orgB,
@@ -557,6 +565,10 @@ before(async () => {
   // several stages. Seed every class policy rather than approving only the
   // immediate contact class, so this positive fixture proves the all-class
   // lifecycle fence without bypassing it.
+  const policyReview = await db.transaction(tx => recordHumanPermissionDecision(tx, {
+    organizationId: orgA, actorUserId: ownerA, requiredKeys: ["tool.policy.manage"],
+    reviewedRevision: 1, decision: "Review isolated fake-provider regression policies",
+  }));
   await db.insert(onbSensitiveLifecyclePolicies).values(
     SENSITIVE_DATA_CLASSES.map((dataClass) => ({
       organizationId: orgA,
@@ -571,7 +583,7 @@ before(async () => {
       policyReference: `test-policy-${dataClass}`,
       approvalReference: `test-approval-${dataClass}`,
       approvedByUserId: ownerA,
-      approvedAuthorityAssignmentId: 1,
+      approvedAuthorityAssignmentId: policyReview.id,
     })),
   );
   liveGovernanceSnapshot = await establishLiveProviderGovernance(orgA);

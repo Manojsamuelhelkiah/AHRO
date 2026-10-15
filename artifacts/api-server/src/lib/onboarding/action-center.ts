@@ -24,6 +24,9 @@ import { externalProviderDispatchDenied } from "./provider-policy";
 import { isChecklistAdministrator } from "./checklist";
 import { sensitiveClassForDocument, withSensitiveAuthorityFence } from "./sensitive-access";
 import { resolveClientActionRouting } from "./client-operations-settings";
+import { actionCenterFamily, matchesActionCenterContext } from "./action-center-family";
+import { resolveEffectiveAccess } from "../access-governance";
+import { isFictionalOfflineExampleCase } from "./offline-example-display";
 
 export type ActionCenterScope = "active" | "completed" | "all";
 export type ActionCenterAccess = "standard" | "synthetic-demo-simulation";
@@ -784,8 +787,9 @@ export async function getActionCenter(
   organizationId: string,
   scope: ActionCenterScope = "active",
   limit = 100,
-  filters: { workforce?: ActionCenterWorkforceFilter; safetyCritical?: boolean; siteExposure?: boolean } = {},
+  filters: { caseType?: string; workforce?: ActionCenterWorkforceFilter; safetyCritical?: boolean; siteExposure?: boolean } = {},
   access: ActionCenterAccess = "standard",
+  actorUserId?: string,
 ) {
   const [cases, approvalRows, documents, systemChecks, events, communications, actionRows, approvalHistory, uploads] =
     await Promise.all([
@@ -846,17 +850,21 @@ export async function getActionCenter(
     access === "synthetic-demo-simulation"
       ? isSyntheticOfflineCase(row)
       : !isHistoricalTestRecord(row) && !isSyntheticOfflineCase(row);
-  const filteredCaseIds = new Set(visibleCases.filter((row) => {
-    if (filters.workforce) {
-      const label = row.workforceClassification?.label ?? "unclassified";
-      if (label !== filters.workforce) return false;
-    }
-    // Unknown is not "no": filters are explicit applicability facts and must
-    // not silently include cases whose safety/site context has not been set.
-    if (filters.safetyCritical !== undefined && row.workforceContext.safetyCritical !== filters.safetyCritical) return false;
-    if (filters.siteExposure !== undefined && row.workforceContext.siteExposure !== filters.siteExposure) return false;
-    return true;
-  }).map((row) => row.id));
+  const matchingCases = visibleCases.filter(row =>
+    row.hireType !== "separation" &&
+    (!filters.caseType || actionCenterFamily(row) === filters.caseType) &&
+    matchesActionCenterContext(row, filters));
+  // Authorization precedes every bounded source projection. Hidden rows must
+  // never consume a visible reader's limit.
+  const authorizedCases = [];
+  for (const row of matchingCases) {
+    if (actorUserId && !(await resolveEffectiveAccess({
+      organizationId, principalType: "human", principalId: actorUserId,
+      caseId: row.id, purpose: "action-center-family",
+    })).allows.includes("flow.case.read")) continue;
+    authorizedCases.push(row);
+  }
+  const filteredCaseIds = new Set(authorizedCases.map(row => row.id));
   const caseById = new Map(visibleCases.map((row) => [row.id, row]));
   const latestSystemChecks = Array.from(new Map(
     systemChecks.map((row) => [`${row.c.id}:${row.check.system}`, row]),
@@ -1188,6 +1196,11 @@ export async function getActionCenter(
     visibleCases.length > 0 && visibleCases.every((row) => !isSyntheticOfflineCase(row));
   return {
     version: 1,
+    caseSummaries: authorizedCases.map(row => ({
+      caseId: row.id, caseType: actionCenterFamily(row),
+      label: isFictionalOfflineExampleCase(row) ? `S${row.id}` : `Case #${row.id}`,
+      status: row.lifecycleStage, caseHref: caseHref(row.id),
+    })),
     generatedAt: new Date().toISOString(),
     pausedOffline,
     capabilities: {

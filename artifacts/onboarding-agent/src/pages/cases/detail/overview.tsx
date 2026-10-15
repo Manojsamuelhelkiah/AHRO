@@ -324,6 +324,11 @@ function DocumentsSummaryCard({ docs, setTab }: any) {
 }
 
 
+export function waitingCaseWorkstreams(c: any): any[] {
+  return (c.workstreams || []).filter((w: any) => w.key !== 'restricted'
+    && !['ready', 'completed', 'done', 'complete', 'rejected', 'cancelled'].includes(w.status));
+}
+
 export function NextActions({ c, pendingApprovals, setTab, showPlanLink = true }: any) {
   if (c.syntheticJourney) return <SyntheticJourneyActions journey={c.syntheticJourney} />;
   const actions: { title: string; desc: string; owner: string; priority: boolean; status?: string }[] = [];
@@ -338,8 +343,7 @@ export function NextActions({ c, pendingApprovals, setTab, showPlanLink = true }
   }
 
   const restricted = (c.workstreams || []).filter((w: any) => w.key === 'restricted');
-  const waitingWorkstreams = (c.workstreams || []).filter((w: any) => w.key !== 'restricted'
-    && !['ready', 'completed', 'done', 'complete', 'rejected', 'cancelled'].includes(w.status));
+  const waitingWorkstreams = waitingCaseWorkstreams(c);
   waitingWorkstreams.forEach((w: any) => {
     actions.push({
       title: w.label,

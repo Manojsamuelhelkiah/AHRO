@@ -25,6 +25,8 @@ import { useOrganizationRole } from '../hooks/use-organization-role';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ActionCenterCreateWork } from './action-center-create-work';
 import { getEarlyTenureReminderInbox, postEarlyTenureInboxEvidence, type EarlyTenureInboxReminder } from '../lib/early-tenure-api';
+import { useActionCenter, useActionCenterCaseType, useActionCenterScope } from '../hooks/use-action-center-filter';
+import { ActionCaseSummaries, DomainRecords, ActionReference, useActionCase, ActionConversationLink } from './action-center-domain-records';
 
 function WorkforceContextTags({ c }: { c: OnbActionCenter['documentFollowups'][0]['case'] }) {
   const label = (c.workforceClassification as { label?: string } | null)?.label ?? 'unclassified';
@@ -36,9 +38,10 @@ function WorkforceContextTags({ c }: { c: OnbActionCenter['documentFollowups'][0
 }
 
 function ActionCaseLink({ caseId, href }: { caseId: number; href?: string }) {
+  const c = useActionCase(caseId);
   return (
-    <Link href={href ?? `/cases/${caseId}`} className="inline-flex shrink-0 items-center rounded bg-[var(--primary-light-bg)] px-2 py-1 text-xs font-semibold text-[var(--primary)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
-      Case #{caseId}
+      <Link href={href ?? c.href} className="inline-flex shrink-0 items-center rounded bg-[var(--primary-light-bg)] px-2 py-1 text-xs font-semibold text-[var(--primary)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+       <ActionReference caseId={caseId} />
     </Link>
   );
 }
@@ -47,7 +50,7 @@ export function NeedsAttentionTab() {
   const [workforce, setWorkforce] = useState<'white-collar' | 'blue-collar-frontline' | 'mixed' | 'needs-review' | 'unclassified' | ''>('');
   const [safetyOnly, setSafetyOnly] = useState(false);
   const [siteOnly, setSiteOnly] = useState(false);
-  const { data, isLoading, isFetching } = useGetOnboardingActionCenter({
+  const { data, isLoading, isFetching } = useActionCenter({
     scope: 'active',
     workforce: workforce || undefined,
     safetyCritical: safetyOnly || undefined,
@@ -57,7 +60,8 @@ export function NeedsAttentionTab() {
   if (isLoading) return <div className="py-12 text-center text-sm text-[var(--text-muted)]">Loading actionable items...</div>;
   if (!data) return <div className="py-12 text-center text-sm text-[var(--status-red)]">Failed to load action center.</div>;
 
-  const totalActionable = data.notifications.length + data.documentFollowups.length + data.workItems.length + data.opportunities.length;
+  const totalActionable = data.notifications.length + data.documentFollowups.length + data.workItems.length + data.opportunities.length +
+    (data.domainRecords ?? []).filter(r => r.category === 'attention').length;
 
   return (
     <div className="space-y-6 relative">
@@ -86,13 +90,17 @@ export function NeedsAttentionTab() {
         </select>
         <label className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={safetyOnly} onChange={(event) => setSafetyOnly(event.target.checked)} /> Safety-critical only</label>
          <label className="flex items-center gap-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={siteOnly} onChange={(event) => setSiteOnly(event.target.checked)} /> Site exposure only</label>
+        {(workforce || safetyOnly || siteOnly) && <Button size="sm" variant="outline" onClick={() => { setWorkforce(''); setSafetyOnly(false); setSiteOnly(false); }}>Clear job context</Button>}
+        <p className="w-full text-xs text-[var(--text-muted)]">Applies only to recorded case job context. Unknown safety or site context does not match an explicit filter. Separation cases do not inherit onboarding job context.</p>
       </div>
-      <EarlyTenureReminderInbox />
+      <EarlyTenureReminderInbox workforce={workforce || undefined} safetyCritical={safetyOnly || undefined} siteExposure={siteOnly || undefined} />
+      <ActionCaseSummaries data={data} />
+      <DomainRecords data={data} category="attention" />
       {totalActionable === 0 ? (
         <Card className="text-center border-dashed py-16" style={{ borderColor: 'var(--border)', backgroundColor: 'transparent', boxShadow: 'none' }}>
           <CheckCircle2 className="mx-auto h-12 w-12 text-[var(--status-green)] opacity-50 mb-4" />
-          <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-1">All Clear</h3>
-          <p className="text-sm text-[var(--text-secondary)]">No cases require immediate attention.</p>
+           <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-1">No matching attention items</h3>
+           <p className="text-sm text-[var(--text-secondary)]">No recorded attention items match these filters. Case summaries do not imply pending work.</p>
         </Card>
       ) : (
         <>
@@ -156,10 +164,12 @@ export function NeedsAttentionTab() {
 /** Member-scoped task prompts are intentionally separate from the HR case view.
  * The server returns no worker or case narrative; its opaque action path is the
  * only client-side completion capability. */
-export function EarlyTenureReminderInbox() {
+export function EarlyTenureReminderInbox(filters: { workforce?: string; safetyCritical?: boolean; siteExposure?: boolean } = {}) {
+  const caseType = useActionCenterCaseType();
+  const scope = useActionCenterScope();
   const inbox = useQuery({
-    queryKey: ['early-tenure-reminder-inbox'],
-    queryFn: getEarlyTenureReminderInbox,
+    queryKey: ['early-tenure-reminder-inbox', ...scope, caseType, filters],
+    queryFn: () => getEarlyTenureReminderInbox(caseType, filters),
     retry: false,
     staleTime: 30_000,
   });
@@ -180,7 +190,7 @@ function EarlyTenureReminderRow({ reminder }: { reminder: EarlyTenureInboxRemind
     mutationFn: () => postEarlyTenureInboxEvidence<null>(reminder.evidenceCompletionPath!, { evidenceReference }),
     onSuccess: () => {
       setNotice('Completion evidence submitted.');
-      queryClient.setQueryData<EarlyTenureInboxReminder[]>(['early-tenure-reminder-inbox'], (current) => current?.filter((item) => item.id !== reminder.id));
+      queryClient.invalidateQueries({ queryKey: ['early-tenure-reminder-inbox'] });
     },
     onError: (error: any) => setNotice(error?.message || 'Completion evidence could not be submitted.'),
   });
@@ -209,9 +219,7 @@ function NotificationCard({ notification }: { notification: OnbActionCenter['not
         <p className="text-sm text-[var(--text-secondary)] mt-1">{notification.detail}</p>
       </div>
       <div className="flex items-center gap-2 shrink-0 w-full md:w-auto mt-2 md:mt-0">
-<Link href={`/approvals?tab=conversation&caseId=${notification.caseId}`} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center mr-3">
-            Conversation
-          </Link>
+          <ActionConversationLink caseId={notification.caseId} />
          <Link href={notification.caseHref} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center">
            View Case <ChevronRight className="h-3 w-3 ml-1" />
          </Link>
@@ -313,9 +321,7 @@ function DocumentFollowupCard({ doc }: { doc: OnbActionCenter['documentFollowups
             </DialogFooter>
           </DialogContent>
         </Dialog>
-<Link href={`/approvals?tab=conversation&caseId=${doc.caseId}`} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
-            Conversation
-          </Link>
+        <ActionConversationLink caseId={doc.caseId} />
         <Link href={doc.caseHref} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
           View Case
         </Link>
@@ -416,7 +422,7 @@ function WorkItemCard({ item }: { item: OnbActionCenter['workItems'][0] }) {
         <div className="flex items-center gap-2 mb-1">
           <Badge variant="outline" className="uppercase text-[10px] bg-[var(--surface-alt)]">Work Item • {item.kind}</Badge>
           <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] bg-[var(--surface-alt)] px-1.5 py-0.5 rounded">
-            Case #{item.caseId}
+             <ActionReference caseId={item.caseId} />
           </span>
           <span className="text-xs text-[var(--text-muted)]">{format(new Date(item.createdAt), 'MMM d, HH:mm')}</span>
         </div>
@@ -518,9 +524,7 @@ function WorkItemCard({ item }: { item: OnbActionCenter['workItems'][0] }) {
            </DialogContent>
          </Dialog>
 
-<Link href={`/approvals?tab=conversation&caseId=${item.caseId}&workItemId=${item.id}`} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
-            Conversation
-          </Link>
+         <ActionConversationLink caseId={item.caseId} workItemId={item.id} />
          <Link href={item.caseHref} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
            View Case
          </Link>
@@ -563,9 +567,7 @@ function OpportunityCard({ opp }: { opp: OnbActionCenter['opportunities'][0] }) 
       <div className="flex flex-wrap items-center gap-2 shrink-0 w-full md:w-auto mt-2 md:mt-0">
          <ManualCallDialog caseId={opp.caseId} defaultNotes={`Regarding opportunity: ${opp.title}`} disabled={!canAct} />
          <ActionCenterCreateWork caseId={opp.caseId} actionVersion={opp.actionVersion} reason={opp.description} disabled={!canAct} />
- <Link href={`/approvals?tab=conversation&caseId=${opp.caseId}`} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
-            Conversation
-          </Link>
+        <ActionConversationLink caseId={opp.caseId} />
         <Link href={opp.caseHref} className="text-xs font-medium text-[var(--primary)] hover:underline flex items-center ml-2">
            View Case <ChevronRight className="h-3 w-3 ml-1" />
          </Link>
@@ -631,7 +633,7 @@ export function ManualCallDialog({ caseId, defaultNotes = '', personaEnabled = f
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Log Manual Call</DialogTitle>
-          <DialogDescription>Record a manual call outcome for Case #{caseId}. This is self-reported and does not verify readiness.</DialogDescription>
+          <DialogDescription>Record a manual call outcome for <ActionReference caseId={caseId} />. This is self-reported and does not verify readiness.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
            {open && c && !isDemo && isAuthorized && c.workerPhone && (
@@ -692,15 +694,17 @@ export function ManualCallDialog({ caseId, defaultNotes = '', personaEnabled = f
 }
 
 export function CompletedTab() {
-  const { data, isLoading } = useGetOnboardingActionCenter({ scope: 'completed' });
+  const { data, isLoading } = useActionCenter({ scope: 'completed' });
 
   if (isLoading) return <div className="py-12 text-center text-sm text-[var(--text-muted)]">Loading completed actions...</div>;
-  if (!data || data.completed.length === 0) {
-    return <div className="py-12 text-center text-sm text-[var(--text-muted)]">No completed actions found.</div>;
+  if (!data) return <p role="alert">Completed records could not be loaded or access was denied.</p>;
+  if (data.completed.length === 0 && !(data.domainRecords ?? []).some(r => r.category === 'completed')) {
+    return <div className="py-12 text-center text-sm text-[var(--text-muted)]">No recorded completed actions match this case type.</div>;
   }
 
   return (
     <div className="space-y-3">
+      <DomainRecords data={data} category="completed" />
       {data.completed.map(c => (
         <Card key={c.id} className="p-4 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-[var(--surface)] opacity-75">
           <div className="flex-1">
@@ -709,7 +713,7 @@ export function CompletedTab() {
                  Completed
                </Badge>
                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] bg-[var(--surface-alt)] px-1.5 py-0.5 rounded">
-                 Case #{c.caseId}
+                 <ActionReference caseId={c.caseId} />
                </span>
                <span className="text-xs text-[var(--text-muted)]">{format(new Date(c.createdAt), 'MMM d, HH:mm')}</span>
              </div>
@@ -729,7 +733,7 @@ export function CompletedTab() {
 
 
 export function CommunicationsTab() {
-  const { data, isLoading } = useGetOnboardingActionCenter({ scope: 'all' });
+  const { data, isLoading } = useActionCenter({ scope: 'all' });
   const search = useSearch();
   const searchParams = new URLSearchParams(search);
   const filterCaseId = searchParams.get('caseId');
@@ -761,6 +765,13 @@ export function CommunicationsTab() {
        .filter(value => typeof value === 'string').join(' ').toLowerCase();
     return text.includes(term) || item.caseId.toString() === term;
   }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const domainCommunications = (data.domainRecords ?? []).filter(r => {
+    if (r.category !== 'communication') return false;
+    if (filterCaseId && String(r.caseId) !== filterCaseId) return false;
+    const term = searchTerm.toLowerCase().trim();
+    if (term.startsWith('case:')) return !term.split(':')[1]?.trim() || String(r.caseId) === term.split(':')[1]?.trim();
+    return !term || `${r.title} ${r.detail} ${r.caseId}`.toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-6">
@@ -777,9 +788,10 @@ export function CommunicationsTab() {
       </div>
 
       <div className="space-y-3">
-        {filtered.length === 0 ? (
+        <DomainRecords data={{ ...data, domainRecords: domainCommunications }} category="communication" />
+        {filtered.length === 0 && domainCommunications.length === 0 ? (
           <div className="py-12 text-center text-sm text-[var(--text-muted)] border rounded-md border-dashed">
-            No communications found.
+            No recorded communications match these filters.
           </div>
         ) : (
           filtered.map(item => {
@@ -795,7 +807,7 @@ export function CommunicationsTab() {
                       {isCompleted ? 'Completed' : (item as any).kind}
                     </Badge>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] bg-[var(--surface-alt)] px-1.5 py-0.5 rounded">
-                      Case #{item.caseId}
+                      <ActionReference caseId={item.caseId} />
                     </span>
                     <span className="text-xs text-[var(--text-muted)]">{format(new Date(item.createdAt), 'MMM d, HH:mm')}</span>
                   </div>

@@ -15,6 +15,10 @@ import {
   isApprovalAcknowledgement,
 } from '../lib/approval-actions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CASE_TYPES } from './cases/case-presentation';
+import { useActionCenterCaseType, useActionCenterScope, useActionCenter } from '../hooks/use-action-center-filter';
+import { ActionCasePresentation, ActionReference, useActionCase, ActionConversationLink } from './action-center-domain-records';
+import { actionCenterTypeHref } from '../lib/action-center-filter';
 
 // Import the newly created tab components
 import { ActionConversationPanel, ConversationCaseOpener } from '@/components/action-conversation';
@@ -24,6 +28,9 @@ export function ApprovalsPage() {
   const [location, setLocation] = useLocation();
   const search = useSearch();
   const searchParams = new URLSearchParams(search);
+  const caseType = useActionCenterCaseType();
+  const scope = useActionCenterScope();
+  const presentation = useActionCenter({ scope: 'all' });
   const tabParam = searchParams.get('tab');
 
   const activeTab = tabParam && ['needs-attention', 'approvals', 'communications', 'completed', 'conversation'].includes(tabParam)
@@ -42,8 +49,24 @@ export function ApprovalsPage() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <PageHeader title="Action Center" subtitle="One accountable view of employee followups and human decisions." />
+      <div className="flex flex-wrap items-center gap-3">
+        <label htmlFor="action-center-case-type" className="text-sm font-semibold">Case type</label>
+        <select id="action-center-case-type" value={caseType ?? ''} className="h-9 max-w-full rounded border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
+          onChange={e => {
+            setLocation(actionCenterTypeHref(location, search, e.target.value, window.location.hash));
+          }}>
+          {CASE_TYPES.map(type => <option key={type} value={type === 'All Cases' ? '' : type}>{type === 'All Cases' ? 'All case types' : type}</option>)}
+        </select>
+        {caseType && <Button size="sm" variant="outline" onClick={() => {
+          setLocation(actionCenterTypeHref(location, search, undefined, window.location.hash));
+        }}>Clear case type</Button>}
+      </div>
+      {presentation.data?.offboardingSource === 'denied' && <p role="status" className="text-xs text-[var(--text-muted)]">Offboarding source access was denied. Other authorized case records remain available.</p>}
+      {presentation.data?.offboardingSource === 'partial' && <p role="status" className="text-xs text-[var(--text-muted)]">Only authorized offboarding records are shown.</p>}
+      {presentation.isError && <p role="alert" className="text-sm text-[var(--status-red)]">Action Center sources could not be loaded or access was denied. No cached records are shown.</p>}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <ActionCasePresentation.Provider value={presentation.data?.caseSummaries ?? []}>
+      <Tabs key={scope.join('|')} value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="min-w-0 overflow-hidden pb-2">
           <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5 mb-4">
             <TabsTrigger value="needs-attention">Needs Attention</TabsTrigger>
@@ -73,8 +96,12 @@ export function ApprovalsPage() {
 
         <TabsContent value="conversation">
           {conversationCaseId ? (
+            <>
+            <p className="mb-2 text-xs text-[var(--text-muted)]">Case type filters apply to discovery. This explicitly opened conversation remains on its selected case.</p>
             <ActionConversationPanel caseId={conversationCaseId} workItemId={conversationWorkItemId} />
+            </>
           ) : (
+            <>
             <ConversationCaseOpener onOpen={(id) => {
               const next = new URLSearchParams(search);
               next.set('tab', 'conversation');
@@ -82,11 +109,35 @@ export function ApprovalsPage() {
               next.delete('workItemId');
               setLocation(`${location}?${next.toString()}`);
             }} />
+            <ConversationCaseDiscovery />
+            </>
           )}
         </TabsContent>
       </Tabs>
+      </ActionCasePresentation.Provider>
     </div>
   );
+}
+
+function ConversationCaseDiscovery() {
+  const query = useActionCenter({ scope: 'all' });
+  const search = useSearch();
+  if (query.isLoading) return <p role="status">Loading matching cases…</p>;
+  if (query.isError) return <p role="alert">Case discovery could not be loaded or access was denied.</p>;
+  const cases = query.data?.caseSummaries ?? [];
+  return <section className="mt-4 space-y-2">
+    <h3 className="text-sm font-semibold">Matching authorized cases ({cases.length})</h3>
+    {cases.length === 0 && <p className="text-sm text-[var(--text-muted)]">No authorized cases match this case type. No examples are created by this filter.</p>}
+    {cases.map(c => {
+      const next = new URLSearchParams(search);
+      next.set('tab', 'conversation'); next.set('caseId', String(c.caseId)); next.delete('workItemId');
+      return <div key={c.caseId} className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] py-2 text-sm">
+        <Link href={c.caseHref} className="text-[var(--primary)]">{c.label}</Link>
+        <span>{c.caseType} · {c.status}</span>
+        <Link href={`/approvals?${next.toString()}`} className="text-[var(--primary)]">Open conversation</Link>
+      </div>;
+    })}
+  </section>;
 }
 
 function LegacyApprovalsQueue() {
@@ -98,13 +149,20 @@ function LegacyApprovalsQueue() {
   const filterApprovalRef = searchParams.get('approvalRef');
   const hasFilter = filterCaseId || filterApprovalId || filterApprovalRef;
   const [showAll, setShowAll] = useState(!!hasFilter);
+  const caseType = useActionCenterCaseType();
+  const scope = useActionCenterScope();
   const statusParam = showAll ? 'all' : 'pending';
-  const { data: approvals, isLoading } = useListOnboardingApprovals({ status: statusParam }, {
+  const { data: loadedApprovals, isLoading, isError } = useListOnboardingApprovals({ status: statusParam, caseType }, {
     query: {
-      queryKey: getListOnboardingApprovalsQueryKey({ status: statusParam }),
+      queryKey: [...getListOnboardingApprovalsQueryKey({ status: statusParam, caseType }), ...scope],
+      retry: false,
       refetchInterval: (query) => getApprovalRefetchInterval(query.state.data),
     }
   });
+  const approvals = isError ? undefined : loadedApprovals?.filter(app =>
+    (!filterCaseId || app.caseId.toString() === filterCaseId) &&
+    (!filterApprovalId || app.id.toString() === filterApprovalId) &&
+    (!filterApprovalRef || app.ruleRef === filterApprovalRef));
 
   return (
     <div className="space-y-4">
@@ -113,7 +171,7 @@ function LegacyApprovalsQueue() {
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm">Filtered View Active:</span>
             <div className="flex gap-2 text-xs">
-              {filterCaseId && <Badge variant="outline" className="bg-white/50">Case #{filterCaseId}</Badge>}
+              {filterCaseId && <Badge variant="outline" className="bg-white/50"><ActionReference caseId={Number(filterCaseId)} /></Badge>}
               {filterApprovalId && <Badge variant="outline" className="bg-white/50">Approval #{filterApprovalId}</Badge>}
               {filterApprovalRef && <Badge variant="outline" className="bg-white/50">Ref: {filterApprovalRef}</Badge>}
             </div>
@@ -139,13 +197,13 @@ function LegacyApprovalsQueue() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isError ? <p role="alert">Approvals could not be loaded or access was denied.</p> : isLoading ? (
         <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Loading queue...</div>
       ) : approvals?.length === 0 ? (
         <Card className="text-center border-dashed" style={{ padding: '64px', borderColor: 'var(--border)', backgroundColor: 'transparent', boxShadow: 'none' }}>
           <ShieldAlert style={{ width: '48px', height: '48px', margin: '0 auto 16px', color: 'var(--text-muted)', opacity: 0.5 }} />
           <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Queue is Clear</h3>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>No agent actions require human review at this time.</p>
+           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>No recorded approvals match the selected filters.</p>
         </Card>
       ) : (
         approvals?.filter(app => {
@@ -177,6 +235,7 @@ export function scopeLabel(scope: { kind?: string; from?: number; to?: number } 
 }
 
 export function ApprovalCard({ approval, statusParam: _statusParam }: { approval: OnbApproval, statusParam: string }) {
+  const casePresentation = useActionCase(approval.caseId);
   const [comment, setComment] = useState('');
   const { user } = useUser();
   const action = useApprovalAction(approval);
@@ -209,7 +268,7 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
         <div className="flex flex-col md:flex-row justify-between items-start gap-4">
           <div className="flex-1 w-full">
             <div className="flex flex-wrap items-center gap-2">
-              <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--primary)', backgroundColor: 'var(--primary-light)', padding: '2px 8px', borderRadius: '999px' }}>Case #{approval.caseId}</span>
+               <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--primary)', backgroundColor: 'var(--primary-light)', padding: '2px 8px', borderRadius: '999px' }}><ActionReference caseId={approval.caseId} /></span>
               <span style={{ color: 'var(--text-muted)' }}>•</span>
               <EngineBadge engine={approval.agent} />
               <HitlBadge pattern={approval.hitlPattern} />
@@ -393,12 +452,10 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
       </div>
       <div style={{ backgroundColor: 'var(--surface-alt)', padding: '12px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="flex items-center gap-4">
-          <Link href={`/cases/${approval.caseId}`} style={{ fontSize: 'var(--text-xs)', color: 'var(--primary)', fontWeight: 600 }} className="hover:underline">
+           <Link href={casePresentation.href} style={{ fontSize: 'var(--text-xs)', color: 'var(--primary)', fontWeight: 600 }} className="hover:underline">
             Open Full Case Context →
           </Link>
-          <Link href={`/approvals?tab=conversation&caseId=${approval.caseId}`} style={{ fontSize: 'var(--text-xs)', color: 'var(--primary)', fontWeight: 600 }} className="hover:underline">
-            Conversation
-          </Link>
+           <ActionConversationLink caseId={approval.caseId} />
           <button onClick={() => setHistoryOpen(!historyOpen)} className="text-[var(--text-xs)] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
             {historyOpen ? 'Hide History' : 'Show History'}
           </button>

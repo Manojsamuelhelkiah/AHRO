@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { actionCenterFamily, matchesActionCenterContext } from "./action-center-family";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
@@ -786,7 +787,8 @@ export async function getEarlyTenureView(organizationId: string, caseId: number,
 /** Minimal, member-scoped in-app inbox. It deliberately excludes worker/case
  * narrative and only acknowledges a reminder after this member-visible
  * projection is returned. */
-export async function getEarlyTenureReminderInbox(organizationId: string, actorUserId: string) {
+export async function getEarlyTenureReminderInbox(organizationId: string, actorUserId: string,
+  filters: { caseType?: string; workforce?: string; safetyCritical?: boolean; siteExposure?: boolean } = {}) {
   return withSensitiveLifecycleFence(organizationId, () => db.transaction(async (tx) => {
     const [membership] = await tx.select({ id: organizationMembershipsTable.id })
       .from(organizationMembershipsTable).where(and(
@@ -796,6 +798,7 @@ export async function getEarlyTenureReminderInbox(organizationId: string, actorU
       )).for("update");
     if (!membership) throw new Error("A current tenant membership is required for the early-tenure inbox.");
     const assignmentRows = await tx.select({
+      caseId: onbEarlyTenureReminders.caseId,
       id: onbEarlyTenureReminders.id,
       targetType: onbEarlyTenureReminders.targetType,
       targetId: onbEarlyTenureReminders.targetId,
@@ -816,6 +819,7 @@ export async function getEarlyTenureReminderInbox(organizationId: string, actorU
       lte(onbEarlyTenureReminders.availableAt, new Date()),
     )).for("update");
     const checkinRows = await tx.select({
+      caseId: onbEarlyTenureReminders.caseId,
       id: onbEarlyTenureReminders.id,
       targetType: onbEarlyTenureReminders.targetType,
       targetId: onbEarlyTenureReminders.targetId,
@@ -834,7 +838,12 @@ export async function getEarlyTenureReminderInbox(organizationId: string, actorU
       eq(onbEarlyTenureCheckins.ownerUserId, actorUserId),
       lte(onbEarlyTenureReminders.availableAt, new Date()),
     )).for("update");
-    const rows = [...assignmentRows.map(({ assignmentId: _assignmentId, ...row }) => row), ...checkinRows];
+    const cases = await tx.select().from(onbCases).where(eq(onbCases.organizationId, organizationId));
+    const matchingIds = new Set(cases.filter(c =>
+      (!filters.caseType || actionCenterFamily(c) === filters.caseType) &&
+      matchesActionCenterContext(c, filters)).map(c => c.id));
+    const rows = [...assignmentRows.map(({ assignmentId: _assignmentId, ...row }) => row), ...checkinRows]
+      .filter(row => matchingIds.has(row.caseId));
     if (rows.length) {
       await tx.update(onbEarlyTenureReminders).set({
         status: "sent", claimOwner: null, claimUntil: null,
@@ -845,7 +854,7 @@ export async function getEarlyTenureReminderInbox(organizationId: string, actorU
         eq(onbEarlyTenureReminders.status, "pending"),
       ));
     }
-    return rows.map((row) => ({
+    return rows.map(({ caseId: _caseId, ...row }) => ({
       ...row,
       // Opaque stable reference lets the member take the action without
       // exposing worker, department, manager, or case narrative in an inbox.

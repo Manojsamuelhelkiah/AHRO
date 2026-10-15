@@ -4775,6 +4775,10 @@ paths:
         and evidence-backed mandatory-checkpoint opportunities. This is a
         read-only snapshot and never changes readiness.
       parameters:
+        - name: caseType
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/ActionCenterCaseType" }
         - name: scope
           in: query
           required: false
@@ -5675,6 +5679,10 @@ paths:
       tags: [onboarding]
       summary: Human-in-the-loop approval queue
       parameters:
+        - name: caseType
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/ActionCenterCaseType" }
         - name: status
           in: query
           schema:
@@ -15657,10 +15665,40 @@ components:
         requirements: { type: array, items: { type: object, additionalProperties: true } }
         denominators: { type: object, additionalProperties: true }
       required: [catalogVersion, baselineRevision, scenarios, guideSections, features, requirements, denominators]
+    ActionCenterCaseType:
+      type: string
+      enum: [Onboarding, Employee Changes, Payroll, Benefits, Leave, Compliance, Offboarding, HR Helpdesk, IT Access, Learning, Mobility, Documents]
+    ActionCenterCaseSummary:
+      type: object
+      properties:
+        caseId: { type: integer }
+        caseType: { $ref: "#/components/schemas/ActionCenterCaseType" }
+        label: { type: string }
+        status: { type: string }
+        caseHref: { type: string }
+      required: [caseId, caseType, label, status, caseHref]
+    ActionCenterDomainRecord:
+      type: object
+      properties:
+        id: { type: string }
+        caseId: { type: integer }
+        category: { type: string, enum: [attention, communication, completed] }
+        title: { type: string }
+        detail: { type: string }
+        status: { type: string }
+        caseHref: { type: string }
+      required: [id, caseId, category, title, detail, status, caseHref]
     OnbActionCenter:
       type: object
       additionalProperties: false
       properties:
+        offboardingSource: { type: string, enum: [available, partial, denied] }
+        caseSummaries:
+          type: array
+          items: { $ref: "#/components/schemas/ActionCenterCaseSummary" }
+        domainRecords:
+          type: array
+          items: { $ref: "#/components/schemas/ActionCenterDomainRecord" }
         version: { type: integer, const: 1 }
         generatedAt: { type: string, format: date-time }
         pausedOffline: { type: boolean }

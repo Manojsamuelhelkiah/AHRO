@@ -277,8 +277,13 @@ export async function getEarlyTenureOwnerOptions(caseId: number): Promise<EarlyT
   }).filter((value) => value.userId.length > 0);
 }
 
-export async function getEarlyTenureReminderInbox(): Promise<EarlyTenureInboxReminder[]> {
-  const response = await customFetch<unknown>(`${EARLY_TENURE_ROOT}/reminders/inbox`, { responseType: 'json' });
+export async function getEarlyTenureReminderInbox(caseType?: string,
+  filters: { workforce?: string; safetyCritical?: boolean; siteExposure?: boolean } = {}): Promise<EarlyTenureInboxReminder[]> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries({ caseType, ...filters })) {
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  }
+  const response = await customFetch<unknown>(`${EARLY_TENURE_ROOT}/reminders/inbox?${params}`, { responseType: 'json' });
   return array(response).map((value) => {
     const source = record(value);
     const targetType: EarlyTenureInboxReminder['targetType'] = source.targetType === 'checkin' ? 'checkin' : 'assignment';

@@ -9512,6 +9512,60 @@ export interface OnboardingLearningCatalog {
   denominators: OnboardingLearningCatalogDenominators;
 }
 
+export type ActionCenterCaseType = typeof ActionCenterCaseType[keyof typeof ActionCenterCaseType];
+
+
+export const ActionCenterCaseType = {
+  Onboarding: 'Onboarding',
+  Employee_Changes: 'Employee Changes',
+  Payroll: 'Payroll',
+  Benefits: 'Benefits',
+  Leave: 'Leave',
+  Compliance: 'Compliance',
+  Offboarding: 'Offboarding',
+  HR_Helpdesk: 'HR Helpdesk',
+  IT_Access: 'IT Access',
+  Learning: 'Learning',
+  Mobility: 'Mobility',
+  Documents: 'Documents',
+} as const;
+
+export interface ActionCenterCaseSummary {
+  caseId: number;
+  caseType: ActionCenterCaseType;
+  label: string;
+  status: string;
+  caseHref: string;
+}
+
+export type ActionCenterDomainRecordCategory = typeof ActionCenterDomainRecordCategory[keyof typeof ActionCenterDomainRecordCategory];
+
+
+export const ActionCenterDomainRecordCategory = {
+  attention: 'attention',
+  communication: 'communication',
+  completed: 'completed',
+} as const;
+
+export interface ActionCenterDomainRecord {
+  id: string;
+  caseId: number;
+  category: ActionCenterDomainRecordCategory;
+  title: string;
+  detail: string;
+  status: string;
+  caseHref: string;
+}
+
+export type OnbActionCenterOffboardingSource = typeof OnbActionCenterOffboardingSource[keyof typeof OnbActionCenterOffboardingSource];
+
+
+export const OnbActionCenterOffboardingSource = {
+  available: 'available',
+  partial: 'partial',
+  denied: 'denied',
+} as const;
+
 export type OnbActionCenterCapabilitiesReminderMode = typeof OnbActionCenterCapabilitiesReminderMode[keyof typeof OnbActionCenterCapabilitiesReminderMode];
 
 
@@ -9779,6 +9833,9 @@ export interface OnbActionCenterOpportunity {
 }
 
 export interface OnbActionCenter {
+  offboardingSource?: OnbActionCenterOffboardingSource;
+  caseSummaries?: ActionCenterCaseSummary[];
+  domainRecords?: ActionCenterDomainRecord[];
   version: 1;
   generatedAt: string;
   pausedOffline: boolean;
@@ -12106,6 +12163,7 @@ export type RefreshOnboardingPolicyRecommendationsBody = {
 };
 
 export type GetOnboardingActionCenterParams = {
+caseType?: ActionCenterCaseType;
 scope?: GetOnboardingActionCenterScope;
 /**
  * @minimum 1
@@ -12178,6 +12236,7 @@ export type StartOnboardingVoiceCall200 = {
 };
 
 export type ListOnboardingApprovalsParams = {
+caseType?: ActionCenterCaseType;
 /**
  * pending (default) | all
  */

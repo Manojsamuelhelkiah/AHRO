@@ -83,8 +83,14 @@ test('sample labels, reference cleanup and read-only navigation at phone, tablet
     await expect(page.getByText('Kiran Pine • Support Engineer • Singapore', { exact: true })).toBeVisible();
     await expect(page.getByText('Offline — read-only; no outreach or business completion.', { exact: true })).toHaveCount(0);
     await expect(page.getByTestId('panel-operational-preparation')).toHaveCount(0);
+    const logistics = page.getByRole('button', { name: /^Status, gateways and logistics/ });
+    await expect(logistics).toHaveAttribute('aria-expanded', 'false');
+    await logistics.click();
     await expect(page.getByText('Awaiting prerequisites', { exact: true })).toBeVisible();
     await expect(page.getByText('Activation, verified evidence and current human decisions are required.', { exact: true })).toBeVisible();
+    const intakeDisclosure = page.getByRole('button', { name: /^Original intake request/ });
+    await expect(intakeDisclosure).toHaveAttribute('aria-expanded', 'false');
+    await intakeDisclosure.click();
     await expect(page.getByText(`${summary} All evidence and human decisions remain pending.`, { exact: true })).toBeVisible();
     const intake = page.getByTestId('panel-hro-intake-request');
     await expect(intake.getByText('Case reference', { exact: true })).toBeVisible();
@@ -102,6 +108,7 @@ test('sample labels, reference cleanup and read-only navigation at phone, tablet
   await page.goto('/cases/3645');
   await expect(page.getByText('Case #3645', { exact: true })).toBeVisible();
   await expect(page.getByText('This case is retained historical evidence.', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: /^Status, gateways and logistics/ }).click();
   await expect(page.getByText('Read-only record — operational execution is not authorized.', { exact: false })).toBeVisible();
   restricted = true;
   await page.goto('/cases/3644');

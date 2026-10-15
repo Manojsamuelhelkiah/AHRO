@@ -128,7 +128,7 @@ export function casePresentationOf(c: CaseLike) {
 export function caseTypeOf(c: CaseLike): CaseFamily {
   if (c.caseFamily && CASE_TYPES.includes(c.caseFamily as CaseTypeFilter) && c.caseFamily !== "All Cases") return c.caseFamily as CaseFamily;
   return casePresentationOf(c)?.type ??
-    (c.hireType === 'offboarding' ? 'Offboarding' : c.hireType === 'internal-transfer' ? 'Employee Changes' : 'Onboarding');
+    (c.hireType === 'offboarding' || c.hireType === 'separation' ? 'Offboarding' : c.hireType === 'internal-transfer' ? 'Employee Changes' : 'Onboarding');
 }
 
 const AGENT_BY_FAMILY: Record<CaseFamily, string> = {

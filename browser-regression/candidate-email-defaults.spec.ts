@@ -98,6 +98,9 @@ test("candidate email defaults, outcomes and retry controls stay clear and usabl
     if (path === `/api/onboarding/cases/${CASE_ID}`) return void await route.fulfill({ json: caseProjection() });
     if (path === `/api/onboarding/cases/${CASE_ID}/access-permissions`) return void await route.fulfill({ json: permissions });
     if (path === `/api/onboarding/cases/${CASE_ID}/communications`) return void await route.fulfill({ json: communications });
+    if (path === `/api/onboarding/cases/${CASE_ID}/governance-impact`) {
+      return void await route.fulfill({ json: { snapshot: null, impacts: [] } });
+    }
     if (path === `/api/onboarding/cases/${CASE_ID}/operational-requests`) {
       return void await route.fulfill({ json: { requests: [], offlinePaused: false, version: 1, capabilities: { aiCall: { hrefTemplate: "/cases/{caseId}" } } } });
     }
@@ -120,6 +123,9 @@ test("candidate email defaults, outcomes and retry controls stay clear and usabl
     const sentBeforeOpen = sendRequests.length;
     const retriesBeforeOpen = retryRequests.length;
     await page.goto(`/cases/${CASE_ID}?tab=communications`);
+    const logistics = page.getByRole("button", { name: /^Status, gateways and logistics/ });
+    await expect(logistics).toHaveAttribute("aria-expanded", "false");
+    await logistics.click();
     await expect(page.getByText("Offer-Acceptance Package", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Background Checks", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Day-1 Readiness", { exact: true }).first()).toBeVisible();
@@ -188,6 +194,7 @@ test("candidate email defaults, outcomes and retry controls stay clear and usabl
       const sendsBeforeReload = sendRequests.length;
       const retriesAtReload = retryRequests.length;
       await page.reload();
+      await page.getByRole("button", { name: /^Status, gateways and logistics/ }).click();
       await expect(page.getByText(reason, { exact: false })).toBeVisible();
       expect(sendRequests.length).toBe(sendsBeforeReload);
       expect(retryRequests.length).toBe(retriesAtReload);

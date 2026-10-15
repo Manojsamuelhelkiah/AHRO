@@ -16041,6 +16041,7 @@ export const getOnboardingActionCenterQueryLimitMax = 200;
 
 
 export const GetOnboardingActionCenterQueryParams = zod.object({
+  "caseType": zod.enum(['Onboarding', 'Employee Changes', 'Payroll', 'Benefits', 'Leave', 'Compliance', 'Offboarding', 'HR Helpdesk', 'IT Access', 'Learning', 'Mobility', 'Documents']).optional(),
   "scope": zod.enum(['active', 'completed', 'all']).default(getOnboardingActionCenterQueryScopeDefault),
   "limit": zod.coerce.number().min(1).max(getOnboardingActionCenterQueryLimitMax).default(getOnboardingActionCenterQueryLimitDefault),
   "workforce": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review', 'unclassified']).optional(),
@@ -16079,6 +16080,23 @@ export const getOnboardingActionCenterResponseOpportunitiesItemActionVersionMin 
 
 
 export const GetOnboardingActionCenterResponse = zod.object({
+  "offboardingSource": zod.enum(['available', 'partial', 'denied']).optional(),
+  "caseSummaries": zod.array(zod.object({
+  "caseId": zod.number(),
+  "caseType": zod.enum(['Onboarding', 'Employee Changes', 'Payroll', 'Benefits', 'Leave', 'Compliance', 'Offboarding', 'HR Helpdesk', 'IT Access', 'Learning', 'Mobility', 'Documents']),
+  "label": zod.string(),
+  "status": zod.string(),
+  "caseHref": zod.string()
+})).optional(),
+  "domainRecords": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.number(),
+  "category": zod.enum(['attention', 'communication', 'completed']),
+  "title": zod.string(),
+  "detail": zod.string(),
+  "status": zod.string(),
+  "caseHref": zod.string()
+})).optional(),
   "version": zod.number(),
   "generatedAt": zod.coerce.date(),
   "pausedOffline": zod.boolean(),
@@ -18691,6 +18709,7 @@ export const ReceiveOnboardingInboundResponse = zod.object({
  * @summary Human-in-the-loop approval queue
  */
 export const ListOnboardingApprovalsQueryParams = zod.object({
+  "caseType": zod.enum(['Onboarding', 'Employee Changes', 'Payroll', 'Benefits', 'Leave', 'Compliance', 'Offboarding', 'HR Helpdesk', 'IT Access', 'Learning', 'Mobility', 'Documents']).optional(),
   "status": zod.coerce.string().optional()
 })
 

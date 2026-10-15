@@ -47,6 +47,9 @@ import {
   type SensitiveAccess,
 } from "../lib/onboarding/sensitive-access";
 import { registeredDemoProfile } from "../lib/demo-principal";
+import { separationActionCenter } from "../lib/offboarding/action-center";
+import { SeparationError } from "../lib/offboarding/model";
+import { parseActionCenterQuery } from "../lib/onboarding/action-center-query";
 
 const router: IRouter = Router();
 
@@ -112,13 +115,16 @@ router.use("/onboarding/action-center/actions", async (req, res, next) => {
 async function sensitiveActionCenterProjection(
   organizationId: string,
   actorUserId: string | undefined,
-  result: Awaited<ReturnType<typeof getActionCenter>>,
+  result: Awaited<ReturnType<typeof getActionCenter>> & {
+    domainRecords?: Awaited<ReturnType<typeof separationActionCenter>>["domainRecords"];
+  },
   access: ActionCenterAccess = "standard",
 ) {
   const accessByCase = new Map<number, SensitiveAccess>();
   const caseAccessByCase = new Map<number, {
     flowRead: boolean;
     profileRead: boolean;
+    notesRead: boolean;
   }>();
   const accessFor = async (caseId: number) => {
     const cached = accessByCase.get(caseId);
@@ -140,6 +146,7 @@ async function sensitiveActionCenterProjection(
     const caseAccess = {
       flowRead: effective.allows.includes("flow.case.read"),
       profileRead: effective.allows.includes("data.case.profile.read"),
+      notesRead: effective.allows.includes("data.case.notes.read"),
     };
     caseAccessByCase.set(caseId, caseAccess);
     return caseAccess;
@@ -203,6 +210,8 @@ async function sensitiveActionCenterProjection(
   const visibleWorkItems = await visibleCaseItems(result.workItems);
   const visibleCompleted = await visibleCaseItems(result.completed);
   const visibleOpportunities = await visibleCaseItems(result.opportunities);
+  const caseSummaries = await visibleCaseItems(result.caseSummaries);
+  const domainRecords = await visibleCaseItems(result.domainRecords ?? []);
   const documentFollowups = await Promise.all(visibleDocuments.map(async (item) => {
     const access = await accessFor(item.caseId);
     const { category, ...publicItem } = item;
@@ -229,18 +238,18 @@ async function sensitiveActionCenterProjection(
     rationale: "Details are restricted to the assigned specialist.",
     case: await safeCase(item.case, item.caseId),
   })));
-  const notifications = visibleNotifications.map((item) => ({
-    ...item,
-    // BGV clearance state is operationally visible; raw event/message text,
-    // provider recipient, and actor identity are not.
-    title: item.kind === "bgv"
-      ? "Background-verification clearance needs attention"
-      : "Restricted onboarding notification",
-    detail: item.kind === "bgv"
-      ? `Background-verification clearance state: ${item.status}.`
-      : "Operational state recorded; details are restricted.",
-    recipient: "Restricted",
-    initiator: "Restricted",
+  const notifications = await Promise.all(visibleNotifications.map(async item => {
+    const [sensitive, fields] = await Promise.all([accessFor(item.caseId), caseAccessFor(item.caseId)]);
+    const narrative = fields.notesRead && fields.profileRead && hasOpaqueNarrativeAccess(sensitive);
+    const label = item.source === "persisted-communication" ? "Communication" :
+      item.source === "recorded-system-check" ? "Operational check" : "Operational event";
+    return { ...item,
+      title: narrative ? item.title : `${label} recorded`,
+      detail: narrative ? item.detail : `Recorded state: ${item.status}.`,
+      recipient: narrative && sensitive.identity ? item.recipient : "Restricted",
+      // A message's actor line is opaque text, independently requiring notes.
+      initiator: narrative && fields.notesRead ? item.initiator : "Restricted",
+    };
   }));
   const workItems = visibleWorkItems.map((item) => ({
     ...item,
@@ -294,6 +303,8 @@ async function sensitiveActionCenterProjection(
     workItems,
     completed,
     opportunities,
+    caseSummaries: caseSummaries.filter(s => s.caseType !== "Offboarding" || caseAccessByCase.get(s.caseId)?.profileRead),
+    domainRecords: domainRecords.filter(s => caseAccessByCase.get(s.caseId)?.profileRead),
   };
 }
 
@@ -334,6 +345,7 @@ function clientError(error: unknown, res: Response): boolean {
 
 router.get("/onboarding/action-center", async (req, res, next) => {
   try {
+    res.setHeader("Cache-Control", "no-store");
     const access = await actionCenterAccess(req.authUserId!);
     if (access === "denied") {
       res.status(403).json({
@@ -342,7 +354,7 @@ router.get("/onboarding/action-center", async (req, res, next) => {
       });
       return;
     }
-    const parsed = GetOnboardingActionCenterQueryParams.safeParse(req.query);
+    const parsed = parseActionCenterQuery(req.query);
     if (!parsed.success) {
       res.status(400).json({ message: parsed.error.message });
       return;
@@ -353,16 +365,27 @@ router.get("/onboarding/action-center", async (req, res, next) => {
       parsed.data.scope,
       parsed.data.limit,
       {
+        caseType: parsed.data.caseType,
         workforce: parsed.data.workforce,
         safetyCritical: parsed.data.safetyCritical,
         siteExposure: parsed.data.siteExposure,
       },
       access,
+      req.authUserId,
     );
+    const domain = await separationActionCenter(organizationId, req.authUserId!, parsed.data);
+    const unified = { ...result, domainRecords: domain.domainRecords,
+      offboardingSource: domain.offboardingSource,
+      caseSummaries: [...result.caseSummaries, ...domain.caseSummaries] };
     res.json(GetOnboardingActionCenterResponse.parse(
-      await sensitiveActionCenterProjection(organizationId, req.authUserId, result, access),
+      await sensitiveActionCenterProjection(organizationId, req.authUserId, unified, access),
     ));
   } catch (error) {
+    if (error instanceof SeparationError) {
+      res.status(error.status).json({ message: error.status === 403
+        ? "Offboarding source access was denied." : "Offboarding records could not be loaded." });
+      return;
+    }
     if (clientError(error, res)) return;
     next(error);
   }

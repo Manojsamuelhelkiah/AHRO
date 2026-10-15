@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { actionCenterFamily, actionCenterFamilies } from "../lib/onboarding/action-center-family";
 import { retiredCaseCapabilityResponse, isRetiredCaseCapabilityRequest, denyRetiredCaseCapability } from "../lib/retired-case-capabilities";
 import { isRestrictedHistoricalCase as isHistoricalTestRecord, activationRecord, currentOperationalRecordSql,
   isRestrictedControllerCase as isRetiredControllerCase, isRestrictedOfflineCase as isSyntheticOfflineCase,
@@ -4736,11 +4737,18 @@ router.post("/onboarding/authority/unresolved-approvals/:id/acknowledge", async 
 
 router.get("/onboarding/approvals", async (req, res, next) => {
   try {
+    const familyFilter = req.query.caseType;
+    if (familyFilter !== undefined && (typeof familyFilter !== "string" || !actionCenterFamilies.includes(familyFilter))) {
+      res.status(400).json({ message: "Invalid case type." }); return;
+    }
+    res.setHeader("Cache-Control", "no-store");
     const wantAll = req.query.status === "all";
     const rows = await db
       .select({
         approval: onbApprovals,
         workerName: onbCases.workerName,
+        hireType: onbCases.hireType,
+        processPolicySnapshot: onbCases.processPolicySnapshot,
         notes: onbCases.notes,
         scenarioKey: onbCases.scenarioKey,
         syntheticProvenance: onbCases.syntheticProvenance,
@@ -4753,7 +4761,9 @@ router.get("/onboarding/approvals", async (req, res, next) => {
       .where(organizationWhere(onbCases, getOrganizationId(req)))
       .orderBy(desc(onbApprovals.createdAt), desc(onbApprovals.id));
     const demoProfile = await registeredDemoProfile(req.authUserId!);
-    const rowsWithAccess = await Promise.all(rows.map(async (row) => ({
+    const rowsWithAccess = await Promise.all(rows.filter(row =>
+      row.hireType !== "separation" && (!familyFilter || actionCenterFamily(row) === familyFilter),
+    ).map(async (row) => ({
       ...row,
       historicalCase: isHistoricalTestRecord(row) || await isAuthoritativelyUatRunOwnedCase({
         organizationId: getOrganizationId(req), id: row.approval.caseId,

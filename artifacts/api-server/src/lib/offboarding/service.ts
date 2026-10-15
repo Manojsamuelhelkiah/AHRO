@@ -88,19 +88,23 @@ export function summary(row: SeparationCase, originalIntent?: string | null, fic
 async function privateRead(tx: Tx, org: string, actor: string, row: SeparationCase) {
   await confidentialRead(tx, org, actor, row.facts.country, row.id);
 }
-export async function listSeparations(org: string, actor: string) {
+export async function separationListSnapshot(org: string, actor: string) {
   return db.transaction(async tx => {
     await lockTenant(tx, org);
-    const rows = await tx.select().from(offbCases).where(eq(offbCases.organizationId, org)).orderBy(desc(offbCases.createdAt)).limit(200);
+    const rows = await tx.select().from(offbCases).where(eq(offbCases.organizationId, org)).orderBy(desc(offbCases.createdAt));
     const origins = rows.length ? await tx.select({ id: onbCases.id, origin: onbCases.originalIntent }).from(onbCases)
       .where(and(eq(onbCases.organizationId, org), inArray(onbCases.id, rows.map(r => r.id)))) : [];
     const labels = new Map(origins.map(r => [r.id, r.origin?.label]));
     const pilots = await tx.select({ caseId: offbExchangePilots.caseId }).from(offbExchangePilots).where(eq(offbExchangePilots.organizationId, org));
     const ids = new Set(pilots.map(p => p.caseId));
     const visible = [];
-    for (const r of rows) { try { await access(tx, org, actor, false, r.id); visible.push(summary(r, labels.get(r.id), ids.has(r.id))); } catch (e) { if (!(e instanceof SeparationError) || e.status !== 403) throw e; } }
-    return visible;
+    let denied = false;
+    for (const r of rows) { try { await access(tx, org, actor, false, r.id); visible.push(summary(r, labels.get(r.id), ids.has(r.id))); } catch (e) { if (!(e instanceof SeparationError) || e.status !== 403) throw e; denied = true; } }
+    return { visible, sourceState: denied ? visible.length ? "partial" as const : "denied" as const : "available" as const };
   });
+}
+export async function listSeparations(org: string, actor: string) {
+  return (await separationListSnapshot(org, actor)).visible.slice(0, 200);
 }
 export async function separationDetail(org: string, actor: string, id: number) {
   return withSensitiveLifecycleFence(org, () => db.transaction(async tx => {

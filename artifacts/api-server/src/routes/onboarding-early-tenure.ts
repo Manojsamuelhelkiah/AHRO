@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { parseActionCenterQuery } from "../lib/onboarding/action-center-query";
 import { db } from "@workspace/db";
 import { getOrganizationId } from "../lib/organization-scope";
 import { resolveReviewerName } from "../middlewares/require-auth";
@@ -118,7 +119,10 @@ router.get("/onboarding/early-tenure/cases/:id/owner-options", async (req, res, 
 
 router.get("/onboarding/early-tenure/reminders/inbox", async (req, res, next) => {
   try {
-    res.json(await getEarlyTenureReminderInbox(getOrganizationId(req), req.authUserId!));
+    const parsed = parseActionCenterQuery(req.query);
+    if (!parsed.success) { res.status(400).json({ message: "Invalid reminder filters." }); return; }
+    res.setHeader("Cache-Control", "no-store");
+    res.json(await getEarlyTenureReminderInbox(getOrganizationId(req), req.authUserId!, parsed.data));
   } catch (error) { if (!handle(error, res)) next(error); }
 });
 
