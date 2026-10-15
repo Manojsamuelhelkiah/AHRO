@@ -125,7 +125,7 @@ export async function evaluateProviderGovernanceGate(
     ),
     readOnlyCaseAnalysis: options.readOnlyCaseAnalysis,
   });
-  if (isRetiredControllerCase(current) && !options.readOnlyCaseAnalysis) {
+  if (current && isRetiredControllerCase(current)) {
     return { allowed: false, workflow, gate, reason: "Historical controller case: all operational effects are retired." };
   }
   if (gate.execution === "isolated-simulation" &&
@@ -223,7 +223,7 @@ export async function dispatchWithProviderGovernance<T>(input: {
         deniedReason = "The onboarding case no longer exists in this organization.";
         return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
       }
-      if (isRetiredControllerCase(currentCase) && !readOnlyCaseAnalysis) {
+      if (isRetiredControllerCase(currentCase)) {
         deniedReason = "This case is retained historical evidence; operational effects are retired.";
         return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
       }
