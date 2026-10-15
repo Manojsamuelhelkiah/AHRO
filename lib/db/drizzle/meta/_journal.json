@@ -1009,6 +1009,20 @@
       "when": 1791936000007,
       "tag": "0117_offboarding_mail_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1791936000008,
+      "tag": "0118_case_list_visibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1791936000009,
+      "tag": "0119_case_list_deletion_compatibility",
+      "breakpoints": true
     }
   ]
 }

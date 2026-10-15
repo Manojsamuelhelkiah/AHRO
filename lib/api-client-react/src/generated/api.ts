@@ -61,6 +61,7 @@ import type {
   AgentInvocationFailure,
   AgentInvocationInput,
   AgentInvocationResponse,
+  CaseListVisibilityInput,
   CatalogueAgentRegistrationInput,
   CatalogueRegistrationResult,
   ClientOperationsSettings,
@@ -381,6 +382,7 @@ import type {
   TransactionWorkingContext,
   UatAdmission,
   UatSignInChallenge,
+  UpdateCaseListVisibility200,
   UpdateOffboardingEmailIndicatorsBody,
   UpdateOnbSettings,
   UpdateOnboardingBgvNotificationsRequest,
@@ -456,6 +458,77 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getUpdateCaseListVisibilityUrl = () => {
+
+
+
+
+  return `/api/onboarding/case-list-visibility`
+}
+
+/**
+ * @summary Change only the shared Demo Cases working list; never case operations
+ */
+export const updateCaseListVisibility = async (caseListVisibilityInput: CaseListVisibilityInput, options?: RequestInit): Promise<UpdateCaseListVisibility200> => {
+
+  return customFetch<UpdateCaseListVisibility200>(getUpdateCaseListVisibilityUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(caseListVisibilityInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateCaseListVisibilityMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCaseListVisibility>>, TError,{data: BodyType<CaseListVisibilityInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCaseListVisibility>>, TError,{data: BodyType<CaseListVisibilityInput>}, TContext> => {
+
+const mutationKey = ['updateCaseListVisibility'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCaseListVisibility>>, {data: BodyType<CaseListVisibilityInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateCaseListVisibility(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCaseListVisibilityMutationResult = NonNullable<Awaited<ReturnType<typeof updateCaseListVisibility>>>
+    export type UpdateCaseListVisibilityMutationBody = BodyType<CaseListVisibilityInput>
+    export type UpdateCaseListVisibilityMutationError = ErrorType<void>
+
+    /**
+ * @summary Change only the shared Demo Cases working list; never case operations
+ */
+export const useUpdateCaseListVisibility = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCaseListVisibility>>, TError,{data: BodyType<CaseListVisibilityInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCaseListVisibility>>,
+        TError,
+        {data: BodyType<CaseListVisibilityInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateCaseListVisibilityMutationOptions(options));
+    }
 
 export const getUpdateOffboardingEmailIndicatorsUrl = (caseId: number,) => {
 

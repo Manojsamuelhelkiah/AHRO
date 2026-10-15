@@ -429,6 +429,9 @@ app.get("/api/test/ready", (_req, res) => {
 const { installConversationBrowserFixture } = await import("./action-conversation-browser-fixture.mjs");
 installConversationBrowserFixture(app, dbPackage, offboardingFixture,
   req => sessions.get(cookieValue(req, "browser_e2e_session")));
+const { installCaseListBrowserFixture } = await import("./case-list-browser-fixture.mjs");
+installCaseListBrowserFixture(app, dbPackage, offboardingFixture,
+  req => sessions.get(cookieValue(req, "browser_e2e_session")));
 
 // An ordinary named member in the disposable schema, with no specialist rows.
 // This seam creates only a held review; it never initializes an engine/provider.

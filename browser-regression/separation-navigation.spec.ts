@@ -65,7 +65,7 @@ test('single Cases destination preserves legacy and operational deep links acros
   });
   await page.route('**/api/offboarding/policies', route => route.fulfill({ json: [] }));
   const caseRow = (id: number) => page.locator(`tr[aria-label^="Open case S${id}"]:visible`)
-    .or(page.getByRole('button').filter({ hasText: `S${id}` }));
+    .or(page.getByRole('link', { name: new RegExp(`^Open case S${id} for `) }).filter({ visible: true }));
   const caseLink = () => caseRow(envelope.id);
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });

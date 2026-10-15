@@ -5,6 +5,32 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type CaseListVisibilitySelectionCaseFamily = typeof CaseListVisibilitySelectionCaseFamily[keyof typeof CaseListVisibilitySelectionCaseFamily];
+
+
+export const CaseListVisibilitySelectionCaseFamily = {
+  Onboarding: 'Onboarding',
+  Offboarding: 'Offboarding',
+} as const;
+
+export interface CaseListVisibilitySelection {
+  /** @minimum 1 */
+  caseId: number;
+  /** @minimum 0 */
+  expectedVersion: number;
+  caseFamily: CaseListVisibilitySelectionCaseFamily;
+}
+
+export interface CaseListVisibilityInput {
+  hidden: boolean;
+  confirmWorkingListOnly: true;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  selection: CaseListVisibilitySelection[];
+}
+
 export type PrivacyEnforcementSettingsMode = typeof PrivacyEnforcementSettingsMode[keyof typeof PrivacyEnforcementSettingsMode];
 
 
@@ -6837,6 +6863,9 @@ export interface OnbCase {
   operationalSourceLabel?: string | null;
   /** Case-scoped identity projection is synthetic and does not represent sensitive-record authority */
   fictionalOfflineIdentity: boolean;
+  workingListHidden?: boolean;
+  workingListVersion?: number;
+  canManageWorkingList?: boolean;
   syntheticJourney?: OnbSyntheticJourney | null;
   /**
      * LLM-generated onboarding plan narrative
@@ -11750,6 +11779,10 @@ export const RetiredCapabilityResponseCode = {
 export type RetiredCapabilityResponse = {
   code: RetiredCapabilityResponseCode;
   message: string;
+};
+
+export type UpdateCaseListVisibility200 = {
+  updatedCount: number;
 };
 
 export type UpdateOffboardingEmailIndicatorsBody = {

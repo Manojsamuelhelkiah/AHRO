@@ -77,7 +77,7 @@ test("candidate email defaults, outcomes and retry controls stay clear and usabl
     if (request.method() === "POST" && path === `/api/onboarding/cases/${CASE_ID}/offer-package-request`) {
       sendRequests.push(path);
       if (holdSend) await new Promise<void>((resolve) => { releaseHeldSend = resolve; });
-      const id = Number(retryMatch[1]);
+      const id = nextMessageId++;
       communications.push({ ...candidateMessage(id, sendOutcome), failureReason: sendFailure });
       await route.fulfill({ status: 200, json: { id, caseId: CASE_ID, status: sendOutcome, failureReason: sendFailure } });
       return;

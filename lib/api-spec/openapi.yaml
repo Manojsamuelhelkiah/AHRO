@@ -43,6 +43,29 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /onboarding/case-list-visibility:
+    put:
+      operationId: updateCaseListVisibility
+      tags: [onboarding]
+      summary: Change only the shared Demo Cases working list; never case operations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CaseListVisibilityInput" }
+      responses:
+        "200":
+          description: Entire explicit selection updated atomically
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updatedCount]
+                properties:
+                  updatedCount: { type: integer }
+        "400": { description: Invalid explicit selection }
+        "403": { description: Current named Demo owner/admin and case permissions required }
+        "409": { description: Selection changed; reload and review again }
   /offboarding/cases/{caseId}/exchanges/email-indicators:
     put:
       operationId: updateOffboardingEmailIndicators
@@ -7383,6 +7406,26 @@ components:
         type: integer
         minimum: 1
   schemas:
+    CaseListVisibilitySelection:
+      type: object
+      additionalProperties: false
+      required: [caseId, expectedVersion, caseFamily]
+      properties:
+        caseId: { type: integer, minimum: 1 }
+        expectedVersion: { type: integer, minimum: 0 }
+        caseFamily: { type: string, enum: [Onboarding, Offboarding] }
+    CaseListVisibilityInput:
+      type: object
+      additionalProperties: false
+      required: [hidden, confirmWorkingListOnly, selection]
+      properties:
+        hidden: { type: boolean }
+        confirmWorkingListOnly: { type: boolean, enum: [true] }
+        selection:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: "#/components/schemas/CaseListVisibilitySelection" }
     PrivacyEnforcementSettings:
       type: object
       required: [mode, revision, canManage]
@@ -13088,6 +13131,7 @@ components:
           items: { type: string }
     OnbCase:
       type: object
+      # Visibility is an authorized list projection, never an operational case flag.
       properties:
         currentActionOwner:
           type: string
@@ -13187,6 +13231,9 @@ components:
         fictionalOfflineIdentity:
           type: boolean
           description: Case-scoped identity projection is synthetic and does not represent sensitive-record authority
+        workingListHidden: { type: boolean }
+        workingListVersion: { type: integer }
+        canManageWorkingList: { type: boolean }
         syntheticJourney:
           oneOf:
             - $ref: "#/components/schemas/OnbSyntheticJourney"

@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { actionCenterFamily, actionCenterFamilies } from "../lib/onboarding/action-center-family";
+import { caseListVisibilityProjection, updateCaseListVisibility, CaseListVisibilityError } from "../lib/onboarding/case-list-visibility";
 import { retiredCaseCapabilityResponse, isRetiredCaseCapabilityRequest, denyRetiredCaseCapability } from "../lib/retired-case-capabilities";
 import { isRestrictedHistoricalCase as isHistoricalTestRecord, activationRecord, currentOperationalRecordSql,
   isRestrictedControllerCase as isRetiredControllerCase, isRestrictedOfflineCase as isSyntheticOfflineCase,
@@ -1339,6 +1340,15 @@ router.post("/onboarding/demo/full-coverage", async (req, res, next) => {
 
 /* ------------------------------- cases ------------------------------- */
 
+router.put("/onboarding/case-list-visibility", async (req, res, next) => {
+  try {
+    res.json(await updateCaseListVisibility(getOrganizationId(req), req.authUserId ?? "", req.body));
+  } catch (error) {
+    if (error instanceof CaseListVisibilityError) { res.status(error.status).json({ message: error.message }); return; }
+    next(error);
+  }
+});
+
 router.get("/onboarding/cases", async (req, res, next) => {
   try {
     const rows = await demoPrincipalVisibleCases(req, await db
@@ -1361,7 +1371,16 @@ router.get("/onboarding/cases", async (req, res, next) => {
       row, sensitiveByCase.get(row.id) ?? NO_SENSITIVE_ACCESS,
       caseGovernanceAccessFromEffective(accessByCase.get(row.id)!), presentation.get(row.id),
     )));
-    res.json(serialized);
+    const visibility = await caseListVisibilityProjection(organizationId, req.authUserId ?? "", visible.map(row => row.id));
+    res.json(serialized.map((row, index) => ({
+      ...row,
+      workingListHidden: ["Onboarding", "Offboarding"].includes(actionCenterFamily(visible[index]!)) &&
+        (visibility.byCase.get(row.id)?.hidden ?? false),
+      workingListVersion: visibility.byCase.get(row.id)?.version ?? 0,
+      canManageWorkingList: visibility.administrator &&
+        ["Onboarding", "Offboarding"].includes(actionCenterFamily(visible[index]!)) &&
+        !!accessByCase.get(row.id)?.allows.includes(CASE_FLOW_EDIT_KEY),
+    })));
   } catch (err) {
     next(err);
   }

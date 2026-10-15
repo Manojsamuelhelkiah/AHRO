@@ -77,7 +77,7 @@ test('sample labels, reference cleanup and read-only navigation at phone, tablet
       await expect(desktopLink).toHaveAttribute('href', '/cases/3644');
       await desktopLink.click();
     } else {
-      await page.getByRole('button', { name: /Role change near payroll cutoff.*Kiran Pine.*S3644/ }).click();
+      await page.getByRole('link', { name: 'Open case S3644 for Kiran Pine' }).click();
     }
     await expect(page).toHaveURL(/\/cases\/3644$/);
     await expect(page.getByText('Kiran Pine • Support Engineer • Singapore', { exact: true })).toBeVisible();

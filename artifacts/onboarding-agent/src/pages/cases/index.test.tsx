@@ -238,6 +238,74 @@ test("program-only organizations load independently and delayed old organization
   assert.match(mounted.container.textContent ?? "", /Showing 0 individual cases · 1 programs/);
 });
 
+test("Demo working-list checkboxes hide and restore one case at a time; history stays separate", async t => {
+  pinOrganizationIdForPage("demo");
+  let hidden = false;
+  let version = 0;
+  const writes: Record<string, any>[] = [];
+  installFetch(({ url, init }) => {
+    if (url.includes("workforce-transfers")) return jsonResponse([programFixture]);
+    if (url === "/api/onboarding/case-list-visibility") {
+      const body = JSON.parse(init?.body as string);
+      writes.push(body); hidden = body.hidden; version++;
+      return jsonResponse({ updatedCount: 1 });
+    }
+    if (url === "/api/organizations/current") return jsonResponse({ id: "demo", role: "owner" });
+    return jsonResponse([
+      { ...caseFixture, workingListHidden: hidden, workingListVersion: version, canManageWorkingList: true },
+      { ...caseFixture, id: 360, workerName: "Payroll unchanged", caseFamily: "Payroll" },
+      { ...caseFixture, id: 361, workerName: "Hidden historical fixture", hireType: "offboarding",
+        controllerRetired: true, workingListHidden: true, workingListVersion: 1, canManageWorkingList: true },
+    ]);
+  });
+  const mounted = await mountCases();
+  t.after(mounted.cleanup);
+  const button = (text: string) => Array.from(document.querySelectorAll("button")).find(button => button.textContent === text)!;
+  await eventually(() => assert.equal(mounted.container.querySelectorAll('input[aria-label="Show HRO-2026-00358 (Onboarding) in working cases"]').length, 2), "per-case checkboxes");
+  assert.equal(writes.length, 0);
+  assert.doesNotMatch(mounted.container.textContent ?? "", /Hidden historical fixture/);
+  assert.match(mounted.container.textContent ?? "", /does not change case status, operations, alerts/);
+  assert.equal(mounted.container.querySelector('input[aria-label*="Payroll"]'), null);
+  await act(async () => (mounted.container.querySelector('input[aria-label="Show HRO-2026-00358 (Onboarding) in working cases"]') as HTMLInputElement).click());
+  await eventually(() => assert.doesNotMatch(mounted.container.textContent ?? "", /Individual Worker/), "hidden case removed");
+  assert.deepEqual(writes[0], { hidden: true, confirmWorkingListOnly: true,
+    selection: [{ caseId: 358, expectedVersion: 0, caseFamily: "Onboarding" }] });
+  assert.match(mounted.container.textContent ?? "", /Payroll unchanged/);
+  const view = mounted.container.querySelector('[aria-label="Cases list visibility"]') as HTMLSelectElement;
+  await act(async () => setValue(view, "hidden"));
+  assert.match(mounted.container.textContent ?? "", /Individual Worker/);
+  assert.match(mounted.container.textContent ?? "", /Hidden historical fixture/);
+  assert.doesNotMatch(mounted.container.textContent ?? "", /Payroll unchanged|Example acquisition/);
+  await act(async () => (mounted.container.querySelector('input[aria-label="Show HRO-2026-00358 (Onboarding) in working cases"]') as HTMLInputElement).click());
+  await eventually(() => assert.equal(writes.length, 2), "restore request");
+  await eventually(() => assert.doesNotMatch(mounted.container.textContent ?? "", /Individual Worker/), "restored case removed from hidden view");
+  await act(async () => setValue(view, "working"));
+  assert.match(mounted.container.textContent ?? "", /Individual Worker/);
+  assert.equal(writes[1]?.selection[0].expectedVersion, 1);
+});
+
+test("filters cannot toggle unseen cases and tenant switches clear visibility controls", async t => {
+  pinOrganizationIdForPage("demo");
+  let version = 0;
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
+  installFetch(({ url, init }) => {
+    if (url.includes("workforce-transfers")) return jsonResponse([]);
+    if (url === "/api/organizations/current") return jsonResponse({ id: "demo", role: "owner" });
+    return jsonResponse(new Headers(init?.headers).get("x-organization-id") === "demo"
+      ? [{ ...caseFixture, workingListHidden: false, workingListVersion: version, canManageWorkingList: true }] : []);
+  });
+  const mounted = await mountCases(client);
+  t.after(mounted.cleanup);
+  await eventually(() => assert.ok(mounted.container.querySelector('input[aria-label^="Show HRO"]')), "selectable Demo fixture");
+  await act(async () => setValue(mounted.container.querySelector('[aria-label="Search cases and programs"]') as HTMLInputElement, 'missing'));
+  assert.equal(mounted.container.querySelector('input[aria-label^="Show HRO"]'), null);
+  await act(async () => setValue(mounted.container.querySelector('[aria-label="Search cases and programs"]') as HTMLInputElement, ''));
+  await eventually(() => assert.ok(mounted.container.querySelector('input[aria-label^="Show HRO"]')), "case visible again after clearing search");
+  pinOrganizationIdForPage("other");
+  await mounted.render();
+  assert.doesNotMatch(mounted.container.textContent ?? "", /Individual Worker|Hidden cases/);
+});
+
 function fillOrdinaryFields(form: HTMLFormElement): void {
   const values: Record<string, string> = {
     workerName: "Ada Lovelace",

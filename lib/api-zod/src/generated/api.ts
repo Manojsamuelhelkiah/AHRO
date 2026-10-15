@@ -8,6 +8,31 @@
 import * as zod from 'zod';
 
 
+/**
+ * @summary Change only the shared Demo Cases working list; never case operations
+ */
+
+export const updateCaseListVisibilityBodySelectionItemExpectedVersionMin = 0;
+
+export const updateCaseListVisibilityBodySelectionMax = 100;
+
+
+
+export const UpdateCaseListVisibilityBody = zod.object({
+  "hidden": zod.boolean(),
+  "confirmWorkingListOnly": zod.literal(true),
+  "selection": zod.array(zod.object({
+  "caseId": zod.number().min(1),
+  "expectedVersion": zod.number().min(updateCaseListVisibilityBodySelectionItemExpectedVersionMin),
+  "caseFamily": zod.enum(['Onboarding', 'Offboarding'])
+})).min(1).max(updateCaseListVisibilityBodySelectionMax)
+})
+
+export const UpdateCaseListVisibilityResponse = zod.object({
+  "updatedCount": zod.number()
+})
+
+
 export const UpdateOffboardingEmailIndicatorsParams = zod.object({
   "caseId": zod.coerce.number()
 })
@@ -13238,6 +13263,9 @@ export const RunOnboardingScenarioResponse = zod.object({
   "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
   "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
+  "workingListHidden": zod.boolean().optional(),
+  "workingListVersion": zod.number().optional(),
+  "canManageWorkingList": zod.boolean().optional(),
   "syntheticJourney": zod.union([zod.object({
   "version": zod.string(),
   "title": zod.string(),
@@ -13506,6 +13534,9 @@ export const ListOnboardingCasesResponseItem = zod.object({
   "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
   "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
+  "workingListHidden": zod.boolean().optional(),
+  "workingListVersion": zod.number().optional(),
+  "canManageWorkingList": zod.boolean().optional(),
   "syntheticJourney": zod.union([zod.object({
   "version": zod.string(),
   "title": zod.string(),
@@ -13867,6 +13898,9 @@ export const CreateOnboardingCaseResponse = zod.object({
   "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
   "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
+  "workingListHidden": zod.boolean().optional(),
+  "workingListVersion": zod.number().optional(),
+  "canManageWorkingList": zod.boolean().optional(),
   "syntheticJourney": zod.union([zod.object({
   "version": zod.string(),
   "title": zod.string(),
@@ -14139,6 +14173,9 @@ export const GetOnboardingCaseResponse = zod.object({
   "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
   "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
+  "workingListHidden": zod.boolean().optional(),
+  "workingListVersion": zod.number().optional(),
+  "canManageWorkingList": zod.boolean().optional(),
   "syntheticJourney": zod.union([zod.object({
   "version": zod.string(),
   "title": zod.string(),
@@ -14503,6 +14540,9 @@ export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
   "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
   "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
+  "workingListHidden": zod.boolean().optional(),
+  "workingListVersion": zod.number().optional(),
+  "canManageWorkingList": zod.boolean().optional(),
   "syntheticJourney": zod.union([zod.object({
   "version": zod.string(),
   "title": zod.string(),
@@ -14792,6 +14832,9 @@ export const RecalculateOnboardingChecklistProfileResponse = zod.object({
   "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
   "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
+  "workingListHidden": zod.boolean().optional(),
+  "workingListVersion": zod.number().optional(),
+  "canManageWorkingList": zod.boolean().optional(),
   "syntheticJourney": zod.union([zod.object({
   "version": zod.string(),
   "title": zod.string(),
@@ -17782,6 +17825,9 @@ export const UpdateOnboardingChecklistItemResponse = zod.object({
   "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
   "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
+  "workingListHidden": zod.boolean().optional(),
+  "workingListVersion": zod.number().optional(),
+  "canManageWorkingList": zod.boolean().optional(),
   "syntheticJourney": zod.union([zod.object({
   "version": zod.string(),
   "title": zod.string(),
@@ -18090,6 +18136,9 @@ export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
   "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
   "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
+  "workingListHidden": zod.boolean().optional(),
+  "workingListVersion": zod.number().optional(),
+  "canManageWorkingList": zod.boolean().optional(),
   "syntheticJourney": zod.union([zod.object({
   "version": zod.string(),
   "title": zod.string(),
@@ -18440,6 +18489,9 @@ export const CorrectOnboardingWorkforceContextResponse = zod.object({
   "operationalStartedAt": zod.string().nullish().describe('Current operational generation boundary, separate from original source creation'),
   "operationalSourceLabel": zod.string().nullish().describe('Original fictional source, not current employee identity or evidence'),
   "fictionalOfflineIdentity": zod.boolean().describe('Case-scoped identity projection is synthetic and does not represent sensitive-record authority'),
+  "workingListHidden": zod.boolean().optional(),
+  "workingListVersion": zod.number().optional(),
+  "canManageWorkingList": zod.boolean().optional(),
   "syntheticJourney": zod.union([zod.object({
   "version": zod.string(),
   "title": zod.string(),

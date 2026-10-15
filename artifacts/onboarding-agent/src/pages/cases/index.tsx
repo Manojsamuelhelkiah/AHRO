@@ -19,6 +19,7 @@ import { listJobProfiles, parseWorkforceTriState } from '@/lib/workforce-policy-
 import { listWorkforceTransferPrograms } from '@/lib/workforce-transfers-api';
 import { PROGRAM_FILTER, matchesTransferProgram, TransferProgramRow, TransferProgramCard } from './transfer-presentation';
 import { caseListPath, caseTypeFromSearch, type WorkItemFilter } from './list-navigation';
+import { useWorkingList, workingListCases } from './working-list';
 import {
   CASE_TYPES,
   caseTitleOf as presentedCaseTitleOf,
@@ -222,7 +223,6 @@ export function CasesPage() {
     }
   });
   const [showHistory, setShowHistory] = useState(false);
-  const cases = !isError && caseRows ? casesForList(caseRows, showHistory) : undefined;
   const [showNew, setShowNew] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
   const [showStandardIntake, setShowStandardIntake] = useState(false);
@@ -234,6 +234,10 @@ export function CasesPage() {
   const [showFilters, setShowFilters] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
   const isDevelopmentDemo = getPinnedOrganizationIdForPage() === 'demo';
+  const workingList = useWorkingList(!isError ? caseRows : undefined, organizationId);
+  const cases = !isError && caseRows ? (workingList.view === 'hidden'
+    ? workingListCases(caseRows, 'hidden')
+    : casesForList(workingListCases(caseRows, 'working'), showHistory)) : undefined;
 
   useEffect(() => {
     if (!showFilters) return;
@@ -279,13 +283,13 @@ export function CasesPage() {
     }
     return [...rows].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '') || b.id - a.id);
   }, [cases, checklistProfileId, typeFilter, filters, query]);
-  const filteredPrograms = useMemo(() => (programs ?? []).filter((p) => matchesTransferProgram(p, {
+  const filteredPrograms = useMemo(() => (workingList.view === 'hidden' ? [] : programs ?? []).filter((p) => matchesTransferProgram(p, {
     type: typeFilter, query, geography: filters.geography, programStatus: filters.programStatus,
     caseOnly: Boolean(checklistProfileId || filters.status || filters.agent || filters.priority ||
       filters.workforce || filters.siteExposure || filters.safetyCritical),
     dateFrom: filters.dateFrom, dateTo: filters.dateTo,
   })).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)),
-  [programs, typeFilter, query, checklistProfileId, filters]);
+   [programs, typeFilter, query, checklistProfileId, filters, workingList.view]);
   const workTypes = [...CASE_TYPES, PROGRAM_FILTER];
   const programStatuses = Array.from(new Set((programs ?? []).map((p) => p.status).filter(Boolean))).sort();
   const programCountLabel = transferQuery.isError || !organizationId ? 'program results unavailable'
@@ -347,11 +351,13 @@ export function CasesPage() {
           </>}
         </div>
       </PageHeader>
-      <label className="flex items-center gap-2 text-sm">
+      {workingList.controls}
+      {workingList.view !== 'hidden' && <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={showHistory} onChange={event => setShowHistory(event.target.checked)} />
         Show all historical test records
-      </label>
-      {showHistory && <p role="status" className="rounded border p-3 text-sm">
+      </label>}
+      {workingList.view === 'hidden' && <p className="text-sm">Hidden cases include individually hidden working and historical records. Existing history restrictions still apply. Check a case to restore it; restored historical records may require the history filter.</p>}
+      {showHistory && workingList.view !== 'hidden' && <p role="status" className="rounded border p-3 text-sm">
         Historical test records are read-only and non-operational. Stored status and evidence describe history, not current business activity or readiness.
       </p>}
 
@@ -610,13 +616,14 @@ export function CasesPage() {
                         }
                       }}
                       onClick={(e) => {
-                        if (!(e.target as HTMLElement).closest('a') && !(e.target as HTMLElement).closest('button')) {
+                        if (!(e.target as HTMLElement).closest('a, button, input, label')) {
                           setLocation(`/cases/${c.id}`);
                         }
                       }}
                     >
                       <td style={{ padding: '10px 8px' }}>
                         <div className="flex min-w-0 items-center gap-2">
+                          {workingList.checkbox(c)}
                           <span className="shrink-0 whitespace-nowrap" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{caseIdOf(c)}</span>
                           <span className="min-w-0 truncate" title={[`Original intent: ${originalIntentOf(c)}`, caseTitleOf(c), isFictionalOfflineExample(c) ? caseSummary(c) : null].filter(Boolean).join(' — ')} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{originalIntentOf(c)}</span>
                           {c.intakeSource === 'Email' && c.intakeSourceUrl && <Link href={c.intakeSourceUrl} title="Email source history" aria-label={`Email source history for ${caseIdOf(c)}`} className="shrink-0 text-xs underline">Email</Link>}
@@ -674,13 +681,18 @@ export function CasesPage() {
             filtered.map((c) => {
               const status = statusOf(c);
               return (
-                <button
+                <div
                   key={c.id}
                   className="w-full text-left"
+                  role="link"
+                  aria-label={`Open case ${caseIdOf(c)} for ${caseWorkerName(c)}`}
+                  tabIndex={0}
                   style={{ padding: '12px var(--space-lg)', borderBottom: '1px solid var(--border)' }}
-                  onClick={() => setLocation(`/cases/${c.id}`)}
+                  onClick={event => { if (!(event.target as HTMLElement).closest('a, input, label')) setLocation(`/cases/${c.id}`); }}
+                  onKeyDown={event => { if (event.target === event.currentTarget && event.key === 'Enter') setLocation(`/cases/${c.id}`); }}
                 >
                   <div className="flex items-center justify-between gap-2">
+                    {workingList.checkbox(c)}
                     <span className="min-w-0 truncate" title={caseTitleOf(c)} style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{caseTitleOf(c)}</span>
                     <HroStatusBadge status={status} />
                   </div>
@@ -696,7 +708,7 @@ export function CasesPage() {
                     {!c.syntheticJourney && c.gateways && <CompactGates gateways={c.gateways} />}
                   </div>
                    <WorkforceTags c={c} />
-                </button>
+                </div>
               );
             })
           )}
