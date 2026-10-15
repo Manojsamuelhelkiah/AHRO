@@ -40,7 +40,7 @@ function ScopedSetup({ scope }: { scope: string }) {
   const provision = useProvisionOffboardingExchanges();
   const qc = useQueryClient();
   return <Card className="my-4 space-y-3 p-4" id="gmail-communication">
-    <h2 className="font-semibold">Access and equipment Gmail</h2>
+    <h2 className="font-semibold">Access and equipment</h2>
     <p className="text-sm text-[var(--text-muted)]">Set reusable contacts once, then adjust case-specific owners when needed. Saving settings sends no initial request. Start the conversation from the case.</p>
     {q.isLoading ? <p role="status">Loading communication settings…</p> : q.isError ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : q.data && <>
       {!params && <ClientGmailDefaults choices={q.data} queryKey={key} />}
