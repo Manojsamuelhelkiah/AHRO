@@ -72,6 +72,7 @@ import { logger } from "../logger";
 import { appendProtectedAuditInTransaction } from "./protected-audit";
 import { makeSharedTick } from "./shared-tick";
 import { hasUatScenarioKey } from "./uat-isolation";
+import { privacyRequirementsDeferred, privacyRequirementsDeferredInTransaction } from "../privacy-enforcement";
 
 export const SENSITIVE_DATA_CLASSES = [
   "candidate-document",
@@ -896,9 +897,16 @@ export async function retrySensitiveLifecycleDeletionJob(input: {
 
 export async function evaluateSensitiveLifecycleGate(input: {
   organizationId: string; jurisdiction: string | null | undefined; dataClass: SensitiveDataClass;
-  disclosure: boolean; providerId?: string; /** false only for retention cleanup, never a new collection/disclosure boundary */
+  disclosure: boolean; providerId?: string; /** false skips new collection checks for existing records or cleanup */
   collection?: boolean;
+  purpose?: "record-access" | "retention-cleanup";
 }) {
+  if (await privacyRequirementsDeferred(input.organizationId)) {
+    // Retention cleanup must not interpret deferral as permission to delete.
+    return input.purpose === "retention-cleanup" || (input.collection === false && input.purpose !== "record-access")
+      ? { allowed: false as const, reason: "Privacy-driven retention cleanup is paused." }
+      : { allowed: true as const, policy: undefined };
+  }
   if (!DELETION_SUPPORTED_CLASSES.has(input.dataClass)) {
     return {
       allowed: false as const,
@@ -982,6 +990,9 @@ const SAFE_GOVERNED_APPROVAL_HISTORY_PROJECTION = sql`(
 export async function evaluateCaseDerivedLifecycleGateInTransaction(tx: any, input: {
   organizationId: string; jurisdiction: string | null | undefined;
 }) {
+  if (await privacyRequirementsDeferredInTransaction(tx, input.organizationId)) {
+    return { allowed: true as const, policies: {} as Record<string, { id: number; revision: number; retentionDays: number }> };
+  }
   const jurisdiction = input.jurisdiction?.trim();
   if (!jurisdiction) {
     return { allowed: false as const, reason: "Case-derived sensitive collection is blocked because the case jurisdiction is missing." };
@@ -1055,6 +1066,7 @@ export async function evaluateCaseDerivedLifecycleGateInTransaction(tx: any, inp
 export async function unsafeCaseDerivedSettingsInTransaction(
   tx: any, organizationId: string, _caseId?: number,
 ): Promise<string | null> {
+  if (await privacyRequirementsDeferredInTransaction(tx, organizationId)) return null;
   const rows = await tx.select({ key: onbSettings.key, value: onbSettings.value })
     .from(onbSettings).where(and(
       eq(onbSettings.organizationId, organizationId),
@@ -1162,6 +1174,7 @@ async function opaqueCasePolicySetInTransaction(tx: any, input: {
  * tenant-wide legacy sweep rather than risking deletion of its held record.
  */
 export async function sensitiveLifecycleDestructionHeld(organizationId: string, dataClass: SensitiveDataClass): Promise<boolean> {
+  if (await privacyRequirementsDeferred(organizationId)) return true;
   const [hold] = await db.select({ id: onbSensitiveLifecycleHolds.id })
     .from(onbSensitiveLifecycleHolds).where(and(
       eq(onbSensitiveLifecycleHolds.organizationId, organizationId),
@@ -1303,6 +1316,7 @@ async function scheduleExpiredCaseDerivedEnvelopes(now: Date, limit: number): Pr
       }
       let inserted = 0;
       for (const caseRow of cases) {
+        if (await privacyRequirementsDeferredInTransaction(tx, caseRow.organizationId)) continue;
         const jurisdiction = jurisdictionForCaseDerivedEnvelope(caseRow);
         if (!jurisdiction) continue;
         const newestSourceAt = await newestCaseDerivedSourceAtInTransaction(
@@ -1517,7 +1531,7 @@ async function scheduleExpiredRelationalRecords(now: Date, limit: number): Promi
       organizationId: record.organizationId,
       jurisdiction: jurisdictionForWorkforceContext(record.workforceContext),
       dataClass: record.dataClass,
-      disclosure: false, collection: false,
+      disclosure: false, collection: false, purpose: "retention-cleanup",
     });
     if (!gate.allowed || !gate.policy) continue;
     if (record.createdAt > new Date(now.getTime() - gate.policy.retentionDays * 86_400_000)) continue;
@@ -2166,6 +2180,14 @@ async function processDeletionJob(jobId: number, owner: string, now: Date): Prom
   });
   if (!job) return "skipped";
   return withSensitiveLifecycleFence(job.organizationId, async () => {
+    if (await privacyRequirementsDeferred(job.organizationId)) {
+      await db.update(onbSensitiveLifecycleDeletionJobs).set({
+        status: "queued", claimOwner: null, claimUntil: null,
+        attempts: sql`greatest(${onbSensitiveLifecycleDeletionJobs.attempts} - 1, 0)`, updatedAt: now,
+      }).where(and(eq(onbSensitiveLifecycleDeletionJobs.id, job.id),
+        eq(onbSensitiveLifecycleDeletionJobs.claimOwner, owner)));
+      return "skipped";
+    }
     if (job.recordKind === "candidate-upload" && job.caseId &&
         job.recordId === `case-derived-envelope:${job.caseId}`) {
       const envelope = await processCaseDerivedEnvelopeDeletionJob(job, now);
@@ -2380,6 +2402,9 @@ export async function runSensitiveLifecycleDeletionWorker(options: {
   let blocked = 0;
   const owner = `sensitive-lifecycle-worker:${randomUUID()}`;
   for (const job of jobs) {
+    const [queued] = await db.select({ organizationId: onbSensitiveLifecycleDeletionJobs.organizationId })
+      .from(onbSensitiveLifecycleDeletionJobs).where(eq(onbSensitiveLifecycleDeletionJobs.id, job.id));
+    if (!queued || await privacyRequirementsDeferred(queued.organizationId)) continue;
     const result = await processDeletionJob(job.id, owner, now);
     if (result === "completed") completed += 1;
     if (result === "blocked") blocked += 1;

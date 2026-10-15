@@ -64,6 +64,7 @@ export interface PolicyCapabilities {
 
 export interface PolicyInput {
   importId?: string;
+  expectedUploadSettingsRevision?: number;
   title: string;
   sourceReference: string;
   text: string;
@@ -148,6 +149,22 @@ export function usePolicies() {
     ...policyQueryOptions(scope),
     refetchInterval: 15_000,
   });
+}
+export type PolicyUploadSettings = { revision: number; requiresSeparateReview: boolean };
+export function usePolicyUploadSettings(enabled: boolean) {
+  const scope = usePolicyScope();
+  return useQuery({
+    queryKey: [...getPoliciesKey(scope), 'upload-settings'],
+    queryFn: () => request<PolicyUploadSettings>('/api/policies/upload-settings'),
+    ...policyQueryOptions(scope),
+    enabled: Boolean(enabled && scope.organizationId && scope.userId),
+    refetchInterval: 15_000,
+  });
+}
+export function useSavePolicyUploadSettings() {
+  return usePolicyMutation<{ expectedRevision: number; requiresSeparateReview: boolean }, PolicyUploadSettings>(
+    data => request('/api/policies/upload-settings', { method: 'PUT', body: JSON.stringify(data) }),
+  );
 }
 
 export function usePolicyReminders(enabled: boolean) {

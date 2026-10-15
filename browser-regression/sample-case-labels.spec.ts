@@ -82,6 +82,7 @@ test('sample labels, reference cleanup and read-only navigation at phone, tablet
     await expect(page).toHaveURL(/\/cases\/3644$/);
     await expect(page.getByText('Kiran Pine • Support Engineer • Singapore', { exact: true })).toBeVisible();
     await expect(page.getByText('Offline — read-only; no outreach or business completion.', { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('panel-operational-preparation')).toHaveCount(0);
     await expect(page.getByText('Awaiting prerequisites', { exact: true })).toBeVisible();
     await expect(page.getByText('Activation, verified evidence and current human decisions are required.', { exact: true })).toBeVisible();
     await expect(page.getByText(`${summary} All evidence and human decisions remain pending.`, { exact: true })).toBeVisible();

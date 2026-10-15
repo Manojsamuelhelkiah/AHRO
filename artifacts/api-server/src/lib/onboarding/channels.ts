@@ -183,7 +183,7 @@ export async function sendEmail(
   to: string,
   subject: string,
   body: string,
-): Promise<{ status: string; failureReason: string | null; externalMessageId: string | null }> {
+): Promise<{ status: string; failureReason: string | null; externalMessageId: string | null; externalThreadId?: string | null }> {
   if (externalProviderDispatchDenied()) {
     return {
       status: "logged-only",
@@ -221,8 +221,8 @@ export async function sendEmail(
     // Store the Gmail message id so the inbound poller can recognise (and
     // skip) our own outbound messages when the demo recipient is the same
     // Gmail account — otherwise self-sent mail would echo back as "inbound".
-    const sent = (await resp.json().catch(() => null)) as { id?: string } | null;
-    return { status: "sent", failureReason: null, externalMessageId: sent?.id ?? null };
+    const sent = (await resp.json().catch(() => null)) as { id?: string; threadId?: string } | null;
+    return { status: "sent", failureReason: null, externalMessageId: sent?.id ?? null, externalThreadId: sent?.threadId ?? null };
   } catch (err) {
     return gmailAmbiguousFailure(err);
   }

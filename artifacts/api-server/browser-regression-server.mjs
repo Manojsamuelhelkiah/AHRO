@@ -392,6 +392,16 @@ app.post("/api/test/offboarding-session", (req, res) => {
   res.json({ profile, organizationId: offboardingFixture.org, userId: user, providerBoundary: "deny-external-providers" });
 });
 
+let exchangeBrowserFixture;
+app.post("/api/test/offboarding-exchange-fixture", async (req, res, next) => {
+  try {
+    if (sessions.get(cookieValue(req, "browser_e2e_session")) !== offboardingFixture.actor) return res.status(403).json({ message: "Controlled operator required" });
+    const { seedExchangeBrowserFixture } = await import("./offboarding-exchange-browser-fixture.mjs");
+    exchangeBrowserFixture ??= seedExchangeBrowserFixture(dbPackage, offboardingFixture);
+    res.json(await exchangeBrowserFixture);
+  } catch (error) { next(error); }
+});
+
 app.get("/api/test/ready", (_req, res) => {
   res.json({ ready: true, providerBoundary: "deny-external-providers" });
 });

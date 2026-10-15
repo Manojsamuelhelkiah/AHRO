@@ -43,6 +43,213 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /offboarding/cases/{caseId}/exchanges/email-indicators:
+    put:
+      operationId: updateOffboardingEmailIndicators
+      tags: [onboarding]
+      parameters:
+        - { name: caseId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, emailConsent, emailVerified]
+              properties:
+                expectedVersion: { type: integer }
+                emailConsent: { type: boolean }
+                emailVerified: { type: boolean }
+      responses:
+        "200":
+          description: Version-bound client declarations; unchecked indicators pause dispatch
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OffboardingExchangeView" }
+  /offboarding/cases/{caseId}/exchanges/email-review:
+    post:
+      operationId: reviewOffboardingEmailIndicators
+      tags: [onboarding]
+      parameters:
+        - { name: caseId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, consentReference, emailReference]
+              properties:
+                expectedVersion: { type: integer }
+                consentReference: { type: string }
+                emailReference: { type: string }
+      responses:
+        "200":
+          description: Authorized manual review with current independently bound source identities
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OffboardingExchangeView" }
+  /offboarding/exchanges/defaults:
+    put:
+      operationId: saveOffboardingGmailDefaults
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedRevision, agentId, recipients]
+              properties:
+                expectedRevision: { type: integer }
+                agentId: { type: string }
+                recipients: { type: array, items: { $ref: "#/components/schemas/OffboardingRecipient" } }
+      responses:
+        "200":
+          description: Client defaults saved without enrollment or dispatch
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OffboardingGmailDefaults" }
+  /offboarding/exchanges/setup:
+    get:
+      operationId: getOffboardingExchangeSetup
+      tags: [onboarding]
+      parameters:
+        - name: caseId
+          in: query
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Read-only named choices for the verified Demo tenant; no enrollment or sends
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cases, agents, members, defaults]
+                properties:
+                  defaults: { $ref: "#/components/schemas/OffboardingGmailDefaults" }
+                  cases:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                  agents:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                  members:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, addresses]
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        addresses: { type: array, items: { type: string } }
+        "403": { description: "Named operator with current case, dispatch and approval permissions required" }
+  /offboarding/exchanges/provision:
+    post:
+      operationId: provisionOffboardingExchanges
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmAddThree]
+              properties:
+                confirmAddThree: { type: boolean, enum: [true] }
+      responses:
+        "200":
+          description: Three additive records; zero sends or authority grants
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [caseIds, sent]
+                properties:
+                  caseIds: { type: array, items: { type: integer } }
+                  sent: { type: integer }
+  /offboarding/cases/{caseId}/exchanges:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer } }
+    get:
+      operationId: getOffboardingExchanges
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Private contextual conversation or null for unrelated cases
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OffboardingExchangeView" }
+  /offboarding/cases/{caseId}/exchanges/enrollment:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer } }
+    put:
+      operationId: enrollOffboardingExchange
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedRevision, enabled, recipients, confirmCommunicationOnly]
+              properties:
+                expectedRevision: { type: integer }
+                enabled: { type: boolean }
+                agentId: { type: string }
+                confirmCommunicationOnly: { type: boolean, enum: [true] }
+                recipients:
+                  type: array
+                  items: { $ref: "#/components/schemas/OffboardingRecipient" }
+      responses:
+        "200":
+          description: Explicit version-bound communication enrollment; sends nothing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OffboardingExchangeView" }
+  /offboarding/cases/{caseId}/exchanges/actions:
+    parameters:
+      - { name: caseId, in: path, required: true, schema: { type: integer } }
+    post:
+      operationId: actOffboardingExchange
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, action]
+              properties:
+                expectedVersion: { type: integer }
+                action: { type: string, enum: [request, advance-clock, exception-review, inspect-interface, source-confirm] }
+                taskId: { type: string }
+                clock: { type: string }
+                exceptionRevision: { type: integer }
+                taskRevision: { type: integer }
+                evidenceReference: { type: string }
+                disposition: { type: string }
+                confirmed: { type: boolean }
+                sourceReference: { type: string }
+                portions: { type: array, items: { type: string } }
+                handlingStatement: { type: string }
+      responses:
+        "200":
+          description: Durable conversation state; never workforce execution or final closure
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OffboardingExchangeView" }
   /onboarding/action-center/cases/{caseId}/conversation:
     parameters:
       - { name: caseId, in: path, required: true, schema: { type: integer, minimum: 1 } }
@@ -1302,6 +1509,77 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/HrPolicyResponse" } } }
         "400": { description: Invalid policy input }
         "403": { description: Verified authority and source audience required }
+  /privacy/enforcement:
+    get:
+      operationId: getPrivacyEnforcement
+      tags: [policies]
+      responses:
+        "200":
+          description: Current client privacy enforcement mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivacyEnforcementSettings"
+        "403": { description: Active client membership required }
+    put:
+      operationId: updatePrivacyEnforcement
+      tags: [policies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrivacyEnforcementInput"
+      responses:
+        "200":
+          description: Saved enforcement mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivacyEnforcementSettings"
+        "403": { description: Client administrator with policy-management permission required }
+        "409": { description: Settings changed; reload before saving }
+  /policies/upload-settings:
+    get:
+      operationId: getPolicyUploadApprovalSettings
+      tags: [hrPolicyLibrary]
+      responses:
+        "200":
+          description: Current tenant policy upload approval settings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revision, requiresSeparateReview]
+                properties:
+                  revision: { type: integer }
+                  requiresSeparateReview: { type: boolean }
+    put:
+      operationId: savePolicyUploadApprovalSettings
+      tags: [hrPolicyLibrary]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedRevision, requiresSeparateReview]
+              properties:
+                expectedRevision: { type: integer }
+                requiresSeparateReview: { type: boolean }
+      responses:
+        "200":
+          description: Versioned settings saved by an authorized policy owner
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revision, requiresSeparateReview]
+                properties:
+                  revision: { type: integer }
+                  requiresSeparateReview: { type: boolean }
+        "403": { description: Current policy-management permission required }
+        "409": { description: Settings changed; reload before saving }
   /policies/reminders:
     get:
       operationId: listHrPolicyReminders
@@ -7094,6 +7372,131 @@ components:
         type: integer
         minimum: 1
   schemas:
+    PrivacyEnforcementSettings:
+      type: object
+      required: [mode, revision, canManage]
+      properties:
+        mode: { type: string, enum: [deferred, active] }
+        revision: { type: integer }
+        canManage: { type: boolean }
+    PrivacyEnforcementInput:
+      type: object
+      required: [mode, expectedRevision]
+      properties:
+        mode: { type: string, enum: [deferred, active] }
+        expectedRevision: { type: integer }
+    OffboardingGmailDefaults:
+      type: object
+      required: [revision, agentId, recipients]
+      properties:
+        revision: { type: integer }
+        agentId: { type: string }
+        recipients: { type: array, items: { $ref: "#/components/schemas/OffboardingRecipient" } }
+    OffboardingRecipient:
+      type: object
+      required: [taskId, memberId, address, persona, escalationMemberId, escalationAddress]
+      properties:
+        taskId: { type: string }
+        memberId: { type: string }
+        address: { type: string }
+        persona: { type: string }
+        consentReference: { type: string, deprecated: true }
+        escalationMemberId: { type: string }
+        escalationAddress: { type: string }
+        escalationConsentReference: { type: string, deprecated: true }
+    OffboardingSourceHandling:
+      type: object
+      properties:
+        sharedAccountOwner: { type: string }
+        ktRequired: { type: boolean }
+        ktOwner: { type: string }
+        ktExpiresAt: { type: string }
+        ktAuthorizationReference: { type: string }
+    OffboardingConversationTask:
+      type: object
+      required: [id, label, revision, owner, dueAt, notBeforeAt, prerequisites, expected, confirmed, outstanding, status, evidence, exception]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        revision: { type: integer }
+        owner: { type: [string, "null"] }
+        dueAt: { type: string }
+        notBeforeAt: { type: [string, "null"] }
+        prerequisites: { type: array, items: { type: string } }
+        expected: { type: array, items: { type: string } }
+        confirmed: { type: array, items: { type: string } }
+        outstanding: { type: array, items: { type: string } }
+        handling: { $ref: "#/components/schemas/OffboardingSourceHandling" }
+        status: { type: string }
+        evidence: { type: array, items: { type: object, additionalProperties: true } }
+        exception:
+          type: [object, "null"]
+          required: [revision, sourceId, explanation, disposition, reviewedBy]
+          properties:
+            revision: { type: integer }
+            sourceId: { type: string }
+            explanation: { type: string }
+            disposition: { type: [string, "null"] }
+            reviewedBy: { type: [string, "null"] }
+    OffboardingExchangeMessage:
+      type: object
+      required: [id, taskId, direction, kind, status, recipient, memberId, operator, agentId, persona, mailbox, subject, body, reference, createdAt, sourceTransportVerified, applied]
+      properties:
+        id: { type: string }
+        taskId: { type: string }
+        direction: { type: string }
+        kind: { type: string }
+        status: { type: string }
+        recipient: { type: string }
+        memberId: { type: string }
+        operator: { type: string }
+        agentId: { type: string }
+        persona: { type: string }
+        mailbox: { type: string }
+        subject: { type: string }
+        body: { type: string }
+        reference: { type: string }
+        createdAt: { type: string }
+        providerMessageId: { type: [string, "null"] }
+        providerThreadId: { type: [string, "null"] }
+        sourceTransportVerified: { type: integer }
+        applied: { type: integer }
+        observation: { type: [object, "null"], additionalProperties: true }
+    OffboardingExchangeView:
+      type: [object, "null"]
+      required: [caseId, version, generation, clock, tasks, enrollment, exchanges, closureAvailable, blockers, communicationChecks]
+      properties:
+        caseId: { type: integer }
+        communicationChecks:
+          type: object
+          required: [emailConsent, emailVerified, reviewRequired, basis, changedBy, reviewedBy, reviewReference]
+          properties:
+            emailConsent: { type: boolean }
+            emailVerified: { type: boolean }
+            reviewRequired: { type: boolean }
+            basis: { type: string, enum: [client-declared] }
+            changedBy: { type: [string, "null"] }
+            reviewedBy: { type: [string, "null"] }
+            reviewReference: { type: [string, "null"] }
+        version: { type: integer }
+        generation: { type: integer }
+        clock: { type: string }
+        blockers: { type: array, items: { type: string } }
+        tasks: { type: array, items: { $ref: "#/components/schemas/OffboardingConversationTask" } }
+        enrollment:
+          type: object
+          required: [enabled, revision, generation, operator, agentId, mailbox, approvedAt, recipients]
+          properties:
+            enabled: { type: boolean }
+            revision: { type: integer }
+            generation: { type: integer }
+            operator: { type: [string, "null"] }
+            agentId: { type: [string, "null"] }
+            mailbox: { type: [string, "null"] }
+            approvedAt: { type: [string, "null"] }
+            recipients: { type: array, items: { $ref: "#/components/schemas/OffboardingRecipient" } }
+        exchanges: { type: array, items: { $ref: "#/components/schemas/OffboardingExchangeMessage" } }
+        closureAvailable: { type: boolean, enum: [false] }
     ActionConversationInput:
       type: object
       additionalProperties: false
@@ -7739,6 +8142,8 @@ components:
       type: object
       required: [id, version, generation, status, facts, closureBlocker, lifecycle]
       properties:
+        fictionalOfflineIdentity: { type: boolean }
+        offlineSample: { type: boolean }
         originalIntent:
           type: string
           readOnly: true
@@ -15887,6 +16292,7 @@ components:
       additionalProperties: false
       properties:
         importId: { type: string }
+        expectedUploadSettingsRevision: { type: integer, description: "Required when attaching a newly uploaded document; fences changes to this client's review process." }
         title: { type: string, minLength: 1, maxLength: 4000 }
         sourceReference: { type: string, minLength: 1, maxLength: 4000 }
         text: { type: string, minLength: 1, maxLength: 40000 }

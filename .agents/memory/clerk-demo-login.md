@@ -20,3 +20,9 @@ For isolated browser fixtures, use Clerk's supported reserved development test-e
 **Why:** Managed Clerk rejected an `.invalid` synthetic address with HTTP 422; a reserved `+clerk_test@example.com` development identity succeeded. The installed SDK also did not support a commonly suggested email-verification-skip option.
 
 **How to apply:** Check the installed SDK types and documented development test identity options. Use a separate, disposable non-demo actor for private tenant tests, short-lived tickets consumed without logging, and exact owned-fixture cleanup. Never weaken a shared demo sign-in or tenant fence to make a private test pass.
+
+The fixed development verification code applies to reserved test identities, not arbitrary real email addresses. Real operator sign-up must retain normal ownership verification.
+
+**Why:** Broad documentation summaries can omit the reserved-address qualifier. A test alias or developer shortcut cannot establish ownership of a real operator's mailbox.
+
+**How to apply:** Verify the current [Clerk test-email rules](https://clerk.com/docs/guides/development/testing/test-emails-and-phones) before suggesting test codes. For real-email delivery failures, inspect the actual form error and provider delivery restrictions instead of bypassing verification.

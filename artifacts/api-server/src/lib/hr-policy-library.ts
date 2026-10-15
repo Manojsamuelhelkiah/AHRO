@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, isNotNull, isNull, lte, or } from "drizzle-orm";
+import { policyUploadSettingsInTransaction } from "./hr-policy-upload-settings";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import {
   db,
   onbGovernanceAuthorityAssignments,
@@ -136,7 +137,7 @@ async function liveMember(tx: any, organizationId: string, userId: string): Prom
   return membership.role;
 }
 
-/** Trusted governance records are intentionally the only specialist authority. */
+/** Current application permission, not a professional qualification or display label. */
 export async function verifiedAuthority(tx: any, organizationId: string, userId: string, authorityRole: string, reviewedRevision = 0) {
   await liveMember(tx, organizationId, userId);
   if (!await hasHumanPermissions(tx, { organizationId, actorUserId: userId, requiredKeys: ["tool.policy.manage"] })) throw new HrPolicyError(
@@ -445,12 +446,42 @@ export async function createPolicy(organizationId: string, userId: string, input
     }
     const policyId = randomUUID();
     const importProvenance = await consumePolicyImport(tx, organizationId, userId, input);
+    const uploadApproval = await uploadedPolicyApproval(tx, organizationId, userId, 1, data, importProvenance, object(input).expectedUploadSettingsRevision);
     await tx.insert(onbHrPolicySources).values({ organizationId, policyId, createdByUserId: userId });
     const [created] = await tx.insert(onbHrPolicyVersions).values({
-      organizationId, policyId, version: 1, ...data, importProvenance, createdByUserId: userId,
+      organizationId, policyId, version: 1, ...data, importProvenance, createdByUserId: userId, ...uploadApproval,
     }).returning();
     return policyPublic(created!);
   });
+}
+
+/** The authorized uploader's exact source is the approval action by default.
+ * A client can explicitly require the existing separate review workflow. */
+async function uploadedPolicyApproval(tx: any, organizationId: string, userId: string, version: number,
+  data: ReturnType<typeof inputPolicy>, provenance: PolicyImportProvenance | null, expectedSettingsRevision: unknown) {
+  // Serializes configuration changes and publication under one tenant fence.
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`policy-upload-settings:${organizationId}`}, 0))`);
+  if (!provenance) return {};
+  const settings = await policyUploadSettingsInTransaction(tx, organizationId);
+  if (expectedSettingsRevision !== settings.revision) throw new HrPolicyError("Policy upload settings changed or were not loaded. Reload the upload form before saving.", 409);
+  if (settings.requiresSeparateReview) return { status: "in_review" as const };
+  const [source] = await tx.select().from(onbHrPolicyImports).where(and(eq(onbHrPolicyImports.id, provenance.importId), eq(onbHrPolicyImports.organizationId, organizationId)));
+  if (!source?.extraction || data.text !== source.extraction.text.trim()) {
+    throw new HrPolicyError("An uploaded policy must retain its exact extracted text. Upload a revised document to change its content.", 409);
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  if (data.effectiveFrom > today || data.effectiveUntil && data.effectiveUntil < today || data.reviewBy && data.reviewBy < today) {
+    throw new HrPolicyError("Check the policy's effective and review dates before uploading it as current guidance.", 409);
+  }
+  const grant = await verifiedAuthority(tx, organizationId, userId, data.reviewAuthorityRole, version);
+  if (!grant?.id) throw new HrPolicyError("Uploader approval could not be recorded.", 409);
+  const reference = `authorized-upload:${provenance.importId}:${provenance.sha256}`;
+  return {
+    status: "published" as const, reviewOutcome: "approved" as const,
+    reviewedByUserId: userId, reviewerAuthorityAssignmentId: grant.id,
+    reviewerVerificationReference: reference, publisherUserId: userId,
+    publisherAuthorityAssignmentId: grant.id, publicationVerificationReference: reference, publishedAt: new Date(),
+  };
 }
 
 export async function revisePolicy(organizationId: string, userId: string, policyId: string, input: unknown) {
@@ -472,8 +503,16 @@ export async function revisePolicy(organizationId: string, userId: string, polic
     const importProvenance = object(input).importId
       ? await consumePolicyImport(tx, organizationId, userId, input)
       : current.importProvenance;
+    const uploadApproval = object(input).importId
+      ? await uploadedPolicyApproval(tx, organizationId, userId, current.version + 1, data, importProvenance ?? null, object(input).expectedUploadSettingsRevision)
+      : {};
+    if ("status" in uploadApproval && uploadApproval.status === "published") {
+      await tx.update(onbHrPolicyVersions).set({ status: "superseded", updatedAt: new Date() }).where(and(
+        eq(onbHrPolicyVersions.organizationId, organizationId), eq(onbHrPolicyVersions.policyId, policyId), eq(onbHrPolicyVersions.status, "published"),
+      ));
+    }
     const [created] = await tx.insert(onbHrPolicyVersions).values({
-      organizationId, policyId, version: current.version + 1, ...data, importProvenance, createdByUserId: userId,
+      organizationId, policyId, version: current.version + 1, ...data, importProvenance, createdByUserId: userId, ...uploadApproval,
     }).returning();
     return policyPublic(created!);
   });

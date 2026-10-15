@@ -988,6 +988,27 @@
       "when": 1791936000006,
       "tag": "0116_action_conversations",
       "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1791936000005,
+      "tag": "0115_offboarding_exchanges",
+      "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1791936000006,
+      "tag": "0116_offboarding_dispatch_timing",
+      "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1791936000007,
+      "tag": "0117_offboarding_mail_recovery",
+      "breakpoints": true
     }
   ]
 }

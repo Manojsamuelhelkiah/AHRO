@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { privacyRequirementsDeferredInTransaction } from "../privacy-enforcement";
 import {
   db, hroContextAnchors, hroContextSteps, hroContextTransactions,
   hroContextRetentionPolicies, hroContextRetentionState, onbSensitiveLifecycleHolds, onbAuditLifecycles,
@@ -113,7 +114,8 @@ export async function pruneContextOrganization(organizationId: string, now = new
     await lockHroContextRetention(tx, organizationId);
     const policy = await currentPolicy(tx, organizationId);
     const counts = { transactionsPruned: 0, stepsPruned: 0, anchorsPruned: 0 };
-    let outcome = !policy ? "approval-required" : !policy.enabled ? "paused" : await activeHold(tx, organizationId) ? "held" : "swept";
+    let outcome = await privacyRequirementsDeferredInTransaction(tx, organizationId) ? "paused" :
+      !policy ? "approval-required" : !policy.enabled ? "paused" : await activeHold(tx, organizationId) ? "held" : "swept";
     if (policy?.enabled && outcome === "swept") {
       const cutoff = new Date(now.getTime() - policy.retentionDays * 86_400_000);
       // Full chains only. Filters exclude ineligible chains before LIMIT, so

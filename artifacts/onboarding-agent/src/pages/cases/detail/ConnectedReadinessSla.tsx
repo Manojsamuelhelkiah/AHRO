@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { format } from 'date-fns';
 import {
   useGetOnboardingCaseReadinessSla,
-  useEnrollOnboardingCaseReadinessSla,
   useSetOnboardingPayrollCutoff,
   useAttestOnboardingReadiness,
   useRebaseOnboardingReadinessSla,
@@ -22,34 +21,12 @@ export function ConnectedReadinessSla({ caseId }: { caseId: number }) {
     query: { queryKey: getGetOnboardingCaseReadinessSlaQueryKey(caseId) }
   });
 
-  const enroll = useEnrollOnboardingCaseReadinessSla();
-
   if (isLoading) {
     return <div className="animate-pulse bg-[var(--surface-alt)] h-40 rounded-[var(--radius-lg)] mb-8"></div>;
   }
 
   if (!data?.enrolled || data.snapshotVersion == null) {
-    return (
-      <div className="mb-8 p-6 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] shadow-[var(--shadow-sm)] flex flex-col items-center justify-center text-center">
-        <h3 className="text-[var(--text-base)] font-bold text-[var(--text-primary)] mb-2">Connected Readiness SLA</h3>
-        <p className="text-[var(--text-sm)] text-[var(--text-muted)] mb-4 max-w-md">
-          This case is not enrolled in the connected readiness tracking. Historical cases or cases created before the policy rollout are not enrolled automatically.
-        </p>
-        {isHR && (
-          <Button 
-            onClick={() => {
-              enroll.mutate({ id: caseId }, {
-                onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetOnboardingCaseReadinessSlaQueryKey(caseId) })
-              });
-            }}
-            disabled={enroll.isPending}
-            className="bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90"
-          >
-            Enroll in Readiness SLA
-          </Button>
-        )}
-      </div>
-    );
+    return null;
   }
 
   const snapshotVersion = data.snapshotVersion as number;

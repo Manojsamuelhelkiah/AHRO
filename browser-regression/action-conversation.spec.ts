@@ -16,7 +16,7 @@ async function fixture(page: Page) {
 for (const viewport of [{ width: 390, height: 844 }, { width: 820, height: 1180 }, { width: 1440, height: 1000 }]) {
   test(`case conversations remain read-only and durable at ${viewport.width}px`, async ({ page }) => {
     await page.setViewportSize(viewport);
-    const data = await fixture(page);
+  const data = await fixture(page);
     const url = `/approvals?tab=conversation&caseId=${data.caseId}`;
     await page.goto(url);
     await expect(page.getByRole("heading", { name: "Action Center", exact: true })).toBeVisible();
@@ -72,6 +72,7 @@ test("historical reply disclosure revocation discards older cached excerpts and 
     expect(seeded.ok()).toBeTruthy();
   }
   let withdrawn = false;
+
   const endpoint = `/api/onboarding/action-center/cases/${data.caseId}/conversation`;
   let holdPagination = false;
   let paginationStarted!: () => void;
@@ -112,10 +113,18 @@ test("historical reply disclosure revocation discards older cached excerpts and 
   expect(revoked.ok()).toBeTruthy();
   withdrawn = true;
   const refreshed = page.waitForResponse(r => new URL(r.url()).pathname === endpoint && !new URL(r.url()).searchParams.has("before"));
+
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await refreshed;
   await expect(page.getByText("FICTIONAL OLDER PRIVATE EXCERPT", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Fictional historical answer.", { exact: true })).toHaveCount(0);
+  const reloadedOlder = page.waitForResponse(r => new URL(r.url()).pathname === endpoint && new URL(r.url()).searchParams.has("before"));
+  await page.getByRole("button", { name: "Load older messages", exact: true }).click();
+  const olderResponse = await reloadedOlder;
+  expect(olderResponse.ok()).toBeTruthy();
+  expect((await olderResponse.json()).nextBefore).not.toBeNull();
+  await expect(page.getByRole("button", { name: "Load older messages", exact: true })).toBeEnabled();
+  await expect(page.getByText("FICTIONAL OLDER PRIVATE EXCERPT", { exact: true })).toHaveCount(0);
   // Start pagination while its control is still authorized, then revoke before
   // its real server read. Revoking first races both the in-flight previous page
   // and background refresh, either of which can already remove the button.

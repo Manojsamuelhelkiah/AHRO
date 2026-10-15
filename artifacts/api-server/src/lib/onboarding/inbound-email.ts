@@ -583,6 +583,9 @@ export async function processMessageRefs(
     const fromAddress = extractAddress(header(msg, "From"));
     const raw = findPlainText(msg.payload) ?? "";
     const subject = header(msg, "Subject") || "";
+    // Opaque offboarding task references belong exclusively to the separation consumer.
+    // Never let a shared sender/mailbox attribute them to an onboarding case.
+    if (/\bOX-[a-f0-9]{48}\b/.test(`${subject}\n${raw}`)) continue;
     if (subject.includes("[HRO-INTAKE:")) {
       if (deps.ingestHroMailboxMessage && !deps.outboundProviderIds?.has(ref.id) && !await deps.alreadyRecorded(ref.id, "")) {
         await deps.ingestHroMailboxMessage(msg, fromAddress, subject, sanitizeInboundText(raw));

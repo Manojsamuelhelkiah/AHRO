@@ -8,6 +8,10 @@ import { builtinModules } from "node:module";
 import path from "node:path";
 import { prepareDatabaseBackedTests } from "./test-db-setup.mjs";
 
+// Existing privacy-boundary suites exercise Active deliberately. Product
+// runtimes default to Deferred regardless of development/production.
+process.env.HRO_PRIVACY_ENFORCEMENT_DEFAULT ??= "active";
+
 const dir = path.dirname(fileURLToPath(import.meta.url));
 rmSync(path.join(dir, "dist-test"), { recursive: true, force: true });
 const requestedTestFile = process.env.TEST_FILE?.trim();
@@ -30,6 +34,9 @@ const ownedWorkspaceSuites = new Set([
   "src/lib/onboarding/governance-runtime.test.ts",
   "src/lib/onboarding/workstream-connectors.test.ts",
   "src/lib/offboarding/offboarding.test.ts",
+  "src/lib/offboarding/exchange-runtime.test.ts",
+  "src/lib/privacy-enforcement.test.ts",
+  "src/lib/hr-policy-imports.test.ts",
   "src/lib/onboarding/client-operations-settings.test.ts",
   "src/routes/user-group-super-admin.test.ts",
   "src/lib/hro-email-intake.test.ts",

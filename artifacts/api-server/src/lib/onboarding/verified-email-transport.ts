@@ -1,5 +1,68 @@
 import { dkimVerify, type DNSResolver } from "mailauth";
 
+const sourceAttestationBrand = Symbol("verifiedSourceAttestation");
+export type VerifiedSourceAttestation = Readonly<{
+  fromAddress: string; sourceMessageId: string; reference: string; statement: string;
+  readonly [sourceAttestationBrand]: true;
+}>;
+
+/** Message-bound transport proof only, not authorization or operational evidence. */
+export async function verifyGmailSourceTransport(input: {
+  rawMessage: string; sourceMessageId: string; expectedFromAddress: string;
+  reference: string; statement: string; resolver?: DNSResolver;
+}): Promise<VerifiedSourceAttestation | null> {
+  const from = normalizedAddress(input.expectedFromAddress), headers = rawHeaders(input.rawMessage), body = rawBody(input.rawMessage);
+  if (!from || !headers || !body || !input.reference || !input.statement ||
+      headers.filter(h => h.name.toLowerCase() === "from").length !== 1 ||
+      headers.filter(h => h.name.toLowerCase() === "subject").length !== 1 ||
+      normalizedAddress(headers.find(h => h.name.toLowerCase() === "from")!.value) !== from ||
+      decodedSignedPlainText(input.rawMessage)?.replace(/\r\n/g, "\n").trim() !== input.statement.replace(/\r\n/g, "\n").trim()) return null;
+  // Ordinary acknowledgments need not repeat the opaque reference in the
+  // body: the independently signed Subject can bind the reply to the task.
+  // Conflicting authored references still fail closed; quoted history is not
+  // a new source statement or a second correlation.
+  const authored = input.statement.split(/\n\s*(?:On .+wrote:|From:|>{1,})/i)[0];
+  const refs = [...new Set(`${headers.find(h => h.name.toLowerCase() === "subject")!.value}\n${authored}`.match(/\bOX-[a-f0-9]{48}\b/g) ?? [])];
+  if (refs.length !== 1 || refs[0] !== input.reference) return null;
+  try {
+    const result = await dkimVerify(input.rawMessage, { minBitLength: 2048, ...(input.resolver ? { resolver: input.resolver } : {}) });
+    if (!verifiedDkimSignature(input.rawMessage, headers, from.split("@")[1], result)) return null;
+    return Object.freeze({ fromAddress: from, sourceMessageId: input.sourceMessageId, reference: input.reference, statement: input.statement, [sourceAttestationBrand]: true as const });
+  } catch { return null; }
+}
+
+/** Decode only bounded plain MIME text from the very bytes whose full body is signed. */
+function decodedSignedPlainText(raw: string, depth = 0): string | null {
+  if (depth > 8 || Buffer.byteLength(raw) > 262144) return null;
+  const headers = rawHeaders(raw), body = rawBody(raw);
+  if (!headers || body === null) return null;
+  const contentTypes = headers.filter(h => h.name.toLowerCase() === "content-type");
+  const encodings = headers.filter(h => h.name.toLowerCase() === "content-transfer-encoding");
+  if (contentTypes.length > 1 || encodings.length > 1) return null;
+  const type = contentTypes[0]?.value ?? "text/plain", encoding = encodings[0]?.value.toLowerCase() ?? "";
+  if (/^multipart\//i.test(type)) {
+    const boundary = type.match(/boundary\s*=\s*(?:"([^"]+)"|([^;\s]+))/i);
+    const token = boundary?.[1] ?? boundary?.[2];
+    if (!token || token.length > 100) return null;
+    const parts = body.split(new RegExp(`(?:^|\\r?\\n)--${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:--)?\\r?\\n`));
+    if (parts.length > 30) return null;
+    const plain = parts.slice(1).map(p => decodedSignedPlainText(p, depth + 1)).filter((p): p is string => p !== null);
+    return plain.length === 1 ? plain[0] : null;
+  }
+  if (!/^text\/plain(?:;|$)/i.test(type) || headers.some(h => h.name.toLowerCase() === "content-disposition" && /attachment/i.test(h.value))) return null;
+  if (encoding === "base64") return /^[a-zA-Z0-9+/=\r\n\s]+$/.test(body) ? Buffer.from(body.replace(/\s/g, ""), "base64").toString("utf8") : null;
+  if (encoding === "quoted-printable") {
+    const normalized = body.replace(/=\r?\n/g, "");
+    return Buffer.from(normalized.replace(/=([0-9a-f]{2})/ig, (_, hex: string) => String.fromCharCode(parseInt(hex, 16))), "binary").toString("utf8");
+  }
+  return ["", "7bit", "8bit", "binary"].includes(encoding) ? body : null;
+}
+export function isVerifiedSourceTransport(value: unknown, expected: { fromAddress: string; sourceMessageId: string; reference: string; statement: string }): value is VerifiedSourceAttestation {
+  const v = value as VerifiedSourceAttestation | null;
+  return Boolean(v && v[sourceAttestationBrand] === true && v.fromAddress === expected.fromAddress.toLowerCase() &&
+    v.sourceMessageId === expected.sourceMessageId && v.reference === expected.reference && v.statement === expected.statement);
+}
+
 /**
  * This symbol is intentionally private. A remote-email decision can only carry
  * this value after this module has verified the raw RFC822 message; callers

@@ -5,6 +5,19 @@ import { registeredDemoProfile } from "../lib/demo-principal";
 import { isRestrictedHistoricalCase as isHistoricalTestRecord, operationalEligibilityInTransaction } from "../lib/onboarding/operational-eligibility";
 import { getUatCaseIsolation } from "../lib/onboarding/uat-isolation";
 import { isReadOnlyCaseExplanationRequest, isRetiredCaseCapabilityRequest, retiredCaseCapabilityResponse } from "../lib/retired-case-capabilities";
+import { loadPilot } from "../lib/offboarding/exchange-service";
+
+/** Narrow route admission; each service independently rechecks live scope and authority. */
+function contextualRoute(method: string, path: string, action: unknown): boolean {
+  if (method === "PUT" && /^\/offboarding\/cases\/\d+\/exchanges\/enrollment$/.test(path)) return true;
+  if (method === "PUT" && /^\/offboarding\/cases\/\d+\/exchanges\/email-indicators$/.test(path)) return true;
+  if (method === "POST" && /^\/offboarding\/cases\/\d+\/exchanges\/email-review$/.test(path)) return true;
+  if (method === "POST" && /^\/offboarding\/cases\/\d+\/exchanges\/actions$/.test(path)) {
+    return ["request", "advance-clock", "exception-review", "inspect-interface", "source-confirm"].includes(String(action));
+  }
+  return method === "POST" && /^\/offboarding\/cases\/\d+\/actions$/.test(path) &&
+    ["screen", "classify", "adopt-policy", "pause", "resume"].includes(String(action));
+}
 
 /** Runs after authentication, tenant verification and (for UAT) separate admission. */
 export function createCaseRetirementFence(deps: {
@@ -52,6 +65,13 @@ export function createCaseRetirementFence(deps: {
           eq(onbCases.organizationId, req.organizationId),
           eq(onbCases.id, Number(match[1])),
         )).limit(1))[0];
+        if (row && contextualRoute(req.method, req.path, req.body?.action)) {
+          const exactPilot = await db.transaction(async tx => {
+            try { await loadPilot(tx, req.organizationId!, row.id); return true; }
+            catch { return false; }
+          });
+          if (exactPilot) { next(); return; }
+        }
         if (row && (isHistoricalTestRecord(row) || (await (deps.isolation ?? getUatCaseIsolation)(row)).isolated)) {
           retiredCaseCapabilityResponse(req, res, next);
           return;

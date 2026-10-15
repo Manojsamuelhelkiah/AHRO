@@ -63,7 +63,7 @@ export function boundedEmailContent(msg: GmailMessage): { body: string; attachme
 export function intakeMessageReserved(msg: GmailMessage, body: string, refs: string[] = []): boolean {
   const subject = header(msg, "Subject"), input = `${subject}\n${body}`;
   if ((msg as GmailMessage & { labelIds?: string[] }).labelIds?.some(l => ["SENT", "DRAFT"].includes(l))) return true;
-  if (/\b(?:CR-[a-f0-9]{32}|AP-\d+(?:-V\d+)?|SIM-REPLY-TOKEN|SIM-THREAD|SYS-)\b/i.test(input)) return true;
+  if (/\b(?:OX-[a-f0-9]{48}|CR-[a-f0-9]{32}|AP-\d+(?:-V\d+)?|SIM-REPLY-TOKEN|SIM-THREAD|SYS-)\b/i.test(input)) return true;
   if (/\[(?:CR|AP|SIM-REPLY|SYS-REPLY):/i.test(input)) return true;
   if (header(msg, "Auto-Submitted") && header(msg, "Auto-Submitted").toLowerCase() !== "no") return true;
   if (/^(?:bulk|list|junk)$/i.test(header(msg, "Precedence"))) return true;

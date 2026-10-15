@@ -8,6 +8,8 @@ import { useGetSeparationCase, useApplySeparationAction, useListSeparationPolici
 import type { SeparationAction, SeparationDetail, SeparationTask, SeparationReceipt } from '@workspace/api-client-react';
 import { Card, Input, Button } from '@/components/ui-shared';
 import { ArrowLeft } from 'lucide-react';
+import { ExchangePanel } from './exchange-panel';
+import { caseListReference } from '../case-presentation';
 import { ClosureWarning, ErrorBox, FACT_FIELDS, FactsForm, Field, Pill, SkeletonRows, areaCls, selectCls, statusTone, validateFacts } from './shared';
 
 const TRIGGERS = ['posh', 'whistleblower', 'litigation-hold', 'fraud-investigation', 'abscondment', 'death-in-service', 'statutory-position', 'unknown', 'conflicting'];
@@ -235,14 +237,14 @@ export function SeparationDetailPage() {
       {q.isLoading ? <SkeletonRows n={5} /> : q.isError ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : d && (
         <>
           <header className="flex flex-wrap items-start justify-between gap-3">
-            <div><p className="text-sm font-semibold">Case {d.id}</p>
+            <div><p className="text-sm font-semibold">Case {caseListReference(d)}</p>
               <OriginalIntent c={d} />
               <h1 className="break-words text-2xl font-semibold" data-testid="text-worker-name">{d.facts.workerName}</h1>
-              <p className="text-sm text-[var(--text-muted)]">Offboarding · {d.facts.employeeId} · {d.facts.role} · {d.facts.country} · LWD {d.facts.lastWorkingDay} ({d.facts.timeZone}) · v{d.version} gen {d.generation}</p></div>
+              <p className="text-sm text-[var(--text-muted)]">Offboarding · {!d.fictionalOfflineIdentity && <>{d.facts.employeeId} · </>}{d.facts.role} · {d.facts.country} · LWD {d.facts.lastWorkingDay} ({d.facts.timeZone}) · v{d.version} gen {d.generation}</p></div>
             <div className="flex flex-wrap gap-2"><Pill tone={statusTone(d.status)}>{d.status}</Pill><Pill tone={statusTone(d.state.gatewayA)}>Separation Screening {d.state.gatewayA}</Pill>{d.state.conflict && <Pill tone="red">source conflict</Pill>}</div>
           </header>
           <ClosureWarning />
-          <div className="flex flex-wrap gap-2 text-xs"><Pill>Final Closure {d.gatewayC}</Pill><Pill>Activity 12 {d.activity12}</Pill><Pill tone="blue">manual, source-backed, no remote actions</Pill></div>
+          <div className="flex flex-wrap gap-2 text-xs"><Pill>Final Closure {d.gatewayC}</Pill><Pill>Activity 12 {d.activity12}</Pill>{!d.fictionalOfflineIdentity && <Pill tone="blue">manual, source-backed, no remote actions</Pill>}</div>
           {d.state.pauseReason && <div role="status" data-testid="banner-pause" className="rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-sm text-[var(--status-amber-fg)]">Paused for HRBP review: {d.state.pauseReason}. Use the HRBP disposition action to cancel, convert to transfer, or resume.</div>}
           {d.state.holds.length > 0 && <div role="status" className="rounded-md border border-[var(--status-red)] bg-[var(--status-red-bg)] p-3 text-sm text-[var(--status-red-fg)]">Holds: {d.state.holds.join('; ')}. Deletion and archival are prohibited.</div>}
           {stale && <div role="alert" className="flex items-center justify-between gap-2 rounded-md bg-[var(--status-amber-bg)] p-3 text-sm text-[var(--status-amber-fg)]">The case changed since you loaded it. <Button size="sm" variant="outline" onClick={() => q.refetch()}>Reload</Button></div>}
@@ -251,7 +253,7 @@ export function SeparationDetailPage() {
             <div className="space-y-5">
               <Card className="space-y-2 p-4"><h2 className="font-semibold">Facts and classification</h2>
                 <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
-                  {Object.entries(d.facts).map(([k, v]) => <div key={k} className="flex gap-2"><dt className="text-[var(--text-muted)]">{k}</dt><dd>{String(v)}</dd></div>)}
+                  {Object.entries(d.facts).filter(([k]) => !d.fictionalOfflineIdentity || k !== 'employeeId').map(([k, v]) => <div key={k} className="flex min-w-0 gap-2"><dt className="text-[var(--text-muted)]">{k}</dt><dd className="min-w-0 break-words">{String(v)}</dd></div>)}
                   {d.privateVisible && d.privateFacts ? <><div className="flex gap-2"><dt className="text-[var(--text-muted)]">exitType</dt><dd>{d.privateFacts.exitType}</dd></div><div className="flex gap-2 sm:col-span-2"><dt className="text-[var(--text-muted)]">exitReason</dt><dd>{d.privateFacts.exitReason}</dd></div></> : <div className="text-xs text-[var(--text-muted)] sm:col-span-2">Exit type and reason are restricted to verified HR and Legal readers.</div>}
                 </dl>
                 <div className="flex flex-wrap gap-2 pt-2 text-xs">
@@ -268,6 +270,7 @@ export function SeparationDetailPage() {
                     {ts.map((t) => <TaskCard ktRequired={d.state.tasks.some((x) => x.id === 'kt-access-exception' && x.details.exceptionRequired === true)} key={`${t.id}-${d.generation}-${d.version}`} t={t} caseId={caseId} version={d.version} busy={act.isPending} run={(a) => { void run(a); }} />)}</div>
                 ))}
               </section>
+              {d.privateVisible && d.fictionalOfflineIdentity === true && <ExchangePanel caseId={caseId} />}
               <Card className="space-y-2 p-4"><h2 className="font-semibold">Decisions</h2>
                 {d.state.decisions.length === 0 ? <p className="text-sm text-[var(--text-muted)]">{d.privateVisible ? 'No decisions recorded.' : 'Decision history is restricted.'}</p> : d.state.decisions.map((r, i) => <div key={i} className="border-b border-[var(--border)] pb-2 last:border-0"><Receipt r={r} /></div>)}</Card>
               <Card className="space-y-2 p-4"><h2 className="font-semibold">Settlement versions</h2>

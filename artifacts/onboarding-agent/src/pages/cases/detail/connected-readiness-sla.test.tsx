@@ -20,7 +20,7 @@ test('ConnectedReadinessSla renders enrolled and unenrolled states based on quer
     </QueryClientProvider>
   );
 
-  assert.match(html, /This case is not enrolled/);
+  assert.equal(html, '', 'An unenrolled case has no setup prompt or enrollment button.');
 
   // 2. Enrolled State
   queryClient.setQueryData(getGetOnboardingCaseReadinessSlaQueryKey(43), {

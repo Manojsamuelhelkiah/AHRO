@@ -5,6 +5,8 @@ import { SeparationError } from "../lib/offboarding/model";
 import { listPolicies, savePolicy, decidePolicy } from "../lib/offboarding/policy";
 import { configureMailbox, convertMailbox, mailboxReadiness, reviewMailbox } from "../lib/hro-mailbox-ingress";
 import { logger } from "../lib/logger";
+import { provisionExchangePilots, readExchange, enrollExchange, exchangeAction, updateCommunicationChecks } from "../lib/offboarding/exchange-service";
+import { exchangeSetupChoices, saveGmailDefaults } from "../lib/offboarding/exchange-setup";
 const router: IRouter = Router();
 const handle = (fn: (req: Request, res: Response) => Promise<unknown>) => async (req: Request, res: Response, next: (e?: unknown) => void) => {
   res.setHeader("Cache-Control", "no-store");
@@ -21,6 +23,18 @@ const handle = (fn: (req: Request, res: Response) => Promise<unknown>) => async 
 const org = getOrganizationId, actor = (r: Request) => r.authUserId!;
 const id = (r: Request) => { const v = Number(r.params.caseId); if (!Number.isSafeInteger(v) || v < 1) throw new SeparationError("Invalid case ID.", 400); return v; };
 router.get("/offboarding/cases", handle(async (r, s) => s.json(await listSeparations(org(r), actor(r)))));
+router.post("/offboarding/exchanges/provision", handle(async (r, s) => s.json(await provisionExchangePilots(org(r), actor(r), r.body))));
+router.put("/offboarding/exchanges/defaults", handle(async (r, s) => s.json(await saveGmailDefaults(org(r), actor(r), r.body))));
+router.get("/offboarding/exchanges/setup", handle(async (r, s) => {
+  const caseId = r.query.caseId === undefined ? undefined : Number(r.query.caseId);
+  if (caseId !== undefined && (!Number.isSafeInteger(caseId) || caseId <= 0)) throw new SeparationError("A positive case number is required.", 400);
+  s.json(await exchangeSetupChoices(org(r), actor(r), caseId));
+}));
+router.get("/offboarding/cases/:caseId/exchanges", handle(async (r, s) => s.json(await readExchange(org(r), actor(r), id(r)))));
+router.put("/offboarding/cases/:caseId/exchanges/email-indicators", handle(async (r, s) => s.json(await updateCommunicationChecks(org(r), actor(r), id(r), r.body))));
+router.post("/offboarding/cases/:caseId/exchanges/email-review", handle(async (r, s) => s.json(await updateCommunicationChecks(org(r), actor(r), id(r), r.body, true))));
+router.put("/offboarding/cases/:caseId/exchanges/enrollment", handle(async (r, s) => s.json(await enrollExchange(org(r), actor(r), id(r), r.body))));
+router.post("/offboarding/cases/:caseId/exchanges/actions", handle(async (r, s) => s.json(await exchangeAction(org(r), actor(r), id(r), r.body))));
 router.post("/offboarding/cases", handle(async (r, s) => s.status(201).json(await createSeparations(org(r), actor(r), r.body))));
 router.post("/offboarding/batch", handle(async (r, s) => s.status(201).json(await createSeparations(org(r), actor(r), r.body, "batch"))));
 router.get("/offboarding/cases/:caseId", handle(async (r, s) => s.json(await separationDetail(org(r), actor(r), id(r)))));

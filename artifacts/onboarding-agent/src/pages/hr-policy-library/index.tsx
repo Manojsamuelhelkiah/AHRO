@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
-  usePolicies, useHandoffs, useCreatePolicy, useResolveHandoff, usePolicyCapabilities, usePolicyScope,
+  usePolicies, useHandoffs, useCreatePolicy, useResolveHandoff, usePolicyCapabilities, usePolicyScope, usePolicyUploadSettings,
   type PolicyMembershipRole, type PolicyReviewAuthorityRole, type PolicyVersion,
 } from '../../hooks/use-policies';
 import { Link, useLocation } from 'wouter';
@@ -34,12 +34,10 @@ export function HrPolicyLibraryIndexPage() {
         if (!entry.draft || entry.draft.version < p.version) entry.draft = p;
       }
     }
-    return Array.from(map.values()).map(g => ({
-      id: (g.current || g.draft)!.policyId,
-      currentVersion: g.current,
-      draftVersion: g.draft,
-      displayVersion: g.draft || g.current!
-    }));
+    return Array.from(map.values()).map(g => {
+      const draft = g.draft && (!g.current || g.draft.version > g.current.version) ? g.draft : undefined;
+      return { id: (g.current || draft)!.policyId, currentVersion: g.current, draftVersion: draft, displayVersion: draft || g.current! };
+    });
   }, [policies]);
 
   return (
@@ -265,6 +263,7 @@ function formatDate(value: string) {
 }
 
 function CreatePolicyDialog({ membershipRole }: { membershipRole: PolicyMembershipRole }) {
+  const approvalSettings = usePolicyUploadSettings(true);
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [sourceReference, setSourceReference] = useState('');
@@ -288,11 +287,12 @@ function CreatePolicyDialog({ membershipRole }: { membershipRole: PolicyMembersh
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (importBusy || importBlocked || isPending) return;
+    if (importBusy || importBlocked || isPending || importId && (!approvalSettings.data || approvalSettings.isError)) return;
     createPolicy(
       { 
         title, 
         importId,
+        expectedUploadSettingsRevision: importId ? approvalSettings.data?.revision : undefined,
         sourceReference,
         text,
         audience: [...new Set([...audience, membershipRole])],
@@ -334,28 +334,29 @@ function CreatePolicyDialog({ membershipRole }: { membershipRole: PolicyMembersh
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 animate-in zoom-in-95 my-auto max-h-[90vh] flex flex-col">
-            <h2 className="font-bold text-[var(--text-xl)] mb-1">Create Policy Source</h2>
-            <p className="text-[var(--text-sm)] text-[var(--text-muted)] mb-6">Initialize a new versioned HR policy.</p>
+            <h2 className="font-bold text-[var(--text-xl)] mb-1">Add policy document</h2>
+            <p className="text-[var(--text-sm)] text-[var(--text-muted)] mb-6">{approvalSettings.isLoading ? 'Loading client policy settings…' : approvalSettings.isError ? 'Policy upload settings are unavailable.' : approvalSettings.data?.requiresSeparateReview ? 'This client requires a separate review of uploaded policies.' : 'Your authorized upload approves this policy. Its uploader and version are recorded.'}</p>
+            {approvalSettings.isError && <p role="alert" className="text-sm">{approvalSettings.error.message}</p>}
             
             <form onSubmit={handleSubmit} className="flex flex-col gap-4 overflow-y-auto flex-1 pr-2">
               <PolicyDocumentImport
                 onBusy={setImportBusy}
-                onExtracted={(extracted, id) => { setText(extracted); setImportId(id); setImportBlocked(false); }}
+                onExtracted={(extracted, id, filename) => { setText(extracted); setImportId(id); setImportBlocked(false); if (!title.trim()) setTitle(filename.replace(/\.(pdf|docx|doc)$/i, '')); if (!sourceReference.trim()) setSourceReference(filename); }}
                 onClear={() => { setText(''); setImportId(undefined); setImportBlocked(false); }}
                 onBlocked={() => { setText(''); setImportId(undefined); setImportBlocked(true); }}
               />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-[var(--text-sm)] font-semibold mb-1.5">Policy Title</label>
                   <input type="text" value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Global Leave Policy" className="w-full h-10 px-3 rounded-lg border focus:border-[var(--primary)] outline-none" />
                 </div>
                 <div>
-                  <label className="block text-[var(--text-sm)] font-semibold mb-1.5">Source Reference ID</label>
+                  <label className="block text-[var(--text-sm)] font-semibold mb-1.5">Document reference</label>
                   <input type="text" value={sourceReference} onChange={e => setSourceReference(e.target.value)} required placeholder="e.g. HR-POL-001" className="w-full h-10 px-3 rounded-lg border focus:border-[var(--primary)] outline-none font-mono text-sm" />
                 </div>
               </div>
               
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
                   <label className="block text-[var(--text-sm)] font-semibold mb-1.5">Effective From</label>
                   <input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} required className="w-full h-10 px-3 rounded-lg border focus:border-[var(--primary)] outline-none" />
@@ -389,16 +390,16 @@ function CreatePolicyDialog({ membershipRole }: { membershipRole: PolicyMembersh
                  </div>
                </fieldset>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[var(--text-sm)] font-semibold mb-1.5">Review Authority Role</label>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {(!importId || approvalSettings.data?.requiresSeparateReview) && <div>
+                  <label className="block text-[var(--text-sm)] font-semibold mb-1.5">Review category</label>
                   <select value={reviewAuthorityRole} onChange={e => setReviewAuthorityRole(e.target.value as PolicyReviewAuthorityRole)} className="w-full h-10 px-3 rounded-lg border focus:border-[var(--primary)] outline-none">
                     <option value="hr-compliance">HR Compliance</option>
                     <option value="legal">Legal</option>
                     <option value="occupational-health">Occupational Health</option>
                     <option value="payroll">Payroll</option>
                   </select>
-                </div>
+                </div>}
                 <fieldset>
                   <label className="block text-[var(--text-sm)] font-semibold mb-1.5">Visibility Audience</label>
                   <div className="flex flex-wrap gap-3 min-h-10 items-center rounded-lg border px-3">
@@ -424,19 +425,20 @@ function CreatePolicyDialog({ membershipRole }: { membershipRole: PolicyMembersh
                 <label className="block text-[var(--text-sm)] font-semibold mb-1.5">Initial Curated Text</label>
                 <textarea 
                   value={text} 
+                  readOnly={Boolean(importId && !approvalSettings.data?.requiresSeparateReview)}
                   onChange={e => setText(e.target.value)} 
                   required 
                   maxLength={40000}
-                  placeholder="Paste policy text or correct the extracted text. This remains an unapproved draft."
+                  placeholder="Choose a policy document, or enter text to create a draft."
                   className="w-full h-40 p-3 rounded-lg border focus:border-[var(--primary)] outline-none resize-none font-serif"
                 />
               </div>
 
               <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
                 <button type="button" disabled={importBusy || isPending} onClick={() => { setOpen(false); setImportId(undefined); setText(''); setImportBlocked(false); }} className="px-4 py-2 rounded-lg font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
-                 <button type="submit" disabled={isPending || importBusy || importBlocked || !title || !sourceReference || !text || audience.length === 0} className="px-4 py-2 rounded-lg font-semibold bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] disabled:opacity-50 flex items-center gap-2">
+                 <button type="submit" disabled={isPending || importBusy || importBlocked || !title || !sourceReference || !text || audience.length === 0 || Boolean(importId && (!approvalSettings.data || approvalSettings.isError))} className="px-4 py-2 rounded-lg font-semibold bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] disabled:opacity-50 flex items-center gap-2">
                   {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Create Policy Draft
+                  {importId ? approvalSettings.data?.requiresSeparateReview ? 'Upload for review' : 'Upload policy' : 'Save policy draft'}
                 </button>
               </div>
             </form>

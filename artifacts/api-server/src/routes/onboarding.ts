@@ -163,6 +163,7 @@ import {
   simulateVendorEmail,
 } from "../lib/onboarding/email-watch";
 import { runInboundEmailTick } from "../lib/onboarding/inbound-email";
+import { runOffboardingExchangeTick } from "../lib/offboarding/exchange-runtime";
 import { applicableSystems, systemDef, WATCHED_SYSTEMS } from "../lib/onboarding/external-systems";
 import { normalizePreference, shouldAuthorizeCandidateEmail, candidateEmailFailureFeedback } from "../lib/onboarding/channel-routing";
 import {
@@ -5297,6 +5298,7 @@ const watcherTick = async (req: Request, res: Response) => {
     runSystemWatcherTick(),
     runEmailWatchTick(),
     runInboundEmailTick(),
+    runOffboardingExchangeTick(),
     runApproverInboxTick(),
     runScenarioFileMaintenance(),
     runCandidateAccessCleanup(),

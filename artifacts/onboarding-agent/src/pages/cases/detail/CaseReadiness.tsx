@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useUpdateOnboardingChecklistItem,
@@ -201,7 +202,7 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
 
   return (
     <div className="mb-10">
-      <h2 className="text-[var(--text-lg)] font-bold text-[var(--text-primary)] mb-4">Case Readiness</h2>
+      <h2 className="text-[var(--text-lg)] font-bold text-[var(--text-primary)] mb-4">Onboarding requirements</h2>
       {!c.controllerRetired && (!canEditProfile || !canEditNotes || !canEditSensitiveEvidence) && (
         <div className="mb-4">
           <RestrictedActionNotice>
@@ -271,11 +272,8 @@ export function CaseReadiness({ c, setTab }: { c: OnbCase, setTab: (t: string) =
         </div>
       )}
       {!isLoadingGovernanceImpact && governanceImpact?.snapshot === null && (
-        <div data-testid="governance-legacy-snapshot" className="mb-4 rounded-[var(--radius-md)] border border-[var(--status-amber)]/30 bg-[var(--status-amber-bg)] p-3 text-[var(--text-sm)] text-[var(--status-amber-fg)]">
-          <div className="flex gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><div>
-            <p className="font-bold">Governance adoption needs review</p>
-            <p className="mt-1">This historical case has no governance adoption snapshot. An explicit audited rebase is required before a sensitive future live action; existing effects are not replayed.</p>
-          </div></div>
+        <div data-testid="governance-legacy-snapshot" className="mb-4 text-sm">
+          <Link href="/client-setup" className="inline-flex min-h-10 items-center text-[var(--primary)]">Client policy configuration</Link>
         </div>
       )}
       {!isLoadingGovernanceImpact && governanceImpact?.impacts.length ? (

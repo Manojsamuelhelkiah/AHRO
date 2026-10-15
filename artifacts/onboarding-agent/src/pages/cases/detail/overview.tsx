@@ -15,10 +15,11 @@ import {
 } from '../../../lib/approval-actions';
 import { CasePrivacyControls } from './case-privacy-controls';
 import { RestrictedActionNotice, useCaseAccess } from './case-access';
-import { caseOwnerOf, isFictionalOfflineExample, workstreamPresentation } from '../case-presentation';
+import { caseOwnerOf, caseTypeOf, isFictionalOfflineExample, workstreamPresentation } from '../case-presentation';
 
 export function OverviewTab({ c, events, docs, comms, approvals, pendingApprovals, setTab, caseId }: any) {
   const access = useCaseAccess();
+  const showOnboardingReadiness = caseTypeOf(c) === 'Onboarding' && !isOfflineDemoSample(c) && !c.controllerRetired;
   if (c.syntheticJourney) return <div className="min-w-0 space-y-6 pb-12">
     <SyntheticJourneyActions journey={c.syntheticJourney} />
     <SyntheticJourneyStages journey={c.syntheticJourney} />
@@ -35,10 +36,10 @@ export function OverviewTab({ c, events, docs, comms, approvals, pendingApproval
   return (
     <div className="flex flex-col xl:flex-row gap-8 pb-12">
       <div className="flex-1 min-w-0">
-        <ConnectedReadinessSla caseId={caseId} />
-        {access?.access.profileRead
+        {showOnboardingReadiness && access?.access.profileRead && <ConnectedReadinessSla caseId={caseId} />}
+        {showOnboardingReadiness && (access?.access.profileRead
           ? <CaseReadiness c={c} setTab={setTab} />
-          : <RestrictedActionNotice>Case profile and readiness details are restricted by your current permissions.</RestrictedActionNotice>}
+          : <RestrictedActionNotice>Onboarding requirements are restricted by your current permissions.</RestrictedActionNotice>)}
         <NextActions c={c} pendingApprovals={pendingApprovals} setTab={setTab} />
         {access?.access.notesRead
           ? <RecentActivitySummary events={events} />
@@ -69,9 +70,9 @@ function OfflinePrivacyRestricted() {
         <ShieldCheck className="w-4 h-4 text-[var(--text-muted)]" />
         <h3 className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Privacy & Retention</h3>
       </div>
-      <p className="text-sm font-medium text-[var(--text-normal)]">Current operational authorization required</p>
+      <p className="text-sm font-medium text-[var(--text-normal)]">Privacy changes unavailable</p>
       <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-        This historical test record is read-only and permanently non-operational. Sensitive retention and existing holds still apply.
+        Privacy changes are unavailable for this read-only record. Existing retention rules and holds still apply.
       </p>
     </div>
   );

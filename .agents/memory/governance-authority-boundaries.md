@@ -3,11 +3,11 @@ name: Governance authority boundaries
 description: Effective policy-management permission and explicit version-bound review govern adoption; provisional policies cannot release live effects.
 ---
 
-Policy review requires current effective policy-management permission and explicit human review. Tenant labels, case assignments and reviewer routing labels alone do not grant permission or establish professional qualifications.
+Policy approval requires current effective policy-management permission and a recorded human action. By default, uploading a client policy is the authorized uploader's approval action. Separate review applies only when explicitly required in Client Setup, not as a universal extra step. Tenant labels, case assignments and reviewer routing labels alone do not grant permission or establish professional qualifications.
 
-**Why:** The user retired the separate specialist-verification mechanism without removing ordinary access governance, separation of duties or explicit policy approval.
+**Why:** The user explicitly stated that permission to upload a client policy means the upload is approved, and repeated this to reject an extra approval process. The separate specialist-verification mechanism is also retired; ordinary scoped access governance remains.
 
-**How to apply:** Reuse the checklist/context-policy engine and live effective-access evaluator; do not create another specialist registry. Keep policy approval, provider configuration and real source evidence independent. Never infer executable scope from editable prose, workflow labels or historical specialist receipts.
+**How to apply:** Restrict client policy uploads to users authorized to publish policies, and bind the approval record to the actual uploader, immutable document/version and upload time. File safety/extraction checks remain technical checks, not a second human approval. Reuse the existing policy engine and live access evaluator; do not create another specialist registry. Keep provider configuration and real source evidence independent. Never infer executable scope from editable prose, workflow labels or historical specialist receipts.
 
 Active cases must retain their adopted revisions; publishing a replacement is not an implicit case rebase.
 

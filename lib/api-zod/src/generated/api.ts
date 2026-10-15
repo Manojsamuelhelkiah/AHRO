@@ -8,6 +8,586 @@
 import * as zod from 'zod';
 
 
+export const UpdateOffboardingEmailIndicatorsParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const UpdateOffboardingEmailIndicatorsBody = zod.object({
+  "expectedVersion": zod.number(),
+  "emailConsent": zod.boolean(),
+  "emailVerified": zod.boolean()
+})
+
+export const UpdateOffboardingEmailIndicatorsResponse = zod.object({
+  "caseId": zod.number(),
+  "communicationChecks": zod.object({
+  "emailConsent": zod.boolean(),
+  "emailVerified": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "basis": zod.enum(['client-declared']),
+  "changedBy": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "reviewReference": zod.string().nullable()
+}),
+  "version": zod.number(),
+  "generation": zod.number(),
+  "clock": zod.string(),
+  "blockers": zod.array(zod.string()),
+  "tasks": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "revision": zod.number(),
+  "owner": zod.string().nullable(),
+  "dueAt": zod.string(),
+  "notBeforeAt": zod.string().nullable(),
+  "prerequisites": zod.array(zod.string()),
+  "expected": zod.array(zod.string()),
+  "confirmed": zod.array(zod.string()),
+  "outstanding": zod.array(zod.string()),
+  "handling": zod.object({
+  "sharedAccountOwner": zod.string().optional(),
+  "ktRequired": zod.boolean().optional(),
+  "ktOwner": zod.string().optional(),
+  "ktExpiresAt": zod.string().optional(),
+  "ktAuthorizationReference": zod.string().optional()
+}).optional(),
+  "status": zod.string(),
+  "evidence": zod.array(zod.record(zod.string(), zod.unknown())),
+  "exception": zod.object({
+  "revision": zod.number(),
+  "sourceId": zod.string(),
+  "explanation": zod.string(),
+  "disposition": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable()
+}).nullable()
+})),
+  "enrollment": zod.object({
+  "enabled": zod.boolean(),
+  "revision": zod.number(),
+  "generation": zod.number(),
+  "operator": zod.string().nullable(),
+  "agentId": zod.string().nullable(),
+  "mailbox": zod.string().nullable(),
+  "approvedAt": zod.string().nullable(),
+  "recipients": zod.array(zod.object({
+  "taskId": zod.string(),
+  "memberId": zod.string(),
+  "address": zod.string(),
+  "persona": zod.string(),
+  "consentReference": zod.string().optional(),
+  "escalationMemberId": zod.string(),
+  "escalationAddress": zod.string(),
+  "escalationConsentReference": zod.string().optional()
+}))
+}),
+  "exchanges": zod.array(zod.object({
+  "id": zod.string(),
+  "taskId": zod.string(),
+  "direction": zod.string(),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "recipient": zod.string(),
+  "memberId": zod.string(),
+  "operator": zod.string(),
+  "agentId": zod.string(),
+  "persona": zod.string(),
+  "mailbox": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "reference": zod.string(),
+  "createdAt": zod.string(),
+  "providerMessageId": zod.string().nullish(),
+  "providerThreadId": zod.string().nullish(),
+  "sourceTransportVerified": zod.number(),
+  "applied": zod.number(),
+  "observation": zod.record(zod.string(), zod.unknown()).nullish()
+})),
+  "closureAvailable": zod.literal(false)
+}).nullable()
+
+
+export const ReviewOffboardingEmailIndicatorsParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const ReviewOffboardingEmailIndicatorsBody = zod.object({
+  "expectedVersion": zod.number(),
+  "consentReference": zod.string(),
+  "emailReference": zod.string()
+})
+
+export const ReviewOffboardingEmailIndicatorsResponse = zod.object({
+  "caseId": zod.number(),
+  "communicationChecks": zod.object({
+  "emailConsent": zod.boolean(),
+  "emailVerified": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "basis": zod.enum(['client-declared']),
+  "changedBy": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "reviewReference": zod.string().nullable()
+}),
+  "version": zod.number(),
+  "generation": zod.number(),
+  "clock": zod.string(),
+  "blockers": zod.array(zod.string()),
+  "tasks": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "revision": zod.number(),
+  "owner": zod.string().nullable(),
+  "dueAt": zod.string(),
+  "notBeforeAt": zod.string().nullable(),
+  "prerequisites": zod.array(zod.string()),
+  "expected": zod.array(zod.string()),
+  "confirmed": zod.array(zod.string()),
+  "outstanding": zod.array(zod.string()),
+  "handling": zod.object({
+  "sharedAccountOwner": zod.string().optional(),
+  "ktRequired": zod.boolean().optional(),
+  "ktOwner": zod.string().optional(),
+  "ktExpiresAt": zod.string().optional(),
+  "ktAuthorizationReference": zod.string().optional()
+}).optional(),
+  "status": zod.string(),
+  "evidence": zod.array(zod.record(zod.string(), zod.unknown())),
+  "exception": zod.object({
+  "revision": zod.number(),
+  "sourceId": zod.string(),
+  "explanation": zod.string(),
+  "disposition": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable()
+}).nullable()
+})),
+  "enrollment": zod.object({
+  "enabled": zod.boolean(),
+  "revision": zod.number(),
+  "generation": zod.number(),
+  "operator": zod.string().nullable(),
+  "agentId": zod.string().nullable(),
+  "mailbox": zod.string().nullable(),
+  "approvedAt": zod.string().nullable(),
+  "recipients": zod.array(zod.object({
+  "taskId": zod.string(),
+  "memberId": zod.string(),
+  "address": zod.string(),
+  "persona": zod.string(),
+  "consentReference": zod.string().optional(),
+  "escalationMemberId": zod.string(),
+  "escalationAddress": zod.string(),
+  "escalationConsentReference": zod.string().optional()
+}))
+}),
+  "exchanges": zod.array(zod.object({
+  "id": zod.string(),
+  "taskId": zod.string(),
+  "direction": zod.string(),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "recipient": zod.string(),
+  "memberId": zod.string(),
+  "operator": zod.string(),
+  "agentId": zod.string(),
+  "persona": zod.string(),
+  "mailbox": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "reference": zod.string(),
+  "createdAt": zod.string(),
+  "providerMessageId": zod.string().nullish(),
+  "providerThreadId": zod.string().nullish(),
+  "sourceTransportVerified": zod.number(),
+  "applied": zod.number(),
+  "observation": zod.record(zod.string(), zod.unknown()).nullish()
+})),
+  "closureAvailable": zod.literal(false)
+}).nullable()
+
+
+export const SaveOffboardingGmailDefaultsBody = zod.object({
+  "expectedRevision": zod.number(),
+  "agentId": zod.string(),
+  "recipients": zod.array(zod.object({
+  "taskId": zod.string(),
+  "memberId": zod.string(),
+  "address": zod.string(),
+  "persona": zod.string(),
+  "consentReference": zod.string().optional(),
+  "escalationMemberId": zod.string(),
+  "escalationAddress": zod.string(),
+  "escalationConsentReference": zod.string().optional()
+}))
+})
+
+export const SaveOffboardingGmailDefaultsResponse = zod.object({
+  "revision": zod.number(),
+  "agentId": zod.string(),
+  "recipients": zod.array(zod.object({
+  "taskId": zod.string(),
+  "memberId": zod.string(),
+  "address": zod.string(),
+  "persona": zod.string(),
+  "consentReference": zod.string().optional(),
+  "escalationMemberId": zod.string(),
+  "escalationAddress": zod.string(),
+  "escalationConsentReference": zod.string().optional()
+}))
+})
+
+
+export const GetOffboardingExchangeSetupQueryParams = zod.object({
+  "caseId": zod.coerce.number().optional()
+})
+
+export const GetOffboardingExchangeSetupResponse = zod.object({
+  "defaults": zod.object({
+  "revision": zod.number(),
+  "agentId": zod.string(),
+  "recipients": zod.array(zod.object({
+  "taskId": zod.string(),
+  "memberId": zod.string(),
+  "address": zod.string(),
+  "persona": zod.string(),
+  "consentReference": zod.string().optional(),
+  "escalationMemberId": zod.string(),
+  "escalationAddress": zod.string(),
+  "escalationConsentReference": zod.string().optional()
+}))
+}),
+  "cases": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})),
+  "agents": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string()
+})),
+  "members": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "addresses": zod.array(zod.string())
+}))
+})
+
+
+export const ProvisionOffboardingExchangesBody = zod.object({
+  "confirmAddThree": zod.literal(true)
+})
+
+export const ProvisionOffboardingExchangesResponse = zod.object({
+  "caseIds": zod.array(zod.number()),
+  "sent": zod.number()
+})
+
+
+export const GetOffboardingExchangesParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const GetOffboardingExchangesResponse = zod.object({
+  "caseId": zod.number(),
+  "communicationChecks": zod.object({
+  "emailConsent": zod.boolean(),
+  "emailVerified": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "basis": zod.enum(['client-declared']),
+  "changedBy": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "reviewReference": zod.string().nullable()
+}),
+  "version": zod.number(),
+  "generation": zod.number(),
+  "clock": zod.string(),
+  "blockers": zod.array(zod.string()),
+  "tasks": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "revision": zod.number(),
+  "owner": zod.string().nullable(),
+  "dueAt": zod.string(),
+  "notBeforeAt": zod.string().nullable(),
+  "prerequisites": zod.array(zod.string()),
+  "expected": zod.array(zod.string()),
+  "confirmed": zod.array(zod.string()),
+  "outstanding": zod.array(zod.string()),
+  "handling": zod.object({
+  "sharedAccountOwner": zod.string().optional(),
+  "ktRequired": zod.boolean().optional(),
+  "ktOwner": zod.string().optional(),
+  "ktExpiresAt": zod.string().optional(),
+  "ktAuthorizationReference": zod.string().optional()
+}).optional(),
+  "status": zod.string(),
+  "evidence": zod.array(zod.record(zod.string(), zod.unknown())),
+  "exception": zod.object({
+  "revision": zod.number(),
+  "sourceId": zod.string(),
+  "explanation": zod.string(),
+  "disposition": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable()
+}).nullable()
+})),
+  "enrollment": zod.object({
+  "enabled": zod.boolean(),
+  "revision": zod.number(),
+  "generation": zod.number(),
+  "operator": zod.string().nullable(),
+  "agentId": zod.string().nullable(),
+  "mailbox": zod.string().nullable(),
+  "approvedAt": zod.string().nullable(),
+  "recipients": zod.array(zod.object({
+  "taskId": zod.string(),
+  "memberId": zod.string(),
+  "address": zod.string(),
+  "persona": zod.string(),
+  "consentReference": zod.string().optional(),
+  "escalationMemberId": zod.string(),
+  "escalationAddress": zod.string(),
+  "escalationConsentReference": zod.string().optional()
+}))
+}),
+  "exchanges": zod.array(zod.object({
+  "id": zod.string(),
+  "taskId": zod.string(),
+  "direction": zod.string(),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "recipient": zod.string(),
+  "memberId": zod.string(),
+  "operator": zod.string(),
+  "agentId": zod.string(),
+  "persona": zod.string(),
+  "mailbox": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "reference": zod.string(),
+  "createdAt": zod.string(),
+  "providerMessageId": zod.string().nullish(),
+  "providerThreadId": zod.string().nullish(),
+  "sourceTransportVerified": zod.number(),
+  "applied": zod.number(),
+  "observation": zod.record(zod.string(), zod.unknown()).nullish()
+})),
+  "closureAvailable": zod.literal(false)
+}).nullable()
+
+
+export const EnrollOffboardingExchangeParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const EnrollOffboardingExchangeBody = zod.object({
+  "expectedRevision": zod.number(),
+  "enabled": zod.boolean(),
+  "agentId": zod.string().optional(),
+  "confirmCommunicationOnly": zod.literal(true),
+  "recipients": zod.array(zod.object({
+  "taskId": zod.string(),
+  "memberId": zod.string(),
+  "address": zod.string(),
+  "persona": zod.string(),
+  "consentReference": zod.string().optional(),
+  "escalationMemberId": zod.string(),
+  "escalationAddress": zod.string(),
+  "escalationConsentReference": zod.string().optional()
+}))
+})
+
+export const EnrollOffboardingExchangeResponse = zod.object({
+  "caseId": zod.number(),
+  "communicationChecks": zod.object({
+  "emailConsent": zod.boolean(),
+  "emailVerified": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "basis": zod.enum(['client-declared']),
+  "changedBy": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "reviewReference": zod.string().nullable()
+}),
+  "version": zod.number(),
+  "generation": zod.number(),
+  "clock": zod.string(),
+  "blockers": zod.array(zod.string()),
+  "tasks": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "revision": zod.number(),
+  "owner": zod.string().nullable(),
+  "dueAt": zod.string(),
+  "notBeforeAt": zod.string().nullable(),
+  "prerequisites": zod.array(zod.string()),
+  "expected": zod.array(zod.string()),
+  "confirmed": zod.array(zod.string()),
+  "outstanding": zod.array(zod.string()),
+  "handling": zod.object({
+  "sharedAccountOwner": zod.string().optional(),
+  "ktRequired": zod.boolean().optional(),
+  "ktOwner": zod.string().optional(),
+  "ktExpiresAt": zod.string().optional(),
+  "ktAuthorizationReference": zod.string().optional()
+}).optional(),
+  "status": zod.string(),
+  "evidence": zod.array(zod.record(zod.string(), zod.unknown())),
+  "exception": zod.object({
+  "revision": zod.number(),
+  "sourceId": zod.string(),
+  "explanation": zod.string(),
+  "disposition": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable()
+}).nullable()
+})),
+  "enrollment": zod.object({
+  "enabled": zod.boolean(),
+  "revision": zod.number(),
+  "generation": zod.number(),
+  "operator": zod.string().nullable(),
+  "agentId": zod.string().nullable(),
+  "mailbox": zod.string().nullable(),
+  "approvedAt": zod.string().nullable(),
+  "recipients": zod.array(zod.object({
+  "taskId": zod.string(),
+  "memberId": zod.string(),
+  "address": zod.string(),
+  "persona": zod.string(),
+  "consentReference": zod.string().optional(),
+  "escalationMemberId": zod.string(),
+  "escalationAddress": zod.string(),
+  "escalationConsentReference": zod.string().optional()
+}))
+}),
+  "exchanges": zod.array(zod.object({
+  "id": zod.string(),
+  "taskId": zod.string(),
+  "direction": zod.string(),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "recipient": zod.string(),
+  "memberId": zod.string(),
+  "operator": zod.string(),
+  "agentId": zod.string(),
+  "persona": zod.string(),
+  "mailbox": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "reference": zod.string(),
+  "createdAt": zod.string(),
+  "providerMessageId": zod.string().nullish(),
+  "providerThreadId": zod.string().nullish(),
+  "sourceTransportVerified": zod.number(),
+  "applied": zod.number(),
+  "observation": zod.record(zod.string(), zod.unknown()).nullish()
+})),
+  "closureAvailable": zod.literal(false)
+}).nullable()
+
+
+export const ActOffboardingExchangeParams = zod.object({
+  "caseId": zod.coerce.number()
+})
+
+export const ActOffboardingExchangeBody = zod.object({
+  "expectedVersion": zod.number(),
+  "action": zod.enum(['request', 'advance-clock', 'exception-review', 'inspect-interface', 'source-confirm']),
+  "taskId": zod.string().optional(),
+  "clock": zod.string().optional(),
+  "exceptionRevision": zod.number().optional(),
+  "taskRevision": zod.number().optional(),
+  "evidenceReference": zod.string().optional(),
+  "disposition": zod.string().optional(),
+  "confirmed": zod.boolean().optional(),
+  "sourceReference": zod.string().optional(),
+  "portions": zod.array(zod.string()).optional(),
+  "handlingStatement": zod.string().optional()
+})
+
+export const ActOffboardingExchangeResponse = zod.object({
+  "caseId": zod.number(),
+  "communicationChecks": zod.object({
+  "emailConsent": zod.boolean(),
+  "emailVerified": zod.boolean(),
+  "reviewRequired": zod.boolean(),
+  "basis": zod.enum(['client-declared']),
+  "changedBy": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "reviewReference": zod.string().nullable()
+}),
+  "version": zod.number(),
+  "generation": zod.number(),
+  "clock": zod.string(),
+  "blockers": zod.array(zod.string()),
+  "tasks": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "revision": zod.number(),
+  "owner": zod.string().nullable(),
+  "dueAt": zod.string(),
+  "notBeforeAt": zod.string().nullable(),
+  "prerequisites": zod.array(zod.string()),
+  "expected": zod.array(zod.string()),
+  "confirmed": zod.array(zod.string()),
+  "outstanding": zod.array(zod.string()),
+  "handling": zod.object({
+  "sharedAccountOwner": zod.string().optional(),
+  "ktRequired": zod.boolean().optional(),
+  "ktOwner": zod.string().optional(),
+  "ktExpiresAt": zod.string().optional(),
+  "ktAuthorizationReference": zod.string().optional()
+}).optional(),
+  "status": zod.string(),
+  "evidence": zod.array(zod.record(zod.string(), zod.unknown())),
+  "exception": zod.object({
+  "revision": zod.number(),
+  "sourceId": zod.string(),
+  "explanation": zod.string(),
+  "disposition": zod.string().nullable(),
+  "reviewedBy": zod.string().nullable()
+}).nullable()
+})),
+  "enrollment": zod.object({
+  "enabled": zod.boolean(),
+  "revision": zod.number(),
+  "generation": zod.number(),
+  "operator": zod.string().nullable(),
+  "agentId": zod.string().nullable(),
+  "mailbox": zod.string().nullable(),
+  "approvedAt": zod.string().nullable(),
+  "recipients": zod.array(zod.object({
+  "taskId": zod.string(),
+  "memberId": zod.string(),
+  "address": zod.string(),
+  "persona": zod.string(),
+  "consentReference": zod.string().optional(),
+  "escalationMemberId": zod.string(),
+  "escalationAddress": zod.string(),
+  "escalationConsentReference": zod.string().optional()
+}))
+}),
+  "exchanges": zod.array(zod.object({
+  "id": zod.string(),
+  "taskId": zod.string(),
+  "direction": zod.string(),
+  "kind": zod.string(),
+  "status": zod.string(),
+  "recipient": zod.string(),
+  "memberId": zod.string(),
+  "operator": zod.string(),
+  "agentId": zod.string(),
+  "persona": zod.string(),
+  "mailbox": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "reference": zod.string(),
+  "createdAt": zod.string(),
+  "providerMessageId": zod.string().nullish(),
+  "providerThreadId": zod.string().nullish(),
+  "sourceTransportVerified": zod.number(),
+  "applied": zod.number(),
+  "observation": zod.record(zod.string(), zod.unknown()).nullish()
+})),
+  "closureAvailable": zod.literal(false)
+}).nullable()
+
+
 
 
 
@@ -1400,6 +1980,8 @@ export const ResolveHroEmailTriageResponse = zod.object({
 
 
 export const ListSeparationCasesResponseItem = zod.object({
+  "fictionalOfflineIdentity": zod.boolean().optional(),
+  "offlineSample": zod.boolean().optional(),
   "originalIntent": zod.string().optional().describe('Fixed originating request label, or Not recorded when creation history is unavailable. No source narrative or exit reason.'),
   "id": zod.number(),
   "version": zod.number(),
@@ -1485,6 +2067,8 @@ export const GetSeparationCaseParams = zod.object({
 })
 
 export const GetSeparationCaseResponse = zod.object({
+  "fictionalOfflineIdentity": zod.boolean().optional(),
+  "offlineSample": zod.boolean().optional(),
   "originalIntent": zod.string().optional().describe('Fixed originating request label, or Not recorded when creation history is unavailable. No source narrative or exit reason.'),
   "id": zod.number(),
   "version": zod.number(),
@@ -3158,6 +3742,7 @@ export const createHrPolicyBodyApplicabilityOneLocationMax = 160;
 
 export const CreateHrPolicyBody = zod.object({
   "importId": zod.string().optional(),
+  "expectedUploadSettingsRevision": zod.number().optional().describe('Required when attaching a newly uploaded document; fences changes to this client\'s review process.'),
   "title": zod.string().min(1).max(createHrPolicyBodyTitleMax),
   "sourceReference": zod.string().min(1).max(createHrPolicyBodySourceReferenceMax),
   "text": zod.string().min(1).max(createHrPolicyBodyTextMax),
@@ -3226,6 +3811,42 @@ export const CreateHrPolicyResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
+})
+
+
+export const GetPrivacyEnforcementResponse = zod.object({
+  "mode": zod.enum(['deferred', 'active']),
+  "revision": zod.number(),
+  "canManage": zod.boolean()
+})
+
+
+export const UpdatePrivacyEnforcementBody = zod.object({
+  "mode": zod.enum(['deferred', 'active']),
+  "expectedRevision": zod.number()
+})
+
+export const UpdatePrivacyEnforcementResponse = zod.object({
+  "mode": zod.enum(['deferred', 'active']),
+  "revision": zod.number(),
+  "canManage": zod.boolean()
+})
+
+
+export const GetPolicyUploadApprovalSettingsResponse = zod.object({
+  "revision": zod.number(),
+  "requiresSeparateReview": zod.boolean()
+})
+
+
+export const SavePolicyUploadApprovalSettingsBody = zod.object({
+  "expectedRevision": zod.number(),
+  "requiresSeparateReview": zod.boolean()
+})
+
+export const SavePolicyUploadApprovalSettingsResponse = zod.object({
+  "revision": zod.number(),
+  "requiresSeparateReview": zod.boolean()
 })
 
 

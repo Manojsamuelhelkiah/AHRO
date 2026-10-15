@@ -41,7 +41,7 @@ separation actions, messages, entitlements or operational authority.
 
 ## Runtime and policy boundaries
 
-- All available separation execution is **manual, source-attested evidence**.
+- Real separation execution is **manual, source-attested evidence**.
   Existing connector adapters support onboarding operations, not separation
   revocation, asset return, statutory computation or client communications.
   No separation operation is advertised as automatically supported. If one is
@@ -55,3 +55,76 @@ separation actions, messages, entitlements or operational authority.
   separately Payroll-field/Finance-or-Payroll-authorized and omits references.
 - Legacy offboarding labels remain review-only. There is no blanket migration,
   deletion or history replay.
+
+## Case-bound access and equipment conversations
+
+The additive resignation exchange journey admits only its exact newly created
+records in the verified Demo organization. Display uses S followed immediately
+by the numeric case ID; neither that label nor a persona is an authorization
+signal. Provisioning, viewing, enrollment and estate configuration send nothing.
+The three records start held and inherit the existing screening, classification,
+approved-policy, permission, confidentiality and final-closure boundaries.
+
+Only Gmail communication may be enabled, by a named accountable operator using
+their authenticated account. Each task needs a unique current member whose
+email is explicitly allowlisted and there is a separate enrolled escalation
+member/address. Consent and email verification are client-declared Yes by default,
+shown as two small case indicators. Unchecking either pauses outgoing email;
+rechecking alone cannot bypass version-bound manual review. These declarations
+are not independent transport proof or authority to confirm work. The registered agent needs
+delegated private-case reading and conversation dispatch intersected with the
+initiating operator's current permissions. No grants or identities are created
+by enrollment. Shared Demo principals cannot enable communication.
+
+Entra and ServiceNow expose bounded fictional operation/status contracts only.
+Their correlated observations are stored separately from Gmail send acceptance,
+signed inbound receipt, owner acknowledgment and authenticated source
+attestation. Neither mock results nor real email establish real account
+disablement, equipment movement, workforce outcomes or final exit closure.
+Production separation task-evidence rejects these registered fictional records.
+
+Email input is untrusted. Completion requires a full, aligned raw DKIM signature,
+exact current task/enrollment/generation correlation, unique verified owner
+binding, live scoped permissions, fresh policy/prerequisites and applicable date
+gates. Generic acknowledgments, unsigned or forwarded statements, model output,
+stale mail and display labels never authorize completion. An explicit reply can
+confirm only checked portions; unresolved items remain pending or require
+version-bound authenticated exception review. Authenticated source handoff is
+also available for the enrolled task owner.
+
+Outbound content and opaque references are persisted before journal claiming.
+Non-idempotent ambiguous sends are never retried: exact signed Gmail sent-message
+inspection can reconcile provider acceptance without implying delivery or read
+acknowledgment. Provider message IDs suppress duplicates and self-send echoes;
+offboarding references are reserved against onboarding/shared-mailbox intake.
+Awaited heartbeat processing handles replies, follow-ups and escalation. The
+persisted operational clock cannot advance real email reminder time.
+
+### Verification and release prerequisites
+
+- Contract tests cover all three adapter scenarios, date boundaries, exact
+  portions, contradictory/quoted statements, bounded interpretation, injection,
+  revision contracts and raw DKIM/encoded-body verification.
+- Existing separation regressions cover the original lifecycle and closure
+  denials; full workspace typechecking and ledger-led schema reconciliation
+  remain required.
+- An isolated, ledger-migrated Gmail-flow regression covers signed source
+  replies, partial and exceptional completion, duplicated and forged messages,
+  unbound responders, membership revocation, explicit clock reconciliation,
+  stale enrollment drafts, quarantine and non-idempotent send recovery.
+- The provider-denied authenticated browser regression exercises all three
+  cases, persisted interface results, paused enrollment, scoped drafts and
+  layouts at 390, 768 and 1280 pixels. This does not attest live channel health.
+- The controlled live round-trip requires independently approved case enrollment
+  by the actual named operator and explicit recipient bindings. Routine email
+  consent/verification follows the client-declared default, not a per-case form.
+  No channel approval has been
+  inferred from the task description, fictional records or mailbox connection.
+  Record only actual Gmail acceptance/receipt; never substitute fake provider
+  receipts or claim live Entra/ServiceNow activity.
+
+Shared-account confirmations require an explicit current named owner.
+Temporary KT handling requires either an explicit statement that access is not
+required, or a named owner, future expiry and reviewed authorization reference.
+Missing or stale details produce a targeted clarification, not completion.
+Labels and proposed ownership never enroll recipients or grant access.

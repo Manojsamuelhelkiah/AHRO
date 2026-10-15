@@ -44,6 +44,7 @@ import type {
   AccessUserGroupSecurityGroupApproval,
   AccessUserGroupSecurityGroupUpdate,
   AccessUserGroupUpdate,
+  ActOffboardingExchangeBody,
   ActionConversation,
   ActionConversationInput,
   ActionConversationMessage,
@@ -82,6 +83,7 @@ import type {
   EaHandoffSuggestion,
   EaSolutionBaseline,
   EffectiveAccess,
+  EnrollOffboardingExchangeBody,
   ErrorMessage,
   ExportOnboardingProtectedAuditParams,
   ExportScenarioWorkbookLinkParams,
@@ -93,9 +95,12 @@ import type {
   GetActionConversationParams,
   GetCurrentHumanPermissions200,
   GetHroEmailRotationParams,
+  GetOffboardingExchangeSetup200,
+  GetOffboardingExchangeSetupParams,
   GetOnboardingActionCenterParams,
   GetOnboardingGuardrails200,
   GetOnboardingOutcomeKpisParams,
+  GetPolicyUploadApprovalSettings200,
   GlobalAssumption,
   GovernanceDecisionHistoryResponse,
   GovernanceDecisionInput,
@@ -176,6 +181,8 @@ import type {
   ListSensitiveLifecycleDeletionJobs200,
   ListSensitiveLifecycleHolds200,
   ModelOption,
+  OffboardingExchangeView,
+  OffboardingGmailDefaults,
   OfflineActivationInput,
   OfflinePreparationInput,
   OfflinePreparationView,
@@ -286,8 +293,12 @@ import type {
   PricingSheet,
   PricingSheetInput,
   PricingSheetUpdate,
+  PrivacyEnforcementInput,
+  PrivacyEnforcementSettings,
   PrivateAdminEligibility,
   PrivateAdminSession,
+  ProvisionOffboardingExchanges200,
+  ProvisionOffboardingExchangesBody,
   ReconcileGovernanceDispatchBody,
   ReconcileOnboardingBgvNotificationsRequest,
   ReconcileOnboardingBgvNotificationsResult,
@@ -304,11 +315,15 @@ import type {
   RetryOnboardingEvidenceMalwareScan200,
   ReviewGovernanceDecisionBody,
   ReviewHrPolicyEvaluation200,
+  ReviewOffboardingEmailIndicatorsBody,
   ReviseGovernanceDecisionBody,
   Rollup,
   RollupRequest,
   RoutingSummary,
   RunHrPolicyEvaluation200,
+  SaveOffboardingGmailDefaultsBody,
+  SavePolicyUploadApprovalSettings200,
+  SavePolicyUploadApprovalSettingsBody,
   Scenario,
   ScenarioFile,
   ScenarioFileFinalizeRequest,
@@ -366,6 +381,7 @@ import type {
   TransactionWorkingContext,
   UatAdmission,
   UatSignInChallenge,
+  UpdateOffboardingEmailIndicatorsBody,
   UpdateOnbSettings,
   UpdateOnboardingBgvNotificationsRequest,
   UpdateOrganizationPrimaryCountry200,
@@ -440,6 +456,549 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getUpdateOffboardingEmailIndicatorsUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/offboarding/cases/${caseId}/exchanges/email-indicators`
+}
+
+export const updateOffboardingEmailIndicators = async (caseId: number,
+    updateOffboardingEmailIndicatorsBody: UpdateOffboardingEmailIndicatorsBody, options?: RequestInit): Promise<OffboardingExchangeView | null> => {
+
+  return customFetch<OffboardingExchangeView | null>(getUpdateOffboardingEmailIndicatorsUrl(caseId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateOffboardingEmailIndicatorsBody)
+  }
+);}
+
+
+
+
+
+export const getUpdateOffboardingEmailIndicatorsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOffboardingEmailIndicators>>, TError,{caseId: number;data: BodyType<UpdateOffboardingEmailIndicatorsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOffboardingEmailIndicators>>, TError,{caseId: number;data: BodyType<UpdateOffboardingEmailIndicatorsBody>}, TContext> => {
+
+const mutationKey = ['updateOffboardingEmailIndicators'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOffboardingEmailIndicators>>, {caseId: number;data: BodyType<UpdateOffboardingEmailIndicatorsBody>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  updateOffboardingEmailIndicators(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOffboardingEmailIndicatorsMutationResult = NonNullable<Awaited<ReturnType<typeof updateOffboardingEmailIndicators>>>
+    export type UpdateOffboardingEmailIndicatorsMutationBody = BodyType<UpdateOffboardingEmailIndicatorsBody>
+    export type UpdateOffboardingEmailIndicatorsMutationError = ErrorType<unknown>
+
+    export const useUpdateOffboardingEmailIndicators = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOffboardingEmailIndicators>>, TError,{caseId: number;data: BodyType<UpdateOffboardingEmailIndicatorsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOffboardingEmailIndicators>>,
+        TError,
+        {caseId: number;data: BodyType<UpdateOffboardingEmailIndicatorsBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateOffboardingEmailIndicatorsMutationOptions(options));
+    }
+
+export const getReviewOffboardingEmailIndicatorsUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/offboarding/cases/${caseId}/exchanges/email-review`
+}
+
+export const reviewOffboardingEmailIndicators = async (caseId: number,
+    reviewOffboardingEmailIndicatorsBody: ReviewOffboardingEmailIndicatorsBody, options?: RequestInit): Promise<OffboardingExchangeView | null> => {
+
+  return customFetch<OffboardingExchangeView | null>(getReviewOffboardingEmailIndicatorsUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(reviewOffboardingEmailIndicatorsBody)
+  }
+);}
+
+
+
+
+
+export const getReviewOffboardingEmailIndicatorsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewOffboardingEmailIndicators>>, TError,{caseId: number;data: BodyType<ReviewOffboardingEmailIndicatorsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewOffboardingEmailIndicators>>, TError,{caseId: number;data: BodyType<ReviewOffboardingEmailIndicatorsBody>}, TContext> => {
+
+const mutationKey = ['reviewOffboardingEmailIndicators'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewOffboardingEmailIndicators>>, {caseId: number;data: BodyType<ReviewOffboardingEmailIndicatorsBody>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  reviewOffboardingEmailIndicators(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewOffboardingEmailIndicatorsMutationResult = NonNullable<Awaited<ReturnType<typeof reviewOffboardingEmailIndicators>>>
+    export type ReviewOffboardingEmailIndicatorsMutationBody = BodyType<ReviewOffboardingEmailIndicatorsBody>
+    export type ReviewOffboardingEmailIndicatorsMutationError = ErrorType<unknown>
+
+    export const useReviewOffboardingEmailIndicators = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewOffboardingEmailIndicators>>, TError,{caseId: number;data: BodyType<ReviewOffboardingEmailIndicatorsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewOffboardingEmailIndicators>>,
+        TError,
+        {caseId: number;data: BodyType<ReviewOffboardingEmailIndicatorsBody>},
+        TContext
+      > => {
+      return useMutation(getReviewOffboardingEmailIndicatorsMutationOptions(options));
+    }
+
+export const getSaveOffboardingGmailDefaultsUrl = () => {
+
+
+
+
+  return `/api/offboarding/exchanges/defaults`
+}
+
+export const saveOffboardingGmailDefaults = async (saveOffboardingGmailDefaultsBody: SaveOffboardingGmailDefaultsBody, options?: RequestInit): Promise<OffboardingGmailDefaults> => {
+
+  return customFetch<OffboardingGmailDefaults>(getSaveOffboardingGmailDefaultsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(saveOffboardingGmailDefaultsBody)
+  }
+);}
+
+
+
+
+
+export const getSaveOffboardingGmailDefaultsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveOffboardingGmailDefaults>>, TError,{data: BodyType<SaveOffboardingGmailDefaultsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveOffboardingGmailDefaults>>, TError,{data: BodyType<SaveOffboardingGmailDefaultsBody>}, TContext> => {
+
+const mutationKey = ['saveOffboardingGmailDefaults'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveOffboardingGmailDefaults>>, {data: BodyType<SaveOffboardingGmailDefaultsBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveOffboardingGmailDefaults(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveOffboardingGmailDefaultsMutationResult = NonNullable<Awaited<ReturnType<typeof saveOffboardingGmailDefaults>>>
+    export type SaveOffboardingGmailDefaultsMutationBody = BodyType<SaveOffboardingGmailDefaultsBody>
+    export type SaveOffboardingGmailDefaultsMutationError = ErrorType<unknown>
+
+    export const useSaveOffboardingGmailDefaults = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveOffboardingGmailDefaults>>, TError,{data: BodyType<SaveOffboardingGmailDefaultsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveOffboardingGmailDefaults>>,
+        TError,
+        {data: BodyType<SaveOffboardingGmailDefaultsBody>},
+        TContext
+      > => {
+      return useMutation(getSaveOffboardingGmailDefaultsMutationOptions(options));
+    }
+
+export const getGetOffboardingExchangeSetupUrl = (params?: GetOffboardingExchangeSetupParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/offboarding/exchanges/setup?${stringifiedParams}` : `/api/offboarding/exchanges/setup`
+}
+
+export const getOffboardingExchangeSetup = async (params?: GetOffboardingExchangeSetupParams, options?: RequestInit): Promise<GetOffboardingExchangeSetup200> => {
+
+  return customFetch<GetOffboardingExchangeSetup200>(getGetOffboardingExchangeSetupUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOffboardingExchangeSetupQueryKey = (params?: GetOffboardingExchangeSetupParams,) => {
+    return [
+    `/api/offboarding/exchanges/setup`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetOffboardingExchangeSetupQueryOptions = <TData = Awaited<ReturnType<typeof getOffboardingExchangeSetup>>, TError = ErrorType<void>>(params?: GetOffboardingExchangeSetupParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOffboardingExchangeSetup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOffboardingExchangeSetupQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOffboardingExchangeSetup>>> = ({ signal }) => getOffboardingExchangeSetup(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOffboardingExchangeSetup>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOffboardingExchangeSetupQueryResult = NonNullable<Awaited<ReturnType<typeof getOffboardingExchangeSetup>>>
+export type GetOffboardingExchangeSetupQueryError = ErrorType<void>
+
+
+
+export function useGetOffboardingExchangeSetup<TData = Awaited<ReturnType<typeof getOffboardingExchangeSetup>>, TError = ErrorType<void>>(
+ params?: GetOffboardingExchangeSetupParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOffboardingExchangeSetup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOffboardingExchangeSetupQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getProvisionOffboardingExchangesUrl = () => {
+
+
+
+
+  return `/api/offboarding/exchanges/provision`
+}
+
+export const provisionOffboardingExchanges = async (provisionOffboardingExchangesBody: ProvisionOffboardingExchangesBody, options?: RequestInit): Promise<ProvisionOffboardingExchanges200> => {
+
+  return customFetch<ProvisionOffboardingExchanges200>(getProvisionOffboardingExchangesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(provisionOffboardingExchangesBody)
+  }
+);}
+
+
+
+
+
+export const getProvisionOffboardingExchangesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof provisionOffboardingExchanges>>, TError,{data: BodyType<ProvisionOffboardingExchangesBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof provisionOffboardingExchanges>>, TError,{data: BodyType<ProvisionOffboardingExchangesBody>}, TContext> => {
+
+const mutationKey = ['provisionOffboardingExchanges'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof provisionOffboardingExchanges>>, {data: BodyType<ProvisionOffboardingExchangesBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  provisionOffboardingExchanges(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ProvisionOffboardingExchangesMutationResult = NonNullable<Awaited<ReturnType<typeof provisionOffboardingExchanges>>>
+    export type ProvisionOffboardingExchangesMutationBody = BodyType<ProvisionOffboardingExchangesBody>
+    export type ProvisionOffboardingExchangesMutationError = ErrorType<unknown>
+
+    export const useProvisionOffboardingExchanges = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof provisionOffboardingExchanges>>, TError,{data: BodyType<ProvisionOffboardingExchangesBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof provisionOffboardingExchanges>>,
+        TError,
+        {data: BodyType<ProvisionOffboardingExchangesBody>},
+        TContext
+      > => {
+      return useMutation(getProvisionOffboardingExchangesMutationOptions(options));
+    }
+
+export const getGetOffboardingExchangesUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/offboarding/cases/${caseId}/exchanges`
+}
+
+export const getOffboardingExchanges = async (caseId: number, options?: RequestInit): Promise<OffboardingExchangeView | null> => {
+
+  return customFetch<OffboardingExchangeView | null>(getGetOffboardingExchangesUrl(caseId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOffboardingExchangesQueryKey = (caseId: number,) => {
+    return [
+    `/api/offboarding/cases/${caseId}/exchanges`
+    ] as const;
+    }
+
+
+export const getGetOffboardingExchangesQueryOptions = <TData = Awaited<ReturnType<typeof getOffboardingExchanges>>, TError = ErrorType<unknown>>(caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOffboardingExchanges>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOffboardingExchangesQueryKey(caseId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOffboardingExchanges>>> = ({ signal }) => getOffboardingExchanges(caseId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: caseId !== null && caseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOffboardingExchanges>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOffboardingExchangesQueryResult = NonNullable<Awaited<ReturnType<typeof getOffboardingExchanges>>>
+export type GetOffboardingExchangesQueryError = ErrorType<unknown>
+
+
+
+export function useGetOffboardingExchanges<TData = Awaited<ReturnType<typeof getOffboardingExchanges>>, TError = ErrorType<unknown>>(
+ caseId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOffboardingExchanges>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOffboardingExchangesQueryOptions(caseId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getEnrollOffboardingExchangeUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/offboarding/cases/${caseId}/exchanges/enrollment`
+}
+
+export const enrollOffboardingExchange = async (caseId: number,
+    enrollOffboardingExchangeBody: EnrollOffboardingExchangeBody, options?: RequestInit): Promise<OffboardingExchangeView | null> => {
+
+  return customFetch<OffboardingExchangeView | null>(getEnrollOffboardingExchangeUrl(caseId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(enrollOffboardingExchangeBody)
+  }
+);}
+
+
+
+
+
+export const getEnrollOffboardingExchangeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enrollOffboardingExchange>>, TError,{caseId: number;data: BodyType<EnrollOffboardingExchangeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof enrollOffboardingExchange>>, TError,{caseId: number;data: BodyType<EnrollOffboardingExchangeBody>}, TContext> => {
+
+const mutationKey = ['enrollOffboardingExchange'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof enrollOffboardingExchange>>, {caseId: number;data: BodyType<EnrollOffboardingExchangeBody>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  enrollOffboardingExchange(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EnrollOffboardingExchangeMutationResult = NonNullable<Awaited<ReturnType<typeof enrollOffboardingExchange>>>
+    export type EnrollOffboardingExchangeMutationBody = BodyType<EnrollOffboardingExchangeBody>
+    export type EnrollOffboardingExchangeMutationError = ErrorType<unknown>
+
+    export const useEnrollOffboardingExchange = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enrollOffboardingExchange>>, TError,{caseId: number;data: BodyType<EnrollOffboardingExchangeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof enrollOffboardingExchange>>,
+        TError,
+        {caseId: number;data: BodyType<EnrollOffboardingExchangeBody>},
+        TContext
+      > => {
+      return useMutation(getEnrollOffboardingExchangeMutationOptions(options));
+    }
+
+export const getActOffboardingExchangeUrl = (caseId: number,) => {
+
+
+
+
+  return `/api/offboarding/cases/${caseId}/exchanges/actions`
+}
+
+export const actOffboardingExchange = async (caseId: number,
+    actOffboardingExchangeBody: ActOffboardingExchangeBody, options?: RequestInit): Promise<OffboardingExchangeView | null> => {
+
+  return customFetch<OffboardingExchangeView | null>(getActOffboardingExchangeUrl(caseId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(actOffboardingExchangeBody)
+  }
+);}
+
+
+
+
+
+export const getActOffboardingExchangeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOffboardingExchange>>, TError,{caseId: number;data: BodyType<ActOffboardingExchangeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof actOffboardingExchange>>, TError,{caseId: number;data: BodyType<ActOffboardingExchangeBody>}, TContext> => {
+
+const mutationKey = ['actOffboardingExchange'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof actOffboardingExchange>>, {caseId: number;data: BodyType<ActOffboardingExchangeBody>}> = (props) => {
+          const {caseId,data} = props ?? {};
+
+          return  actOffboardingExchange(caseId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActOffboardingExchangeMutationResult = NonNullable<Awaited<ReturnType<typeof actOffboardingExchange>>>
+    export type ActOffboardingExchangeMutationBody = BodyType<ActOffboardingExchangeBody>
+    export type ActOffboardingExchangeMutationError = ErrorType<unknown>
+
+    export const useActOffboardingExchange = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOffboardingExchange>>, TError,{caseId: number;data: BodyType<ActOffboardingExchangeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof actOffboardingExchange>>,
+        TError,
+        {caseId: number;data: BodyType<ActOffboardingExchangeBody>},
+        TContext
+      > => {
+      return useMutation(getActOffboardingExchangeMutationOptions(options));
+    }
 
 export const getGetActionConversationUrl = (caseId: number,
     params?: GetActionConversationParams,) => {
@@ -6784,6 +7343,278 @@ export const useCreateHrPolicy = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getCreateHrPolicyMutationOptions(options));
+    }
+
+export const getGetPrivacyEnforcementUrl = () => {
+
+
+
+
+  return `/api/privacy/enforcement`
+}
+
+export const getPrivacyEnforcement = async ( options?: RequestInit): Promise<PrivacyEnforcementSettings> => {
+
+  return customFetch<PrivacyEnforcementSettings>(getGetPrivacyEnforcementUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPrivacyEnforcementQueryKey = () => {
+    return [
+    `/api/privacy/enforcement`
+    ] as const;
+    }
+
+
+export const getGetPrivacyEnforcementQueryOptions = <TData = Awaited<ReturnType<typeof getPrivacyEnforcement>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPrivacyEnforcement>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPrivacyEnforcementQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPrivacyEnforcement>>> = ({ signal }) => getPrivacyEnforcement({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPrivacyEnforcement>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPrivacyEnforcementQueryResult = NonNullable<Awaited<ReturnType<typeof getPrivacyEnforcement>>>
+export type GetPrivacyEnforcementQueryError = ErrorType<void>
+
+
+
+export function useGetPrivacyEnforcement<TData = Awaited<ReturnType<typeof getPrivacyEnforcement>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPrivacyEnforcement>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPrivacyEnforcementQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdatePrivacyEnforcementUrl = () => {
+
+
+
+
+  return `/api/privacy/enforcement`
+}
+
+export const updatePrivacyEnforcement = async (privacyEnforcementInput: PrivacyEnforcementInput, options?: RequestInit): Promise<PrivacyEnforcementSettings> => {
+
+  return customFetch<PrivacyEnforcementSettings>(getUpdatePrivacyEnforcementUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(privacyEnforcementInput)
+  }
+);}
+
+
+
+
+
+export const getUpdatePrivacyEnforcementMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePrivacyEnforcement>>, TError,{data: BodyType<PrivacyEnforcementInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePrivacyEnforcement>>, TError,{data: BodyType<PrivacyEnforcementInput>}, TContext> => {
+
+const mutationKey = ['updatePrivacyEnforcement'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePrivacyEnforcement>>, {data: BodyType<PrivacyEnforcementInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updatePrivacyEnforcement(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePrivacyEnforcementMutationResult = NonNullable<Awaited<ReturnType<typeof updatePrivacyEnforcement>>>
+    export type UpdatePrivacyEnforcementMutationBody = BodyType<PrivacyEnforcementInput>
+    export type UpdatePrivacyEnforcementMutationError = ErrorType<void>
+
+    export const useUpdatePrivacyEnforcement = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePrivacyEnforcement>>, TError,{data: BodyType<PrivacyEnforcementInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePrivacyEnforcement>>,
+        TError,
+        {data: BodyType<PrivacyEnforcementInput>},
+        TContext
+      > => {
+      return useMutation(getUpdatePrivacyEnforcementMutationOptions(options));
+    }
+
+export const getGetPolicyUploadApprovalSettingsUrl = () => {
+
+
+
+
+  return `/api/policies/upload-settings`
+}
+
+export const getPolicyUploadApprovalSettings = async ( options?: RequestInit): Promise<GetPolicyUploadApprovalSettings200> => {
+
+  return customFetch<GetPolicyUploadApprovalSettings200>(getGetPolicyUploadApprovalSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPolicyUploadApprovalSettingsQueryKey = () => {
+    return [
+    `/api/policies/upload-settings`
+    ] as const;
+    }
+
+
+export const getGetPolicyUploadApprovalSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getPolicyUploadApprovalSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPolicyUploadApprovalSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPolicyUploadApprovalSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPolicyUploadApprovalSettings>>> = ({ signal }) => getPolicyUploadApprovalSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPolicyUploadApprovalSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPolicyUploadApprovalSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getPolicyUploadApprovalSettings>>>
+export type GetPolicyUploadApprovalSettingsQueryError = ErrorType<unknown>
+
+
+
+export function useGetPolicyUploadApprovalSettings<TData = Awaited<ReturnType<typeof getPolicyUploadApprovalSettings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPolicyUploadApprovalSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPolicyUploadApprovalSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSavePolicyUploadApprovalSettingsUrl = () => {
+
+
+
+
+  return `/api/policies/upload-settings`
+}
+
+export const savePolicyUploadApprovalSettings = async (savePolicyUploadApprovalSettingsBody: SavePolicyUploadApprovalSettingsBody, options?: RequestInit): Promise<SavePolicyUploadApprovalSettings200> => {
+
+  return customFetch<SavePolicyUploadApprovalSettings200>(getSavePolicyUploadApprovalSettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(savePolicyUploadApprovalSettingsBody)
+  }
+);}
+
+
+
+
+
+export const getSavePolicyUploadApprovalSettingsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savePolicyUploadApprovalSettings>>, TError,{data: BodyType<SavePolicyUploadApprovalSettingsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof savePolicyUploadApprovalSettings>>, TError,{data: BodyType<SavePolicyUploadApprovalSettingsBody>}, TContext> => {
+
+const mutationKey = ['savePolicyUploadApprovalSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof savePolicyUploadApprovalSettings>>, {data: BodyType<SavePolicyUploadApprovalSettingsBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  savePolicyUploadApprovalSettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SavePolicyUploadApprovalSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof savePolicyUploadApprovalSettings>>>
+    export type SavePolicyUploadApprovalSettingsMutationBody = BodyType<SavePolicyUploadApprovalSettingsBody>
+    export type SavePolicyUploadApprovalSettingsMutationError = ErrorType<void>
+
+    export const useSavePolicyUploadApprovalSettings = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savePolicyUploadApprovalSettings>>, TError,{data: BodyType<SavePolicyUploadApprovalSettingsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof savePolicyUploadApprovalSettings>>,
+        TError,
+        {data: BodyType<SavePolicyUploadApprovalSettingsBody>},
+        TContext
+      > => {
+      return useMutation(getSavePolicyUploadApprovalSettingsMutationOptions(options));
     }
 
 export const getListHrPolicyRemindersUrl = () => {

@@ -5,7 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import {
   actionConversationMessages as messages, accessNamedGrants, db, onbCases,
   onbActionCenterActions, onbCommunications, onbEvents, organizationsTable, organizationMembershipsTable,
-  onbSensitiveLifecyclePolicies, onbSensitiveLifecycleHolds,
+  onbSensitiveLifecyclePolicies, onbSensitiveLifecycleHolds, onbSettings,
 } from "@workspace/db";
 import { PostActionConversationBody } from "@workspace/api-zod";
 import { postConversation, getConversation } from "./action-conversations";
@@ -16,6 +16,7 @@ import { conversationDigest, conversationEvidenceFingerprint, conversationIntent
 import { seedApprovedSensitiveLifecyclePolicies } from "../../test-utils/sensitive-lifecycle-fixtures";
 import { requireOwnedOrganizationTestSchema } from "../../test-support/organization-fixtures";
 import { ALL_SENSITIVE_RECORD_CLASSES } from "./sensitive-access";
+import { PRIVACY_ENFORCEMENT_KEY } from "../privacy-enforcement";
 
 const organizationId = `conversation-tests-${randomUUID()}`;
 const actor = `conversation-human-${randomUUID()}`;
@@ -30,6 +31,7 @@ before(async () => {
   await requireOwnedOrganizationTestSchema();
   await db.insert(organizationsTable).values({ id: organizationId, name: "Conversation fixtures", slug: organizationId, joinCodeHash: randomUUID(), createdByUserId: actor });
   await db.insert(organizationMembershipsTable).values({ organizationId, clerkUserId: actor, role: "owner" });
+  await db.insert(onbSettings).values({ organizationId, key: PRIVACY_ENFORCEMENT_KEY, value: JSON.stringify({ revision: 1, mode: "active" }) });
   const keys = ["flow.case.read", "flow.case.edit", "data.case.notes.read", "data.case.notes.edit", "data.case.profile.read", "data.case.readiness.read",
     ...ALL_SENSITIVE_RECORD_CLASSES.flatMap(key => [`data.${key}.read`, `data.${key}.edit`])];
   await db.insert(accessNamedGrants).values(keys.map(resourceKey => ({
@@ -70,6 +72,28 @@ test("bounded contract, local intent and exact mentions never interpret user tex
   assert.notEqual(conversationEvidenceFingerprint(evidence), conversationEvidenceFingerprint({ ...evidence, sources: [{ id: "source:1", excerpt: "changed" }] }));
   assert.equal(interruptedConversationState({ state: "pending", updatedAt: new Date(0) }, 120001), "uncertain");
   assert.equal(interruptedConversationState({ state: "failed", updatedAt: new Date(0) }, 120001), "failed");
+});
+
+test("Deferred privacy permits authorized conversation history and notes without granting access or execution", async () => {
+  await db.update(onbSettings).set({ value: JSON.stringify({ revision: 2, mode: "deferred" }) })
+    .where(and(eq(onbSettings.organizationId, organizationId), eq(onbSettings.key, PRIVACY_ENFORCEMENT_KEY)));
+  try {
+    const body = note("Deferred mode annotation, not an operational instruction.");
+    const posted = await postConversation(organizationId, actor, caseId, body, noModel);
+    assert.equal(posted.state, "recorded");
+    assert.equal(posted.explanation, null);
+    const history = await getConversation(organizationId, actor, caseId);
+    assert.ok(history.messages.some(row => row.id === posted.id && row.text === body.text));
+    await assert.rejects(getConversation(organizationId, "unbound-user", caseId), /permissions|required|withheld/);
+    await assert.rejects(postConversation(organizationId, "unbound-user", caseId, note(), noModel), /permissions|required|withheld/);
+    await assert.rejects(getConversation("unbound-tenant", actor, caseId), /not found/);
+    assert.equal((await db.select().from(onbCommunications).where(eq(onbCommunications.organizationId, organizationId))).length, 0);
+    const [row] = await db.select().from(onbCases).where(eq(onbCases.id, caseId));
+    assert.equal(row?.lifecycleStage, "trigger-received");
+  } finally {
+    await db.update(onbSettings).set({ value: JSON.stringify({ revision: 3, mode: "active" }) })
+      .where(and(eq(onbSettings.organizationId, organizationId), eq(onbSettings.key, PRIVACY_ENFORCEMENT_KEY)));
+  }
 });
 
 test("note-only posting persists exactly once under concurrent retries and refresh, without model or operational work", async () => {

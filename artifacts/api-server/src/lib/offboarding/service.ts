@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { db, offbCases, offbSources, offbPolicies, offbCheckpoints, onbCases, type SeparationCase, type SeparationPolicy, type SeparationState } from "@workspace/db";
+import type { PilotState } from "./exchange-contract";
 import { withSensitiveLifecycleFence, evaluateCaseDerivedLifecycleGateInTransaction } from "../onboarding/sensitive-lifecycle";
 import { acquireCaseDispatchMutationLock } from "../onboarding/dispatch-guard";
 import { appendProtectedAuditInTransaction } from "../onboarding/protected-audit";
 import { access, lockTenant, authority, confidentialRead, payrollRead, receipt, currentReceipt, type Tx } from "./authority";
 import { CLOSURE_BLOCKED, SENSITIVE_TRIGGERS, compilePlan, facts, initialState, object, text, SeparationError } from "./model";
+import { db, offbCases, offbSources, offbPolicies, offbCheckpoints, offbExchangePilots, onbCases, organizationsTable, type SeparationCase, type SeparationPolicy, type SeparationState } from "@workspace/db";
 export const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 async function checkpoint(tx: Tx, row: SeparationCase, actor: string, action: string) {
   await tx.insert(offbCheckpoints).values({ organizationId: row.organizationId, caseId: row.id, version: row.version, generation: row.generation, status: row.status, facts: row.facts, state: row.state, actor, action }).onConflictDoNothing();
@@ -13,13 +14,17 @@ async function checkpoint(tx: Tx, row: SeparationCase, actor: string, action: st
 export async function audit(tx: Tx, org: string, actor: string, action: string, id: number | string, version: number) {
   await appendProtectedAuditInTransaction(tx, { organizationId: org, actorId: actor, actorKind: "authenticated", actorAuthority: "verified-offboarding-authority", action: `offboarding.${action}`, outcome: "success", objectType: "separation", objectId: String(id), reviewedRevision: version, correlationId: String(id), source: "offboarding", payload: { safeStatus: "recorded", closureAvailable: false } });
 }
-export async function createSeparationInTransaction(tx: Tx, org: string, actor: string, raw: unknown, channel: string, sourceReference: string) {
+
+const FIXED_PILOT_METADATA = Symbol("fixed-offboarding-pilot-metadata");
+export async function createSeparationInTransaction(tx: Tx, org: string, actor: string, raw: unknown, channel: string, sourceReference: string, metadataToken?: typeof FIXED_PILOT_METADATA) {
   const f = facts(raw);
   await access(tx, org, actor, true);
   const scope = channel === "security-request" ? "it-security-approve" : channel === "manager-request" ? "manager-approve" : "hr-compliance-approve";
   await authority(tx, org, actor, scope, f.country);
-  const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, { organizationId: org, jurisdiction: f.country });
-  if (!lifecycle.allowed) throw new SeparationError(lifecycle.reason);
+  if (metadataToken !== FIXED_PILOT_METADATA) {
+    const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, { organizationId: org, jurisdiction: f.country });
+    if (!lifecycle.allowed) throw new SeparationError(lifecycle.reason);
+  }
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`separation:${org}:${f.employeeId}`}, 0))`);
   const fingerprint = hash(f);
   const [previous] = await tx.select().from(offbSources).where(and(eq(offbSources.organizationId, org), eq(offbSources.channel, channel), eq(offbSources.sourceReference, sourceReference)));
@@ -76,9 +81,9 @@ export async function load(tx: Tx, org: string, actor: string, id: number, write
   await access(tx, org, actor, write, id);
   return row;
 }
-export function summary(row: SeparationCase, originalIntent?: string | null) {
+export function summary(row: SeparationCase, originalIntent?: string | null, fictional = false) {
   const { exitReason: _reason, exitType: _type, ...f } = row.facts;
-  return { id: row.id, originalIntent: originalIntent ?? "Not recorded", version: row.version, generation: row.generation, status: row.status, facts: f, closureBlocker: CLOSURE_BLOCKED, lifecycle: "separation" as const };
+  return { id: row.id, originalIntent: originalIntent ?? "Not recorded", version: row.version, generation: row.generation, status: row.status, facts: f, closureBlocker: CLOSURE_BLOCKED, lifecycle: "separation" as const, fictionalOfflineIdentity: fictional, offlineSample: fictional };
 }
 async function privateRead(tx: Tx, org: string, actor: string, row: SeparationCase) {
   await confidentialRead(tx, org, actor, row.facts.country, row.id);
@@ -90,8 +95,10 @@ export async function listSeparations(org: string, actor: string) {
     const origins = rows.length ? await tx.select({ id: onbCases.id, origin: onbCases.originalIntent }).from(onbCases)
       .where(and(eq(onbCases.organizationId, org), inArray(onbCases.id, rows.map(r => r.id)))) : [];
     const labels = new Map(origins.map(r => [r.id, r.origin?.label]));
+    const pilots = await tx.select({ caseId: offbExchangePilots.caseId }).from(offbExchangePilots).where(eq(offbExchangePilots.organizationId, org));
+    const ids = new Set(pilots.map(p => p.caseId));
     const visible = [];
-    for (const r of rows) { try { await access(tx, org, actor, false, r.id); visible.push(summary(r, labels.get(r.id))); } catch (e) { if (!(e instanceof SeparationError) || e.status !== 403) throw e; } }
+    for (const r of rows) { try { await access(tx, org, actor, false, r.id); visible.push(summary(r, labels.get(r.id), ids.has(r.id))); } catch (e) { if (!(e instanceof SeparationError) || e.status !== 403) throw e; } }
     return visible;
   });
 }
@@ -124,7 +131,8 @@ export async function separationDetail(org: string, actor: string, id: number) {
     await access(tx, org, actor, false, id);
     const settlementReview = [];
     if (settlementVisible) for (const v of row.state.settlementVersions) settlementReview.push({ revision: v.revision, currency: v.currency, items: v.items, recordedAt: v.receipt.recordedAt, authorityCurrent: await currentReceipt(tx, org, v.receipt, row.facts.country, id) });
-    return { ...summary(row, origin?.intent?.label), privateVisible, privateFacts: privateVisible ? row.facts : null, sources, settlementReview, state: {
+    const [pilot] = await tx.select().from(offbExchangePilots).where(and(eq(offbExchangePilots.organizationId, org), eq(offbExchangePilots.caseId, id)));
+    return { ...summary(row, origin?.intent?.label, Boolean(pilot)), privateVisible, privateFacts: privateVisible ? row.facts : null, sources, settlementReview, state: {
       gatewayA: row.state.gatewayA, classification: privateVisible ? row.state.classification : null,
       urgency: row.state.urgency, flags: row.state.flags, sensitiveTriggers: privateVisible ? row.state.sensitiveTriggers : [],
       conflict: row.state.conflict, holds: privateVisible ? row.state.holds : row.state.holds.length ? ["Restricted hold"] : [],
@@ -294,6 +302,8 @@ export async function actionSeparation(org: string, actor: string, id: number, i
         await authority(tx, org, owner, t.scope, f.country, id); t.owner = owner;
       } else if (action === "task-blocked") { t.status = b.uncertain === true ? "uncertain" : "blocked"; t.evidence = null; }
       else {
+        const [pilot] = await tx.select().from(offbExchangePilots).where(and(eq(offbExchangePilots.organizationId, org), eq(offbExchangePilots.caseId, id)));
+        if (pilot) throw new SeparationError("Fictional case confirmations belong in the access/equipment journey and cannot establish workforce execution evidence.");
         if (b.provenance !== "human-source-attested" || b.simulated === true) throw new SeparationError("Simulated, UAT, mailbox or unverified provider results cannot establish real execution.");
         if (t.owner !== actor) throw new SeparationError("The current verified accountable owner must record execution.", 403);
         for (const p of t.prerequisites) {
@@ -347,8 +357,42 @@ export async function actionSeparation(org: string, actor: string, id: number, i
       await access(tx, org, actor, true, id);
     }
     const [updated] = await tx.update(offbCases).set({ facts: f, state: s, status, activeKey, generation, version: row.version + 1, updatedAt: new Date() }).where(and(eq(offbCases.organizationId, org), eq(offbCases.id, id))).returning();
+    if (generation !== row.generation || action === "adopt-policy") {
+      const [pilot] = await tx.select().from(offbExchangePilots).where(and(eq(offbExchangePilots.organizationId, org), eq(offbExchangePilots.caseId, id))).for("update");
+      if (pilot) {
+        const state = structuredClone(pilot.state) as unknown as PilotState;
+        state.enrollment.enabled = false; state.enrollment.revision++; state.enrollment.generation = generation;
+        for (const task of state.tasks) {
+          task.revision++; task.status = "pending"; task.confirmed = []; task.outstanding = [...task.expected]; task.exception = null; task.evidence = [];
+          delete task.handling;
+        }
+        await tx.update(offbExchangePilots).set({ generation, version: pilot.version + 1, state: state as unknown as Record<string, unknown> }).where(eq(offbExchangePilots.caseId, id));
+      }
+    }
     await checkpoint(tx, updated, actor, action);
     await audit(tx, org, actor, action, id, row.version + 1);
     return { caseId: id, version: row.version + 1, status, closureBlocker: CLOSURE_BLOCKED };
   }));
+}
+
+/** Only this constructor can admit known, contact-free fictional metadata.
+ * It cannot import a worker, promote an existing case, enroll a mailbox,
+ * activate operations, or approve any policy. Real messages retain their
+ * independent collection and evidence gates. No HTTP input carries this token. */
+export async function createFixedPilotSeparationInTransaction(tx: Tx, org: string, actor: string, scenario: "success" | "delayed" | "exception") {
+  const [tenant] = await tx.select().from(organizationsTable).where(eq(organizationsTable.id, org));
+  if (org !== "demo" || tenant?.slug !== "demo" || tenant.name !== "Demo Organization") throw new SeparationError("These examples require the verified Demo organization.", 403);
+  const names = { success: "Alex Morgan", delayed: "Jordan Ellis", exception: "Taylor Reed" } as const;
+  if (!Object.hasOwn(names, scenario)) throw new SeparationError("Unsupported example.", 400);
+  const employeeId = `FICTIONAL-OX-${scenario.toUpperCase()}`;
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`separation:${org}:${employeeId}`}, 0))`);
+  const previous = await tx.select({ id: offbCases.id }).from(offbCases).where(and(eq(offbCases.organizationId, org), eq(offbCases.employeeId, employeeId)));
+  if (previous.length) throw new SeparationError("Historical identities cannot be promoted into this flow.");
+  const day = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+  return createSeparationInTransaction(tx, org, actor, {
+    employeeId, workerName: names[scenario], exitType: "resignation", exitReason: "Voluntary resignation",
+    lastWorkingDay: day, terminationDate: day, timeZone: "America/New_York",
+    role: "Engineer", department: "Technology", country: "US", legalEntity: "Demo Organization",
+    workerCategory: "Employee", manager: "Case manager",
+  }, "contextual-offboarding", `offboarding-contextual/v1:${scenario}`, FIXED_PILOT_METADATA);
 }

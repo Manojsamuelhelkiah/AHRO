@@ -3,6 +3,8 @@ import multer from "multer";
 import { authorizePolicyImport, uploadPolicyImport, getPolicyImport, discardPolicyImport } from "../lib/hr-policy-imports";
 import { POLICY_IMPORT_MAX_BYTES } from "../lib/hr-policy-document-extraction";
 import { getOrganizationId } from "../lib/organization-scope";
+import { getPolicyUploadSettings, savePolicyUploadSettings, PolicyUploadSettingsError } from "../lib/hr-policy-upload-settings";
+import { getPrivacyEnforcement, savePrivacyEnforcement, PrivacyEnforcementError } from "../lib/privacy-enforcement";
 import { policyEvaluationCatalog, reviewPolicyBenchmark, runPolicyBenchmark, configurePolicyDrift } from "../lib/hr-policy-evaluation";
 import { policyDriftInbox, updatePolicyDriftInbox } from "../lib/hr-policy-drift-notifications";
 import {
@@ -33,8 +35,8 @@ import {
 } from "../lib/hr-policy-library";
 
 function errorResponse(error: unknown, res: Response): boolean {
-  if (error instanceof HrPolicyError) {
-    res.status(error.statusCode).json({ message: error.message, ...(error.code ? { code: error.code } : {}) });
+  if (error instanceof HrPolicyError || error instanceof PolicyUploadSettingsError || error instanceof PrivacyEnforcementError) {
+    res.status(error.statusCode).json({ message: error.message, ...(error instanceof HrPolicyError && error.code ? { code: error.code } : {}) });
     return true;
   }
   return false;
@@ -60,6 +62,22 @@ export const policyDocumentUpload = multer({
 
 export function createHrPolicyRouter(): IRouter {
   const router: IRouter = Router();
+  router.get("/privacy/enforcement", async (req, res, next) => {
+    try { res.json(await getPrivacyEnforcement(getOrganizationId(req), req.authUserId!)); }
+    catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
+  router.put("/privacy/enforcement", async (req, res, next) => {
+    try { res.json(await savePrivacyEnforcement(getOrganizationId(req), req.authUserId!, req.body)); }
+    catch (error) { if (!errorResponse(error, res)) next(error); }
+  });
+router.get("/policies/upload-settings", async (req, res, next) => {
+  try { res.json(await getPolicyUploadSettings(getOrganizationId(req), req.authUserId!)); }
+  catch (error) { if (!errorResponse(error, res)) next(error); }
+});
+router.put("/policies/upload-settings", async (req, res, next) => {
+  try { res.json(await savePolicyUploadSettings(getOrganizationId(req), req.authUserId!, req.body)); }
+  catch (error) { if (!errorResponse(error, res)) next(error); }
+});
   let activeImports = 0;
   router.post("/policies/imports", async (req, res, next) => {
     try {

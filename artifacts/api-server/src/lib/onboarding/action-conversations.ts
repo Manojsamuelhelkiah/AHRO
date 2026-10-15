@@ -32,7 +32,7 @@ export async function conversationAccess(organizationId: string, actor: string, 
   }
   // Opaque chat is a governed derivative of every applicable data class.
   for (const dataClass of OPAQUE_CANDIDATE_UPLOAD_CLASSES) {
-    const gate = await evaluateSensitiveLifecycleGate({ organizationId, jurisdiction: jurisdictionForCaseDerivedEnvelope(row), dataClass, disclosure: false, collection: false });
+    const gate = await evaluateSensitiveLifecycleGate({ organizationId, jurisdiction: jurisdictionForCaseDerivedEnvelope(row), dataClass, disclosure: false, collection: false, purpose: "record-access" });
     if (!gate.allowed) return deny(403, "Conversation records are unavailable under the current record lifecycle policy.");
   }
   const canPost = !await registeredDemoProfile(actor) &&

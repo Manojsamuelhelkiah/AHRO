@@ -1,5 +1,9 @@
 # Memory Index
 
+- [Privacy enforcement deferral](privacy-enforcement-deferral.md) — sensitivity/privacy workflow requirements are deferred in development and published apps until explicit later activation.
+
+- [Task Preview data boundaries](task-preview-data-boundaries.md) — main and task Previews can have different tenant data despite shared authentication; match the user's Preview first.
+
 - [Post-merge workflow readiness](post-merge-workflow-readiness.md) — setup success does not prove services restarted; verify actual workflow state after reconciliation.
 
 - [HRO proposals and simulations](hro-proposal-simulation-boundaries.md) — generated workflows need human review; aggregate what-if means are not causal forecasts or case-level SLA rates.
@@ -85,11 +89,13 @@
 - [Administrator case access](administrator-viewing-agreement.md) — verified Super Admin gets case reads and administrative edits; retained-record state and employee-owned consent remain separate.
 - [Administrator session observation](administrator-session-observation.md) — missing headers are not expiry; late negative responses from prior sessions must not invalidate renewed access.
 - [Offboarding specification boundary](offboarding-specification-boundary.md) — the user will supply closure section 4.6 later; operational preparation must not imply finalization.
+- [Offboarding Gmail scope](offboarding-gmail-scope.md) — named consent enables only exact fictional-case communication, never real account/asset effects or workforce outcomes.
 - [Permanent case-test retirement](product-feature-retirement.md) — retired launch/evaluation actions must not return; preserve history, offline fences, genuine operations and commercial modeling.
 - [Controlled offline inventory](offline-inventory-exception.md) — additive Demo-only examples are a narrow one-off exception, not restored creation, reset, execution or authority.
 - [Offline reporting scope](offline-operational-authorization.md) — count authorized offline examples; current scope excludes activation and historical case repairs.
 - [Offline generation evidence](offline-generation-evidence.md) — dates alone do not distinguish retained history from new work; fence original and prior-generation identifiers too.
 - [Case pipeline density](case-pipeline-density.md) — desktop cases stay compact and single-line; long narratives belong in detail views or hover text.
+- [Case configuration boundaries](case-configuration-boundaries.md) — client configuration belongs in Client Setup; case pages must not become preparation forms or repeat provenance callouts.
 - [Client operating defaults](client-operating-default-boundaries.md) — calendar proposals never reschedule approved obligations; responsibility routing grants neither access nor delivery authority.
 - [Requirements Register retirement](requirements-retirement-boundaries.md) — permanent retirement, not relocation; historical manual coverage never substitutes for objective operational safeguards.
 - [Member identity boundaries](member-identity-boundaries.md) — readable directory labels are not authority or recipient bindings; internal-account presentation is not account cleanup.

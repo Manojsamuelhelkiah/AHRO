@@ -5,6 +5,177 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type PrivacyEnforcementSettingsMode = typeof PrivacyEnforcementSettingsMode[keyof typeof PrivacyEnforcementSettingsMode];
+
+
+export const PrivacyEnforcementSettingsMode = {
+  deferred: 'deferred',
+  active: 'active',
+} as const;
+
+export interface PrivacyEnforcementSettings {
+  mode: PrivacyEnforcementSettingsMode;
+  revision: number;
+  canManage: boolean;
+}
+
+export type PrivacyEnforcementInputMode = typeof PrivacyEnforcementInputMode[keyof typeof PrivacyEnforcementInputMode];
+
+
+export const PrivacyEnforcementInputMode = {
+  deferred: 'deferred',
+  active: 'active',
+} as const;
+
+export interface PrivacyEnforcementInput {
+  mode: PrivacyEnforcementInputMode;
+  expectedRevision: number;
+}
+
+export interface OffboardingRecipient {
+  taskId: string;
+  memberId: string;
+  address: string;
+  persona: string;
+  /** @deprecated */
+  consentReference?: string;
+  escalationMemberId: string;
+  escalationAddress: string;
+  /** @deprecated */
+  escalationConsentReference?: string;
+}
+
+export interface OffboardingGmailDefaults {
+  revision: number;
+  agentId: string;
+  recipients: OffboardingRecipient[];
+}
+
+export interface OffboardingSourceHandling {
+  sharedAccountOwner?: string;
+  ktRequired?: boolean;
+  ktOwner?: string;
+  ktExpiresAt?: string;
+  ktAuthorizationReference?: string;
+}
+
+export type OffboardingConversationTaskEvidenceItem = { [key: string]: unknown };
+
+/**
+ * @nullable
+ */
+export type OffboardingConversationTaskException = {
+  revision: number;
+  sourceId: string;
+  explanation: string;
+  /** @nullable */
+  disposition: string | null;
+  /** @nullable */
+  reviewedBy: string | null;
+} | null;
+
+export interface OffboardingConversationTask {
+  id: string;
+  label: string;
+  revision: number;
+  /** @nullable */
+  owner: string | null;
+  dueAt: string;
+  /** @nullable */
+  notBeforeAt: string | null;
+  prerequisites: string[];
+  expected: string[];
+  confirmed: string[];
+  outstanding: string[];
+  handling?: OffboardingSourceHandling;
+  status: string;
+  evidence: OffboardingConversationTaskEvidenceItem[];
+  /** @nullable */
+  exception: OffboardingConversationTaskException;
+}
+
+/**
+ * @nullable
+ */
+export type OffboardingExchangeMessageObservation = { [key: string]: unknown } | null;
+
+export interface OffboardingExchangeMessage {
+  id: string;
+  taskId: string;
+  direction: string;
+  kind: string;
+  status: string;
+  recipient: string;
+  memberId: string;
+  operator: string;
+  agentId: string;
+  persona: string;
+  mailbox: string;
+  subject: string;
+  body: string;
+  reference: string;
+  createdAt: string;
+  /** @nullable */
+  providerMessageId?: string | null;
+  /** @nullable */
+  providerThreadId?: string | null;
+  sourceTransportVerified: number;
+  applied: number;
+  /** @nullable */
+  observation?: OffboardingExchangeMessageObservation;
+}
+
+export type OffboardingExchangeViewCommunicationChecksBasis = typeof OffboardingExchangeViewCommunicationChecksBasis[keyof typeof OffboardingExchangeViewCommunicationChecksBasis];
+
+
+export const OffboardingExchangeViewCommunicationChecksBasis = {
+  'client-declared': 'client-declared',
+} as const;
+
+export type OffboardingExchangeViewCommunicationChecks = {
+  emailConsent: boolean;
+  emailVerified: boolean;
+  reviewRequired: boolean;
+  basis: OffboardingExchangeViewCommunicationChecksBasis;
+  /** @nullable */
+  changedBy: string | null;
+  /** @nullable */
+  reviewedBy: string | null;
+  /** @nullable */
+  reviewReference: string | null;
+};
+
+export type OffboardingExchangeViewEnrollment = {
+  enabled: boolean;
+  revision: number;
+  generation: number;
+  /** @nullable */
+  operator: string | null;
+  /** @nullable */
+  agentId: string | null;
+  /** @nullable */
+  mailbox: string | null;
+  /** @nullable */
+  approvedAt: string | null;
+  recipients: OffboardingRecipient[];
+};
+
+/**
+ * @nullable
+ */
+export type OffboardingExchangeView = {
+  caseId: number;
+  communicationChecks: OffboardingExchangeViewCommunicationChecks;
+  version: number;
+  generation: number;
+  clock: string;
+  blockers: string[];
+  tasks: OffboardingConversationTask[];
+  enrollment: OffboardingExchangeViewEnrollment;
+  exchanges: OffboardingExchangeMessage[];
+  closureAvailable: false;
+} | null;
+
 export type ActionConversationInputMode = typeof ActionConversationInputMode[keyof typeof ActionConversationInputMode];
 
 
@@ -1091,6 +1262,8 @@ export const SeparationSummaryLifecycle = {
 } as const;
 
 export interface SeparationSummary {
+  fictionalOfflineIdentity?: boolean;
+  offlineSample?: boolean;
   /** Fixed originating request label, or Not recorded when creation history is unavailable. No source narrative or exit reason. */
   readonly originalIntent?: string;
   id: number;
@@ -10233,6 +10406,8 @@ export interface HrPolicyReminder {
 
 export interface HrPolicyCreateInput {
   importId?: string;
+  /** Required when attaching a newly uploaded document; fences changes to this client's review process. */
+  expectedUploadSettingsRevision?: number;
   /**
      * @minLength 1
      * @maxLength 4000
@@ -11515,6 +11690,94 @@ export type RetiredCapabilityResponse = {
   message: string;
 };
 
+export type UpdateOffboardingEmailIndicatorsBody = {
+  expectedVersion: number;
+  emailConsent: boolean;
+  emailVerified: boolean;
+};
+
+export type ReviewOffboardingEmailIndicatorsBody = {
+  expectedVersion: number;
+  consentReference: string;
+  emailReference: string;
+};
+
+export type SaveOffboardingGmailDefaultsBody = {
+  expectedRevision: number;
+  agentId: string;
+  recipients: OffboardingRecipient[];
+};
+
+export type GetOffboardingExchangeSetupParams = {
+caseId?: number;
+};
+
+export type GetOffboardingExchangeSetup200CasesItem = {
+  id: number;
+  name: string;
+};
+
+export type GetOffboardingExchangeSetup200AgentsItem = {
+  id: string;
+  name: string;
+};
+
+export type GetOffboardingExchangeSetup200MembersItem = {
+  id: string;
+  name: string;
+  addresses: string[];
+};
+
+export type GetOffboardingExchangeSetup200 = {
+  defaults: OffboardingGmailDefaults;
+  cases: GetOffboardingExchangeSetup200CasesItem[];
+  agents: GetOffboardingExchangeSetup200AgentsItem[];
+  members: GetOffboardingExchangeSetup200MembersItem[];
+};
+
+export type ProvisionOffboardingExchangesBody = {
+  confirmAddThree: true;
+};
+
+export type ProvisionOffboardingExchanges200 = {
+  caseIds: number[];
+  sent: number;
+};
+
+export type EnrollOffboardingExchangeBody = {
+  expectedRevision: number;
+  enabled: boolean;
+  agentId?: string;
+  confirmCommunicationOnly: true;
+  recipients: OffboardingRecipient[];
+};
+
+export type ActOffboardingExchangeBodyAction = typeof ActOffboardingExchangeBodyAction[keyof typeof ActOffboardingExchangeBodyAction];
+
+
+export const ActOffboardingExchangeBodyAction = {
+  request: 'request',
+  'advance-clock': 'advance-clock',
+  'exception-review': 'exception-review',
+  'inspect-interface': 'inspect-interface',
+  'source-confirm': 'source-confirm',
+} as const;
+
+export type ActOffboardingExchangeBody = {
+  expectedVersion: number;
+  action: ActOffboardingExchangeBodyAction;
+  taskId?: string;
+  clock?: string;
+  exceptionRevision?: number;
+  taskRevision?: number;
+  evidenceReference?: string;
+  disposition?: string;
+  confirmed?: boolean;
+  sourceReference?: string;
+  portions?: string[];
+  handlingStatement?: string;
+};
+
 export type GetActionConversationParams = {
 /**
  * @minimum 1
@@ -11628,6 +11891,21 @@ export type ConfigureHrPolicyDrift200 = {
 
 export type RunHrPolicyEvaluation200 = {
   run: HrPolicyEvaluationRun;
+};
+
+export type GetPolicyUploadApprovalSettings200 = {
+  revision: number;
+  requiresSeparateReview: boolean;
+};
+
+export type SavePolicyUploadApprovalSettingsBody = {
+  expectedRevision: number;
+  requiresSeparateReview: boolean;
+};
+
+export type SavePolicyUploadApprovalSettings200 = {
+  revision: number;
+  requiresSeparateReview: boolean;
 };
 
 export type ReviseGovernanceDecisionBody = {

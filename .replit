@@ -71,12 +71,16 @@ timeoutMs = 180000
 
 [nix]
 channel = "stable-25_05"
-packages = ["alsa-lib", "at-spi2-atk", "atk", "cairo", "cups", "dbus", "freetype", "glib", "glibcLocales", "gumbo", "harfbuzz", "jbig2dec", "libgbm", "libjpeg_turbo", "libxkbcommon", "mesa", "mupdf", "nspr", "nss", "openjpeg", "pango", "swig", "xcbuild", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libxcb"]
+packages = ["alsa-lib", "at-spi2-atk", "atk", "cairo", "cups", "dbus", "freetype", "glib", "glibcLocales", "gumbo", "harfbuzz", "jbig2dec", "libgbm", "libjpeg_turbo", "libxkbcommon", "mesa", "mupdf", "nspr", "nss", "openjpeg", "pango", "swig", "xcbuild", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libxcb", "clamav"]
 
 [userenv]
 
 [userenv.shared]
 ONBOARDING_ALLOWED_RECIPIENTS = "helkiah@gmail.com,manojsamuel.helkiah@hcltech.com"
+
+[userenv.development]
+MALWARE_SCANNER_CLAMAV_SOCKET_PATH = "/tmp/hro-private-document-scanner/clamd.sock"
+MALWARE_SCANNER_CLAMAV_TIMEZONE = "UTC"
 
 [objectStorage]
 defaultBucketID = "replit-objstore-b03aae0f-24bc-4583-a731-9788c26e9a34"

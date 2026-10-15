@@ -37,6 +37,9 @@ import {
 import type { Rollup, Scenario, ScenarioInputs, ScenarioFlowBasis } from '@workspace/api-client-react';
 import { Building2, Check, ChevronRight, Copy, FileUp, FlaskConical, Users } from 'lucide-react';
 import { CreateClientDialog } from '@/components/create-client-dialog';
+import { ClientPolicyUploadSettings } from './policy-upload-settings';
+import { ClientGmailSetup } from './gmail-setup';
+import { ClientPrivacyEnforcement } from './privacy-enforcement';
 import { enterClientWorkspace } from '@/lib/enter-client-workspace';
 import { findNamedClientWorkspace } from '@/lib/organization-bootstrap';
 
@@ -335,6 +338,9 @@ function ClientSetupWizard({
           subtitle="Rigorous parameter capture and integration planning." 
         />
         
+        <ClientPolicyUploadSettings />
+        <ClientPrivacyEnforcement />
+        <ClientGmailSetup />
         <div className="bg-[var(--surface)] rounded-[var(--radius-xl)] shadow-xl overflow-hidden border border-[var(--border)] mt-2">
           {/* Header */}
           <div className="bg-[var(--midnight)] text-[var(--dark-text)] p-6 relative overflow-hidden">

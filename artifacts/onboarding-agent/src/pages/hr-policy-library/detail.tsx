@@ -4,7 +4,7 @@ import { useRoute, Link } from 'wouter';
 import {
   usePolicyHistory, usePolicyVersion, useUpdateDraft, useSubmitReview, useReviewPolicy,
   usePublishPolicy, useSupersedePolicy, useRetirePolicy, usePolicyCapabilities,
-  usePolicyScope, type PolicyMembershipRole, type PolicyVersion,
+  usePolicyScope, usePolicyUploadSettings, type PolicyMembershipRole, type PolicyVersion,
 } from '../../hooks/use-policies';
 import { ArrowLeft, Edit3, Send, CheckCircle, XCircle, Clock, Shield, AlertTriangle, Loader2, FileText } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
@@ -116,6 +116,7 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
   const isReview = policy.draft?.status === 'in_review';
   const isRetired = policy.current?.status === 'retired' && !policy.draft;
   const canEdit = Boolean(selectedForEditing && capabilities?.canMaintain && editable && !isReview && !isRetired);
+  const approvalSettings = usePolicyUploadSettings(Boolean(capabilities?.canMaintain));
   const [title, setTitle] = useState('');
   const [sourceReference, setSourceReference] = useState('');
   const [policyText, setPolicyText] = useState('');
@@ -157,13 +158,14 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
 
   if (!editable) return null;
   const handleSave = () => {
-    if (importBusy || importBlocked || !policyText.trim() || !title.trim() || !sourceReference.trim() || audience.length === 0 || !effectiveFrom) return;
+    if (importBusy || importBlocked || !policyText.trim() || !title.trim() || !sourceReference.trim() || audience.length === 0 || !effectiveFrom || importId && (!approvalSettings.data || approvalSettings.isError)) return;
     const applicability = Object.fromEntries(
       Object.entries({ country, workerType, location }).filter(([, value]) => value.trim()),
     );
     updateDraft({
       expectedVersion: editable.version,
       importId,
+      expectedUploadSettingsRevision: importId ? approvalSettings.data?.revision : undefined,
       title,
       sourceReference,
       text: policyText,
@@ -176,8 +178,8 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
       reviewBy: reviewBy || undefined,
       reviewAuthorityRole,
     }, {
-      onSuccess: () => {
-        toast({ title: 'Draft saved', description: 'A new full replacement version was created.' });
+      onSuccess: ({ policy: saved }) => {
+        toast({ title: saved.status === 'published' ? 'Replacement uploaded and approved' : saved.status === 'in_review' ? 'Replacement uploaded for review' : 'Draft saved', description: 'The previous version is retained in policy history.' });
         onSaved();
       },
       onError: (error: Error) => toast({ title: 'Unable to save draft', description: error.message, variant: 'destructive' }),
@@ -191,8 +193,8 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
           <h2 className="text-[var(--text-lg)] font-bold flex items-center gap-2"><FileText className="h-5 w-5" /> Full policy version</h2>
           <p className="text-xs text-[var(--text-muted)] mt-1">Editing creates version {editable.version + 1}; the stored text is loaded only after source authorization.</p>
         </div>
-        {canEdit && <button onClick={handleSave} disabled={isPending || importBusy || importBlocked || contentLoading || contentError || !policyText.trim() || audience.length === 0} className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-bold rounded-lg disabled:opacity-50 flex items-center gap-2">
-          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 className="h-4 w-4" />} Save full replacement
+        {canEdit && <button onClick={handleSave} disabled={isPending || importBusy || importBlocked || contentLoading || contentError || !policyText.trim() || audience.length === 0 || Boolean(importId && (!approvalSettings.data || approvalSettings.isError))} className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-bold rounded-lg disabled:opacity-50 flex items-center gap-2">
+          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 className="h-4 w-4" />} {importId ? approvalSettings.data?.requiresSeparateReview ? 'Upload replacement for review' : 'Upload replacement' : 'Save full replacement'}
         </button>}
       </div>
       <PolicySourceProvenance provenance={editable.importProvenance} />
@@ -207,21 +209,21 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
             onClear={() => { setPolicyText(text ?? ''); setImportId(undefined); setImportBlocked(false); }}
             onBlocked={() => { setImportId(undefined); setImportBlocked(true); }}
           />}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Policy title"><input value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canEdit} className={fieldClass} /></Field>
             <Field label="Source reference"><input value={sourceReference} onChange={(e) => setSourceReference(e.target.value)} disabled={!canEdit} className={`${fieldClass} font-mono`} /></Field>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Effective from"><input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} disabled={!canEdit} className={fieldClass} /></Field>
             <Field label="Effective until"><input type="date" value={effectiveUntil} onChange={(e) => setEffectiveUntil(e.target.value)} disabled={!canEdit} className={fieldClass} /></Field>
             <Field label="Review by"><input type="date" value={reviewBy} onChange={(e) => setReviewBy(e.target.value)} disabled={!canEdit} className={fieldClass} /></Field>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Country"><input value={country} onChange={(e) => setCountry(e.target.value)} disabled={!canEdit} className={fieldClass} /></Field>
             <Field label="Worker type"><input value={workerType} onChange={(e) => setWorkerType(e.target.value)} disabled={!canEdit} className={fieldClass} /></Field>
             <Field label="Location"><input value={location} onChange={(e) => setLocation(e.target.value)} disabled={!canEdit} className={fieldClass} /></Field>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Review authority">
               <select value={reviewAuthorityRole} onChange={(e) => setReviewAuthorityRole(e.target.value as PolicyVersion['reviewAuthorityRole'])} disabled={!canEdit} className={fieldClass}>
                 <option value="hr-compliance">HR Compliance</option><option value="legal">Legal</option><option value="occupational-health">Occupational Health</option><option value="payroll">Payroll</option>
@@ -235,7 +237,7 @@ function DraftEditor({ policy, text, contentLoading, contentError, selectedForEd
           </div>
           <div>
             <label className="block text-sm font-semibold mb-1.5 text-[var(--text-secondary)]">Policy text (full replacement)</label>
-            <textarea value={policyText} onChange={(e) => setPolicyText(e.target.value)} disabled={!canEdit} maxLength={40000} className="w-full h-64 p-4 rounded-xl border focus:border-[var(--primary)] outline-none font-serif resize-y disabled:bg-slate-50" />
+            <textarea value={policyText} readOnly={Boolean(importId && !approvalSettings.data?.requiresSeparateReview)} onChange={(e) => setPolicyText(e.target.value)} disabled={!canEdit} maxLength={40000} className="w-full h-64 p-4 rounded-xl border focus:border-[var(--primary)] outline-none font-serif resize-y disabled:bg-slate-50" />
             <p className="text-xs text-[var(--text-muted)] mt-2 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" /> The complete current text is submitted with every edit; partial patches are not supported.</p>
           </div>
         </div>}
