@@ -8,6 +8,13 @@ front-end selection of named contacts and agents rather than requiring users to
 copy system IDs into each case. Case pages should focus on the request, tasks,
 conversations and decisions—not a separate operational-preparation process.
 
+Do not add an Offboarding/Separations shortcut button to the main Cases header.
+
+**Why:** The user explicitly removed that extra header button as unnecessary.
+
+**How to apply:** Keep the existing Offboarding routes and Client Setup case links;
+do not restore the main case-list header shortcut to solve discoverability.
+
 **Why:** The product owner explicitly said the additional Operational preparation
 section was not requested and made the already complicated case page unusable.
 Repeated fictional-source explanations were also rejected; the S-number is the

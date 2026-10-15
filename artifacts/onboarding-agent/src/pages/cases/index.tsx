@@ -331,7 +331,6 @@ export function CasesPage() {
       <PageHeader title={context.title} subtitle={context.subtitle}>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Link href="/email-intake"><Button variant="outline" className="gap-2" data-testid="link-email-intake">Email intake</Button></Link>
-          <Link href="/cases/separations"><Button variant="outline" className="gap-2" data-testid="link-separations">Offboarding cases</Button></Link>
           {!organization.data?.demoProfile && <>
           <Button onClick={() => setShowNew(!showNew)} className="gap-2">
             <Plus className="h-4 w-4" /> New Case
