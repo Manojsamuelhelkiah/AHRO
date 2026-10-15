@@ -256,7 +256,7 @@ test("organization creation requires, canonicalizes, stores, and returns a prima
   await deleteTestOrganizations(eq(organizationsTable.id, response.organization.id));
 });
 
-test("member administration enforces owner-only CAS mutations and active listing", { concurrency: false }, async () => {
+test("member administration permits client admins with CAS mutations and active listing", { concurrency: false }, async () => {
   const adminList = await request("/organizations/members", adminUserId);
   assert.equal(adminList.status, 200);
   assert.deepEqual(
@@ -271,7 +271,13 @@ test("member administration enforces owner-only CAS mutations and active listing
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ expectedRole: "member", role: "admin" }),
   });
-  assert.equal(adminAttempt.status, 403);
+  assert.equal(adminAttempt.status, 200);
+  const adminRestore = await request(`/organizations/members/${targetUserId}`, adminUserId, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ expectedRole: "admin", role: "member" }),
+  });
+  assert.equal(adminRestore.status, 200);
 
   const stale = await request(`/organizations/members/${targetUserId}`, ownerUserId, {
     method: "PATCH",
@@ -304,7 +310,7 @@ test("identity enrichment is authorized before directory access and restricted t
   };
   const denied = await listOrganizationMembers(organizationId, otherOwnerUserId, loadLabels);
   assert.equal(denied.kind, "error");
-  const deniedRemoved = await listRemovedOrganizationMembers(organizationId, adminUserId, loadLabels);
+  const deniedRemoved = await listRemovedOrganizationMembers(organizationId, otherOwnerUserId, loadLabels);
   assert.equal(deniedRemoved.kind, "error");
   assert.deepEqual(queried, []);
   const allowed = await listOrganizationMembers(organizationId, ownerUserId, loadLabels);
@@ -469,7 +475,7 @@ test("owners can review and reinstate a removed member with an audited reason an
   assert.equal(removed.revision, 1);
 
   const adminList = await request("/organizations/current/removed-members", adminUserId);
-  assert.equal(adminList.status, 403);
+  assert.equal(adminList.status, 200);
   const removedAccountList = await request("/organizations/current/removed-members", targetUserId);
   assert.equal(removedAccountList.status, 403);
   const crossTenantList = await request("/organizations/current/removed-members", otherOwnerUserId, {

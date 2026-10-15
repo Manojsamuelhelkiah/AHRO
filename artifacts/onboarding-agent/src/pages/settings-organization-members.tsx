@@ -32,7 +32,7 @@ export function OrganizationMembersSettings() {
   const { role, loading: roleLoading } = useOrganizationRole();
   const queryClient = useQueryClient();
   const canRead = role === "owner" || role === "admin";
-  const canManage = role === "owner";
+  const canManage = role === "owner" || role === "admin";
   const organizationId = getPinnedOrganizationIdForPage();
   const members = useListOrganizationMembers({
     query: { enabled: canRead && !!organizationId, queryKey: [...getListOrganizationMembersQueryKey(), organizationId], staleTime: 0, refetchOnMount: "always" },
@@ -97,7 +97,7 @@ export function OrganizationMembersSettings() {
 
   const revoke = (member: OrganizationMember) => {
     if (!canManage || !window.confirm(
-      `Remove ${identityLabel(member, rows)} from this organization?\n\nThis revokes organization access. Shared join codes cannot restore access. Historical records are retained. Only an owner can explicitly reinstate ordinary membership.`,
+      `Remove ${identityLabel(member, rows)} from this organization?\n\nThis revokes organization access. Shared join codes cannot restore access. Historical records are retained. A client owner or administrator must explicitly reinstate ordinary membership.`,
     )) return;
     setNotice(null);
     remove.mutate({
@@ -194,7 +194,7 @@ export function OrganizationMembersSettings() {
             <section className="space-y-3 border-t border-[var(--border)] pt-4" aria-label="Removed members">
               <h4 className="text-sm font-semibold">Removed members</h4>
               <p className="text-xs text-[var(--text-muted)]">
-                Only an owner can reinstate an account, as an ordinary member. Previously revoked
+                A client owner or administrator can reinstate an account, as an ordinary member. Previously revoked
                 permissions and historical approval receipts are not restored. Access changes require explicit review.
               </p>
               {removedMembers.isLoading ? <LoadingBlock>Loading removed members...</LoadingBlock>

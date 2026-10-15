@@ -77,8 +77,8 @@ test("isolated contextual Gmail lifecycle: admission, partial/exception, replay,
     await db.insert(organizationsTable).values({ id: "demo", slug: "demo", name: "Demo Organization", joinCodeHash: "isolated-unused", createdByUserId: operator }).onConflictDoNothing();
     await db.insert(organizationsTable).values({ id: "other", slug: "other", name: "Other Organization", joinCodeHash: "isolated-other-unused", createdByUserId: operator });
     for (const user of [operator, reviewer, owner, escalation]) {
-      await db.insert(organizationMembershipsTable).values({ organizationId: "demo", clerkUserId: user, role: "member" });
-      await db.insert(accessNamedGrants).values(keys.map(resourceKey => ({ organizationId: "demo", principalType: "human" as const, principalId: user,
+      await db.insert(organizationMembershipsTable).values({ organizationId: "demo", clerkUserId: user, role: user === operator ? "admin" : "member" });
+      if (user !== operator) await db.insert(accessNamedGrants).values(keys.map(resourceKey => ({ organizationId: "demo", principalType: "human" as const, principalId: user,
         scope: "tenant" as const, resourceType: resourceKey.startsWith("flow.") ? "flow" as const : resourceKey.startsWith("tool.") ? "tool" as const : "field" as const,
         resourceKey, source: "named" as const, effect: "allow" as const, status: "active" as const, createdByUserId: "fixture-grantor",
         approvedByUserId: "fixture-independent-grantor", approvedAt: new Date() })));
@@ -99,6 +99,8 @@ test("isolated contextual Gmail lifecycle: admission, partial/exception, replay,
       }, "contextual-offboarding"), /sensitive collection|policies are missing/i,
       "source labels and JSON flags cannot bypass ordinary collection gates");
       const choices = await exchangeSetupChoices("demo", operator);
+      assert.equal((await db.select().from(accessNamedGrants).where(eq(accessNamedGrants.principalId, operator))).length, 0,
+        "the client admin opens Gmail setup and provisions cases without individual grants");
       assert.deepEqual(choices.cases.map(c => c.id).sort(), [...provisioned.caseIds].sort());
       assert.equal(choices.agents.find(a => a.id === agentId)?.name, "Conversation agent");
       assert.ok(choices.members.some(m => m.id === owner));
@@ -167,7 +169,8 @@ test("isolated contextual Gmail lifecycle: admission, partial/exception, replay,
       assert.equal(outbound.status, "accepted");
       assert.equal(stateOf(await pilot(id)).tasks[0].status, "pending", "Gmail acceptance is not source acknowledgment");
       const ackId = await incoming(outbound, "Received, working on it");
-      assert.equal(stateOf(await pilot(id)).tasks[0].status, "acknowledged");
+      assert.equal(stateOf(await pilot(id)).tasks[0].status, "acknowledged",
+        JSON.stringify((await db.select().from(offbExchanges).where(eq(offbExchanges.providerMessageId, ackId))).map(m => ({ status: m.status, applied: m.applied }))));
       const ackVersion = (await pilot(id)).version;
       await incoming(outbound, "Received, working on it", ownerAddress, ackId);
       assert.equal((await pilot(id)).version, ackVersion, "inbox replay is atomic and idempotent");

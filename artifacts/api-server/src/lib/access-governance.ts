@@ -125,6 +125,8 @@ type AccessReadBatch = {
   cases: Set<number>;
   activatedCases: Set<number>;
   members: Set<string>;
+  administrators: Set<string>;
+  sharedDemoPrincipals: Set<string>;
   agents: (typeof accessAgents.$inferSelect)[];
   memberships: (typeof accessUserGroupMembers.$inferSelect)[];
   userGroups: (typeof accessUserGroups.$inferSelect)[];
@@ -208,15 +210,23 @@ export async function resolveEffectiveAccessForCases(
     ));
     const memberIds = [...new Set([...principals, ...agents.map(row => row.ownerUserId),
       ...userGroups.map(row => row.ownerUserId), ...securityGroups.map(row => row.ownerUserId)])];
-    const members = memberIds.length ? await tx.select({ userId: organizationMembershipsTable.clerkUserId })
+    const members = memberIds.length ? await tx.select({ userId: organizationMembershipsTable.clerkUserId, role: organizationMembershipsTable.role })
       .from(organizationMembershipsTable).where(and(
         eq(organizationMembershipsTable.organizationId, input.organizationId),
         inArray(organizationMembershipsTable.clerkUserId, memberIds), isNull(organizationMembershipsTable.revokedAt),
+      )) : [];
+    const demoRegistrations = principals.length ? await tx.select({ key: onbSettings.key, value: onbSettings.value })
+      .from(onbSettings).where(and(
+        eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+        inArray(onbSettings.key, principals.map(demoPrincipalSettingKey)),
       )) : [];
     const batch: AccessReadBatch = {
       now, cases: new Set(cases.map(row => row.id)),
       activatedCases: new Set(cases.filter(row => row.activation !== null).map(row => row.id)),
       members: new Set(members.map(row => row.userId)),
+      administrators: new Set(members.filter(row => row.role === "owner" || row.role === "admin").map(row => row.userId)),
+      sharedDemoPrincipals: new Set(principals.filter(id => demoRegistrations.some(row =>
+        row.key === demoPrincipalSettingKey(id) && parseRegisteredDemoProfile(row.value)))),
       agents, memberships, userGroups, groupLinks, directLinks, securityGroups, attachments, policies, grants,
     };
     const result = new Map<number, EffectiveAccess>();
@@ -331,6 +341,29 @@ async function isActiveHumanMember(
     ))
     .limit(1);
   return Boolean(membership);
+}
+
+/** Live app-owned client role, never a display label or public Demo identity. */
+export async function isClientAdministratorInTransaction(
+  tx: AccessGovernanceTransaction,
+  organizationId: string,
+  userId: string,
+  batch?: AccessReadBatch,
+): Promise<boolean> {
+  if (!organizationId || !userId) return false;
+  if (batch) return batch.administrators.has(userId) && !batch.sharedDemoPrincipals.has(userId);
+  const [membership] = await tx.select({ role: organizationMembershipsTable.role })
+    .from(organizationMembershipsTable).where(and(
+      eq(organizationMembershipsTable.organizationId, organizationId),
+      eq(organizationMembershipsTable.clerkUserId, userId),
+      isNull(organizationMembershipsTable.revokedAt),
+    )).limit(1);
+  if (membership?.role !== "owner" && membership?.role !== "admin") return false;
+  const [registration] = await tx.select({ value: onbSettings.value }).from(onbSettings).where(and(
+    eq(onbSettings.organizationId, DEMO_ORGANIZATION_ID),
+    eq(onbSettings.key, demoPrincipalSettingKey(userId)),
+  )).limit(1);
+  return !parseRegisteredDemoProfile(registration?.value);
 }
 
 async function caseBelongsToTenant(
@@ -632,8 +665,9 @@ async function resolveSubjectCapabilities(
  * Resolve the union of current security-group policy and named grants for a
  * tenant member. Agents must name an active initiating human and receive only
  * the intersection of both principals' effective permissions. Membership
- * roles (including owner), legacy specialist authorities, and display labels
- * never create a permission.
+ * Active named client owners/admins receive all catalog permissions in their
+ * own tenant. Ordinary members still need explicit grants/policies. Legacy
+ * specialist authorities and display labels never create permissions.
  *
  * `purpose` is recorded only as caller context and is not an authorization
  * input. A provided caseId must identify a case in organizationId.
@@ -693,6 +727,12 @@ async function evaluateEffectiveAccess(
     return { allows: [...keys], reasons };
   }
 
+  if (input.principalType === "human" &&
+    await isClientAdministratorInTransaction(tx, input.organizationId, input.principalId, batch)) {
+    for (const key of keys) reasons[key].push("Active client administrator; full administrative access within this client only. Independent evidence, consent and execution safeguards still apply.");
+    return { allows: [...keys], reasons };
+  }
+
   let primary: PrincipalSubject;
   let initiator: PrincipalSubject | undefined;
   if (input.principalType === "human") {
@@ -728,7 +768,13 @@ async function evaluateEffectiveAccess(
   }
 
   const principalCapabilities = await resolveSubjectCapabilities(tx, input, primary, batch);
-  const initiatorCapabilities = initiator
+  const administrativeInitiator = initiator
+    ? await isClientAdministratorInTransaction(tx, input.organizationId, initiator.principalId, batch)
+    : false;
+  const initiatorCapabilities = initiator && administrativeInitiator
+    ? { allows: new Set<string>(keys), denies: new Set<string>(),
+      reasons: new Map(keys.map(key => [key, ["Initiating human is an active administrator of this client."]])) }
+    : initiator
     ? await resolveSubjectCapabilities(tx, input, initiator, batch)
     : undefined;
   for (const key of keys) {

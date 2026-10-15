@@ -103,6 +103,14 @@ test("preset group creation accepts active Super Admin without elevating its und
     assert.equal(membership[0].role, "member");
     const ownerResult = await create("payroll", owner);
     assert.equal(ownerResult.status, 201, JSON.stringify(ownerResult.body));
+    await db.update(organizationMembershipsTable).set({ role: "admin" })
+      .where(eq(organizationMembershipsTable.clerkUserId, actor));
+    const clientAdminResult = await create("it-operations", actor);
+    assert.equal(clientAdminResult.status, 201, JSON.stringify(clientAdminResult.body));
+    await db.update(organizationMembershipsTable).set({ role: "member" })
+      .where(eq(organizationMembershipsTable.clerkUserId, actor));
+    assert.equal((await create("compliance-reviewers", actor)).status, 403,
+      "downgraded client admin cannot retain group creation privileges");
   } finally {
     if (server) await new Promise<void>((resolve, reject) =>
       server!.close(error => error ? reject(error) : resolve()));

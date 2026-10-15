@@ -199,7 +199,7 @@ export function AccessGovernanceSettings() {
   const { role, loading: roleLoading } = useOrganizationRole();
   const queryClient = useQueryClient();
   const canRead = role === "owner" || role === "admin";
-  const canManage = role === "owner";
+  const canManage = role === "owner" || role === "admin";
   const organizationId = getPinnedOrganizationIdForPage();
   const queryKey = ["organization-access-governance", organizationId];
   const snapshotQuery = useQuery({
@@ -592,7 +592,7 @@ export function AccessGovernanceSettings() {
                   The list could not be refreshed. Displaying the last loaded groups. {errorText(snapshotQuery.error)}
                   <Button variant="outline" size="sm" className="ml-3" onClick={() => void snapshotQuery.refetch()}>Retry refresh</Button>
                 </div>}
-                {!canManage && <div className="flex items-start gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-xs text-[var(--text-muted)]"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Read-only access. Only organization owners can create or change agents, groups, memberships, grants, and approvals.</div>}
+                {!canManage && <div className="flex items-start gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-xs text-[var(--text-muted)]"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Read-only access. Client owners and administrators can manage agents, groups, memberships and grants. Independent review requirements still apply.</div>}
 
                 <section className="rounded-md border border-[var(--border)] bg-[var(--surface-alt)] p-3">
                   <SectionTitle title="Upcoming access expirations" detail="Active temporary assignments stop granting access at the listed time. Times are shown in your local timezone." />
@@ -787,16 +787,16 @@ export function AccessGovernanceSettings() {
                           <select aria-label="New user-group steward" className={`${inputClass} mt-1 w-full`} disabled={busy || !ownerDirectory.data || ownerDirectory.isError} value={transfer.ownerUserId} onChange={(event) => setTransfer({ ...transfer, ownerUserId: event.target.value, acknowledged: false })}>
                             <option value="">Choose an active owner by name</option>
                             {(ownerDirectory.data?.members ?? []).filter((member) => member.accountKind !== "internal" &&
-                              member.role === "owner" && member.clerkUserId !== transfer.group.ownerUserId &&
-                              data.members.some((active) => active.role === "owner" && active.clerkUserId === member.clerkUserId),
+                              (member.role === "owner" || member.role === "admin") && member.clerkUserId !== transfer.group.ownerUserId &&
+                              data.members.some((active) => (active.role === "owner" || active.role === "admin") && active.clerkUserId === member.clerkUserId),
                             ).map((member) => <option key={member.clerkUserId} value={member.clerkUserId}>{memberLabel(member, data.members)}</option>)}
                           </select>
                         </label>
-                        {ownerDirectory.data && !ownerDirectory.data.members.some((member) => member.accountKind !== "internal" && member.role === "owner" && member.clerkUserId !== transfer.group.ownerUserId && data.members.some((active) => active.role === "owner" && active.clerkUserId === member.clerkUserId)) && <p className="text-xs">No other active organization owners are available.</p>}
+                        {ownerDirectory.data && !ownerDirectory.data.members.some((member) => member.accountKind !== "internal" && (member.role === "owner" || member.role === "admin") && member.clerkUserId !== transfer.group.ownerUserId && data.members.some((active) => (active.role === "owner" || active.role === "admin") && active.clerkUserId === member.clerkUserId)) && <p className="text-xs">No other active client owners or administrators are available.</p>}
                         <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={transfer.acknowledged} disabled={busy} onChange={(event) => setTransfer({ ...transfer, acknowledged: event.target.checked })} />I understand the access suspension and confirm transfer to {transfer.ownerUserId ? memberLabel(ownerDirectory.data?.members.find((member) => member.clerkUserId === transfer.ownerUserId) ?? { clerkUserId: transfer.ownerUserId, role: "owner" }, data.members) : "the selected owner"}.</label>
                         {group.version !== transfer.group.version && <p role="alert" className="text-xs text-[var(--status-red)]">This group changed. Cancel and reopen the transfer to review its current settings.</p>}
                         <div className="flex gap-2">
-                          <Button type="submit" size="sm" disabled={busy || ownerDirectory.isError || !transfer.acknowledged || !ownerDirectory.data?.members.some((member) => member.accountKind !== "internal" && member.role === "owner" && member.clerkUserId === transfer.ownerUserId) || group.version !== transfer.group.version}>Confirm stewardship transfer</Button>
+                          <Button type="submit" size="sm" disabled={busy || ownerDirectory.isError || !transfer.acknowledged || !ownerDirectory.data?.members.some((member) => member.accountKind !== "internal" && (member.role === "owner" || member.role === "admin") && member.clerkUserId === transfer.ownerUserId) || group.version !== transfer.group.version}>Confirm stewardship transfer</Button>
                           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setTransfer(null)}>Cancel</Button>
                         </div>
                       </form>}

@@ -21,6 +21,7 @@ import { isPlatformSuperAdmin } from "../lib/private-platform-admin";
 import { enrichMemberIdentities, isInternalAccount } from "../lib/member-identities";
 import {
   ACCESS_GOVERNANCE_CATALOG,
+  isClientAdministratorInTransaction,
   USER_GROUP_STARTERS,
   userGroupStarter,
   normalizedUserGroupName,
@@ -234,16 +235,9 @@ async function isActiveOrganizationOwner(
   organizationId: string,
   userId: string,
 ): Promise<boolean> {
-  const [owner] = await tx.select({ id: organizationMembershipsTable.clerkUserId })
-    .from(organizationMembershipsTable)
-    .where(and(
-      eq(organizationMembershipsTable.organizationId, organizationId),
-      eq(organizationMembershipsTable.clerkUserId, userId),
-      eq(organizationMembershipsTable.role, "owner"),
-      isNull(organizationMembershipsTable.revokedAt),
-    ))
-    .limit(1);
-  return Boolean(owner);
+  // Group stewardship still checks the exact recorded owner and independent
+  // reviewer; either live client administrative role may hold that position.
+  return isClientAdministratorInTransaction(tx, organizationId, userId);
 }
 
 async function policyForGroup(
@@ -864,8 +858,8 @@ router.get("/field-access", async (req, res, next) => {
 
 router.post("/agents", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may manage access governance.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -914,8 +908,8 @@ router.post("/agents", async (req, res, next) => {
 
 router.patch("/agents/:id", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may manage access governance.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -954,8 +948,8 @@ router.patch("/agents/:id", async (req, res, next) => {
 
 router.post("/user-groups", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may manage access governance.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -975,8 +969,8 @@ router.post("/user-groups", async (req, res, next) => {
       // administrative owner without permanently elevating the shared account.
       // Keep stored group-steward activity and independent review checks separate.
       if (starter && !isPlatformSuperAdmin(actor, organizationId) &&
-          !await isActiveOrganizationOwner(tx, organizationId, actor)) {
-        throw Object.assign(new Error("Only an active organization owner may create groups."), { status: 403, code: "ORGANIZATION_OWNER_REQUIRED" });
+          !await isClientAdministratorInTransaction(tx, organizationId, actor)) {
+        throw Object.assign(new Error("Only an active client owner or administrator may create groups."), { status: 403, code: "ORGANIZATION_OWNER_REQUIRED" });
       }
       if (starter) {
         const groups = await tx.select().from(accessUserGroups)
@@ -1034,8 +1028,8 @@ router.post("/user-groups", async (req, res, next) => {
 
 router.patch("/user-groups/:id", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may manage access governance.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -1127,8 +1121,8 @@ router.patch("/user-groups/:id", async (req, res, next) => {
 
 router.post("/user-groups/:id/owner", async (req, res, next): Promise<void> => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an active organization owner may transfer stewardship.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required to transfer stewardship.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const parsed = TransferAccessUserGroupOwnerBody.safeParse(req.body);
@@ -1219,8 +1213,8 @@ router.post("/user-groups/:id/owner", async (req, res, next): Promise<void> => {
 
 router.put("/user-groups/:id/members", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may manage access governance.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -1392,8 +1386,8 @@ router.put("/user-groups/:id/members", async (req, res, next) => {
 
 router.post("/user-groups/:id/members/approve", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may review sensitive group membership.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -1514,8 +1508,8 @@ router.post("/user-groups/:id/members/approve", async (req, res, next) => {
 
 router.put("/user-groups/:id/security-groups", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may manage access governance.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -1697,8 +1691,8 @@ router.put("/user-groups/:id/security-groups", async (req, res, next) => {
 
 router.post("/user-groups/:id/security-groups/approve", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may review group access bindings.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -1864,8 +1858,8 @@ router.post("/user-groups/:id/security-groups/approve", async (req, res, next) =
 
 router.post("/security-groups", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may manage access governance.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -1923,8 +1917,8 @@ router.post("/security-groups", async (req, res, next) => {
 
 router.patch("/security-groups/:id", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may manage access governance.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -2142,8 +2136,8 @@ router.patch("/security-groups/:id", async (req, res, next) => {
 
 router.put("/grants", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may manage access governance.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -2280,8 +2274,8 @@ router.put("/grants", async (req, res, next) => {
 
 router.post("/grants/approve", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may review direct access bindings.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);
@@ -2378,8 +2372,8 @@ router.post("/grants/approve", async (req, res, next) => {
 
 router.post("/security-groups/:id/approve", async (req, res, next) => {
   try {
-    if (req.organizationRole !== "owner") {
-      fail(res, 403, "Only an organization owner may review access policies.", "ORGANIZATION_OWNER_REQUIRED");
+    if (req.organizationRole !== "owner" && req.organizationRole !== "admin") {
+      fail(res, 403, "Client owner or administrator access is required.", "ORGANIZATION_OWNER_REQUIRED");
       return;
     }
     const body = bodyObject(req.body);

@@ -35,6 +35,7 @@ const ownedWorkspaceSuites = new Set([
   "src/lib/onboarding/workstream-connectors.test.ts",
   "src/lib/offboarding/offboarding.test.ts",
   "src/lib/offboarding/exchange-runtime.test.ts",
+  "src/lib/client-administrator-access.test.ts",
   "src/lib/privacy-enforcement.test.ts",
   "src/lib/hr-policy-imports.test.ts",
   "src/lib/onboarding/client-operations-settings.test.ts",

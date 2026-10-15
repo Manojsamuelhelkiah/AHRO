@@ -52,7 +52,7 @@ const OWNER_REQUIRED: MutationFailure = {
   kind: "error",
   status: 403,
   code: "ORGANIZATION_OWNER_REQUIRED",
-  message: "Only an organization owner may manage member roles, remove members, or reinstate members.",
+  message: "Client owner or administrator access is required to manage members.",
 };
 
 function memberResponse(
@@ -184,7 +184,7 @@ export async function listRemovedOrganizationMembers(
         eq(organizationMembershipsTable.clerkUserId, actorUserId),
         isNull(organizationMembershipsTable.revokedAt),
       ));
-    if (!isPlatformSuperAdmin(actorUserId, organizationId) && (!actor || actor.role !== "owner")) return OWNER_REQUIRED;
+    if (!isPlatformSuperAdmin(actorUserId, organizationId) && (!actor || (actor.role !== "owner" && actor.role !== "admin"))) return OWNER_REQUIRED;
     const members = await tx
       .select()
       .from(organizationMembershipsTable)
@@ -216,7 +216,7 @@ export async function changeOrganizationMemberRole(input: {
       input.actorUserId,
       input.targetUserId,
     );
-    if (!isPlatformSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || actor.role !== "owner")) return OWNER_REQUIRED;
+    if (!isPlatformSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || (actor.role !== "owner" && actor.role !== "admin"))) return OWNER_REQUIRED;
     if (input.targetUserId === input.actorUserId) {
       return conflict("An owner cannot change their own membership role.");
     }
@@ -293,7 +293,7 @@ export async function removeOrganizationMember(input: {
       input.actorUserId,
       input.targetUserId,
     );
-    if (!isPlatformSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || actor.role !== "owner")) return OWNER_REQUIRED;
+    if (!isPlatformSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || (actor.role !== "owner" && actor.role !== "admin"))) return OWNER_REQUIRED;
     if (input.targetUserId === input.actorUserId) {
       return conflict("An owner cannot remove their own membership.");
     }
@@ -388,7 +388,7 @@ export async function reinstateOrganizationMember(input: {
       input.actorUserId,
       input.targetUserId,
     );
-    if (!isPlatformSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || actor.role !== "owner")) return OWNER_REQUIRED;
+    if (!isPlatformSuperAdmin(input.actorUserId, input.organizationId) && (!actor || actor.revokedAt || (actor.role !== "owner" && actor.role !== "admin"))) return OWNER_REQUIRED;
     if (!target || !target.revokedAt) {
       return {
         kind: "error" as const,
