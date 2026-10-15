@@ -27,6 +27,8 @@ if (process.env.ONBOARDING_E2E_TEST !== "true" || process.env.NODE_ENV !== "test
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is required for the durable browser regression");
 }
+// Process-owned harness admission only, never supplied by browser input.
+process.env.ONBOARDING_AUTOMATED_TEST = "true";
 
 const port = Number(process.env.PORT || 4178);
 assert(Number.isInteger(port) && port > 0);
@@ -393,12 +395,31 @@ app.post("/api/test/offboarding-session", (req, res) => {
 });
 
 let exchangeBrowserFixture;
+const { exchangeBrowserBoundary, seedExchangeBrowserFixture, inspectExchangeBrowserFixture } = await import("./offboarding-exchange-browser-fixture.mjs");
+const exchangeBoundary = await exchangeBrowserBoundary();
 app.post("/api/test/offboarding-exchange-fixture", async (req, res, next) => {
   try {
     if (sessions.get(cookieValue(req, "browser_e2e_session")) !== offboardingFixture.actor) return res.status(403).json({ message: "Controlled operator required" });
-    const { seedExchangeBrowserFixture } = await import("./offboarding-exchange-browser-fixture.mjs");
-    exchangeBrowserFixture ??= seedExchangeBrowserFixture(dbPackage, offboardingFixture);
+    exchangeBrowserFixture ??= exchangeBoundary.run(() => seedExchangeBrowserFixture(dbPackage, offboardingFixture, exchangeBoundary));
     res.json(await exchangeBrowserFixture);
+  } catch (error) { next(error); }
+});
+app.get("/api/test/offboarding-exchange-state", async (req, res, next) => {
+  try {
+    if (sessions.get(cookieValue(req, "browser_e2e_session")) !== offboardingFixture.actor || !exchangeBrowserFixture) return res.status(403).end();
+    res.json(await inspectExchangeBrowserFixture(dbPackage, await exchangeBrowserFixture, exchangeBoundary));
+  } catch (error) { next(error); }
+});
+app.post("/api/test/offboarding-exchange-dispatch", async (req, res, next) => {
+  try {
+    if (sessions.get(cookieValue(req, "browser_e2e_session")) !== offboardingFixture.actor || !exchangeBrowserFixture) return res.status(403).end();
+    const state = await inspectExchangeBrowserFixture(dbPackage, await exchangeBrowserFixture, exchangeBoundary);
+    const message = state.exchanges.find(m => m.id === req.body.id && m.direction === "outbound" && state.caseIds.includes(m.caseId));
+    if (!message) return res.status(403).end();
+    const { dispatchExchange } = await import("./src/lib/offboarding/exchange-runtime.ts");
+    let blocked = null;
+    await exchangeBoundary.run(async () => { try { await dispatchExchange(message.id); } catch (error) { blocked = error.message; } });
+    res.json({ blocked, ...await inspectExchangeBrowserFixture(dbPackage, await exchangeBrowserFixture, exchangeBoundary) });
   } catch (error) { next(error); }
 });
 
@@ -483,7 +504,12 @@ app.use((req, _res, next) => {
   const session = cookieValue(req, "browser_e2e_session");
   const userId = session ? sessions.get(session) : null;
   if (userId) req.authUserId = userId;
-  enterControlledRequest(next);
+  enterControlledRequest(() => {
+    // Capture directory + transport for the whole awaited production route,
+    // not just fixture creation. Never admits a live provider.
+    if (exchangeBrowserFixture && userId === offboardingFixture.actor && req.path.startsWith("/api/offboarding/")) exchangeBoundary.run(next);
+    else next();
+  });
 });
 
 // The browser regression is allowed to inspect owned fixture state, but only

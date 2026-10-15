@@ -47,7 +47,10 @@ export function installConversationBrowserFixture(app, p, fixture, authenticated
         id: organizationId, name: "Isolated Conversation Test", slug: organizationId,
         joinCodeHash: `${randomUUID()}:unused`, createdByUserId: fixture.actor,
       });
-      await p.db.insert(p.organizationMembershipsTable).values({ organizationId, clerkUserId: fixture.actor, role: "admin" });
+      // These journeys revoke individual grants. A client administrator has
+      // membership-based access independently of those grants, so exercise
+      // revocation as an ordinary named member instead.
+      await p.db.insert(p.organizationMembershipsTable).values({ organizationId, clerkUserId: fixture.actor, role: "member" });
       const keys = ["flow.case.read", "flow.case.edit", "data.case.notes.read", "data.case.notes.edit", "data.case.profile.read", "data.case.readiness.read",
         "data.identity.read", "data.medical.read", "data.payroll.read", "data.bgv.read",
         "data.identity.edit", "data.medical.edit", "data.payroll.edit", "data.bgv.edit", "tool.external.dispatch"];

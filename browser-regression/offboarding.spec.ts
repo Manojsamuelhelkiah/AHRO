@@ -205,10 +205,11 @@ test("Settings and Cases share versioned offboarding proposals and independent d
   await expect(page.getByTestId("input-policy-role")).toHaveCount(0);
   await expect(page.getByText("PRIVATE PREVIOUS CLIENT DRAFT")).toHaveCount(0);
   await expect(page.locator('[data-testid^="card-policy-"]')).toHaveCount(0);
-  // Creating/owning a workspace does not grant the explicit policy visibility
-  // permissions. The empty new tenant remains fail-closed until configured.
-  await expect(page.getByRole("alert").filter({ hasText: "Access denied" })).toBeVisible();
-  await expect(page.getByTestId("button-new-policy")).toBeDisabled();
+  // A named workspace owner has client-local administrative rights, but no
+  // policy records or unsaved edits from the previously selected client.
+  await expect(page.getByText("No policies are visible", { exact: false })).toBeVisible();
+  await expect(page.getByTestId("button-new-policy")).toBeEnabled();
+  await expect(page.getByRole("alert").filter({ hasText: "Access denied" })).toHaveCount(0);
   await page.getByRole("combobox", { name: "Active client workspace" }).selectOption(fixture.organizationId);
   await expect(page.getByTestId(`card-policy-${draft.id}-2`)).toBeVisible();
 
