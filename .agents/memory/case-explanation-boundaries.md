@@ -26,3 +26,9 @@ Read-only analysis eligibility is separate from activation and provider-disclosu
 **Why:** A body-bearing explanation question was mistaken for a live mutation and returned a misleading retirement error. Removing that classification must not silently authorize a provider request or convert fictional source history into fresh evidence.
 
 **How to apply:** Admit only the supported explanation operation through mutation-oriented fences. Report genuine record or disclosure restrictions explicitly without repeated retry prompts. Keep preparation, activation and workflow start distinct, and require generation provenance for current child evidence; unproven historical snapshots cannot establish readiness.
+
+Read-only explanations use current reviewed disclosure decisions, not an operational adoption/rebase requirement on the historical case. They must not automatically approve provisional provider-governance decisions.
+
+**Why:** Curated offline examples share an operational retirement flag; routing explanation requests through ordinary message-dispatch checks incorrectly treats reading as live activation. After separating that classification, genuine current disclosure reviews can still block the model request.
+
+**How to apply:** Constrain the exception to exact server-owned explanation generation/verification operations, retain fresh case-analysis and actual UAT/controller isolation checks, and return the specific server-generated denial rather than an umbrella error. Separate AI-analysis policy approval from employee messaging only through explicit product authorization.

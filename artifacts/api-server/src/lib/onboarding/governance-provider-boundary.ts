@@ -21,6 +21,7 @@ import { getUatCaseIsolation } from "./uat-isolation";
 import { candidateEmailDeliveryDecision } from "./channel-routing";
 import { operationalCandidateEmailEligible as sampleCandidateEmailEligible } from "./operational-eligibility";
 import { withHroCaseContext, recordHroContextStep } from "../hro-context/manager";
+import { caseAnalysisRestriction } from "./case-analysis-eligibility";
 
 /**
  * Canonical provider-boundary scopes. These are server-owned constants: a
@@ -70,6 +71,18 @@ export type ProviderGovernanceDispatch<T> =
   | { dispatched: false; reason: string };
 const PROVIDER_GOVERNANCE_DENIED = Symbol("provider-governance-denied");
 
+/** Exact server-owned model operation, not an exemption selectable by request data. */
+export function isReadOnlyExplanationDispatch(input: {
+  caseRow: { id: number }; workflow: ProviderGovernanceWorkflow; providerId: string;
+  operation: string; readOnlyCaseAnalysis?: boolean;
+}): boolean {
+  return input.readOnlyCaseAnalysis === true &&
+    input.workflow === PROVIDER_GOVERNANCE_WORKFLOW.communication &&
+    input.providerId === "openai" &&
+    ["generation", "verification"].some(stage =>
+      input.operation === `onboarding-case-explainability:${input.caseRow.id}:${stage}`);
+}
+
 const SENSITIVE_CLASS_BY_WORKFLOW: Readonly<Record<ProviderGovernanceWorkflow, SensitiveDataClass>> = {
   "candidate-communications": "candidate-contact",
   "candidate-voice": "candidate-voice",
@@ -90,10 +103,19 @@ export async function evaluateProviderGovernanceGate(
     candidateEmailDelivery?: boolean;
     candidatePortalEmail?: boolean;
     allowIsolatedLocalOperation?: "candidate-private-upload" | "candidate-portal-credential";
+    readOnlyCaseAnalysis?: boolean;
   } = {},
 ): Promise<ProviderGovernanceGate> {
+  const [current] = await db.select().from(onbCases).where(and(
+    eq(onbCases.organizationId, caseRow.organizationId), eq(onbCases.id, caseRow.id),
+  )).limit(1);
+  if (!current) return { allowed: false, workflow, gate: null, reason: "Case no longer exists in this organization." };
+  if (options.readOnlyCaseAnalysis) {
+    const restriction = await caseAnalysisRestriction(current);
+    if (restriction) return { allowed: false, workflow, gate: null, reason: restriction };
+  }
   const gate = await evaluateStoredCaseGovernanceGate({
-    caseRow,
+    caseRow: current,
     // Both modules use the same explicit canonical scope union. No `as never`
     // escape hatch may hide an unmapped real-provider workflow.
     workflow,
@@ -101,11 +123,9 @@ export async function evaluateProviderGovernanceGate(
       options.candidateEmailDelivery && workflow === PROVIDER_GOVERNANCE_WORKFLOW.communication ||
       options.candidatePortalEmail && workflow === PROVIDER_GOVERNANCE_WORKFLOW.portal
     ),
+    readOnlyCaseAnalysis: options.readOnlyCaseAnalysis,
   });
-  const [current] = await db.select().from(onbCases).where(and(
-    eq(onbCases.organizationId, caseRow.organizationId), eq(onbCases.id, caseRow.id),
-  )).limit(1);
-  if (current && isRetiredControllerCase(current)) {
+  if (isRetiredControllerCase(current) && !options.readOnlyCaseAnalysis) {
     return { allowed: false, workflow, gate, reason: "Historical controller case: all operational effects are retired." };
   }
   if (gate.execution === "isolated-simulation" &&
@@ -146,6 +166,8 @@ export async function dispatchWithProviderGovernance<T>(input: {
   candidateEmailDelivery?: boolean;
   /** Internal bearer-link issuance accompanying an explicitly requested email. */
   candidatePortalEmail?: boolean;
+  /** Fixed case-explanation operation only; all final disclosure gates still apply. */
+  readOnlyCaseAnalysis?: boolean;
   /** Server-derived data class for document-specific provider disclosures. */
   dataClass?: SensitiveDataClass;
   /**
@@ -163,6 +185,7 @@ export async function dispatchWithProviderGovernance<T>(input: {
   dispatch: () => Promise<T>;
   disposition: (value: T) => GovernanceDispatchResult<T>["disposition"];
 }): Promise<ProviderGovernanceDispatch<T>> {
+  const readOnlyCaseAnalysis = isReadOnlyExplanationDispatch(input);
   let deniedReason: string | null = null;
   const value = await withGovernanceDispatch<T | typeof PROVIDER_GOVERNANCE_DENIED>({
     organizationId: input.caseRow.organizationId,
@@ -200,7 +223,7 @@ export async function dispatchWithProviderGovernance<T>(input: {
         deniedReason = "The onboarding case no longer exists in this organization.";
         return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
       }
-      if (isRetiredControllerCase(currentCase)) {
+      if (isRetiredControllerCase(currentCase) && !readOnlyCaseAnalysis) {
         deniedReason = "This case is retained historical evidence; operational effects are retired.";
         return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
       }
@@ -217,11 +240,20 @@ export async function dispatchWithProviderGovernance<T>(input: {
         (item.id === "policy-rebase-required" || item.id === "workforce-context-review") &&
         currentCase.readiness.find((readiness) => readiness.key === item.id)?.status !== "ready",
       );
-      if (unresolvedContextHold) {
+      if (unresolvedContextHold && !readOnlyCaseAnalysis) {
         deniedReason = "The case has a pending workforce policy rebase or migration review hold; rebuild and explicitly release it before provider dispatch.";
         return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
       }
       const uatIsolation = await getUatCaseIsolation(currentCase);
+      // Reading a curated example is not operational activation. Actual or
+      // uncertain UAT ownership and retained controller history remain denied.
+      if (readOnlyCaseAnalysis) {
+        const restriction = await caseAnalysisRestriction(currentCase);
+        if (restriction) {
+          deniedReason = restriction;
+          return { value: PROVIDER_GOVERNANCE_DENIED, disposition: "definitive-not-sent" as const };
+        }
+      }
       const candidateEmailDelivery = input.candidateEmailDelivery === true &&
         input.workflow === PROVIDER_GOVERNANCE_WORKFLOW.communication &&
         input.providerId === "gmail" && sampleCandidateEmailEligible(currentCase) &&
@@ -244,7 +276,7 @@ export async function dispatchWithProviderGovernance<T>(input: {
         input.allowIsolatedLocalOperation === "candidate-portal-credential" &&
         input.workflow === PROVIDER_GOVERNANCE_WORKFLOW.portal &&
         input.providerId === "internal-candidate-portal";
-      if (uatIsolation.isolated && !candidateEmailDelivery && !candidatePortalEmail && (
+      if (uatIsolation.isolated && !readOnlyCaseAnalysis && !candidateEmailDelivery && !candidatePortalEmail && (
         !uatIsolation.fencedByScenarioKey ||
         !uatIsolation.linkedToRun ||
         !localUatOperation
@@ -268,6 +300,7 @@ export async function dispatchWithProviderGovernance<T>(input: {
           allowIsolatedLocalOperation: input.allowIsolatedLocalOperation,
           candidateEmailDelivery,
           candidatePortalEmail,
+          readOnlyCaseAnalysis,
         },
       );
       if (!gate.allowed) {

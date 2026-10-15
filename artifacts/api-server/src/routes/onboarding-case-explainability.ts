@@ -199,7 +199,11 @@ export function createOnboardingCaseExplainabilityRouter(
             provider_governance_or_lifecycle_denied: "Ask AI is unavailable because current provider approval, record isolation, or data-disclosure policy does not permit AI analysis. Review the permitted case records directly.",
             sensitive_external_disclosure_blocked: "This question or its evidence includes restricted content that cannot be sent to an AI provider. Ask about general case status without private details, or review permitted records directly.",
           };
-          const message = restrictions[error.metadata?.code ?? ""];
+          const policyReason = error.metadata?.code === "provider_governance_or_lifecycle_denied"
+            ? error.metadata.denialReason : undefined;
+          const message = policyReason
+            ? `Ask AI cannot analyse this case: ${policyReason}`
+            : restrictions[error.metadata?.code ?? ""];
           if (message) {
             res.status(403).json({ code: error.metadata?.code, message, retryable: false });
             return;

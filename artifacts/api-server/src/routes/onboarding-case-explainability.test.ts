@@ -13,6 +13,19 @@ const ownedCase = {} as NonNullable<
   Awaited<ReturnType<typeof findExplainableCase>>
 >;
 
+test("provider restriction names the actual server policy denial without offering retries", async () => {
+  const result = await request(async () => {
+    throw new ExplainabilityCompletionError("Dispatch not approved", {
+      stage: "generation", code: "provider_governance_or_lifecycle_denied",
+      denialReason: "AI disclosure review is provisional.",
+    });
+  }, { question: "What needs attention?" }, { organizationId: "specific-policy-denial-test" });
+  assert.equal(result.response.status, 403);
+  const body = await result.response.json() as { message: string; retryable: boolean };
+  assert.equal(body.message, "Ask AI cannot analyse this case: AI disclosure review is provisional.");
+  assert.equal(body.retryable, false);
+});
+
 const evidence: CaseExplainabilityEvidence = {
   caseId: 41,
   asOf: "2030-01-01T00:00:00.000Z",

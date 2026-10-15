@@ -422,10 +422,12 @@ export async function evaluateStoredCaseGovernanceGate(input: {
   workflow?: GovernanceWorkflow;
   /** Candidate email, or its separately authorized internal portal credential. */
   candidateEmailDelivery?: boolean;
+  /** Server-only, read-only case explanations; never authorizes a business effect. */
+  readOnlyCaseAnalysis?: boolean;
 }): Promise<GovernanceExecutionGate> {
   const organizationId = input.caseRow.organizationId;
   const execution = executionContextForStoredCase({
-    isolatedSimulation: !(input.candidateEmailDelivery &&
+    isolatedSimulation: !input.readOnlyCaseAnalysis && !(input.candidateEmailDelivery &&
       (input.workflow === "candidate-communications" || input.workflow === "candidate-portal")) && isSyntheticOfflineCase({
       workerName: input.caseRow.workerName,
       workerEmail: input.caseRow.workerEmail,
@@ -495,6 +497,7 @@ export async function evaluateStoredCaseGovernanceGate(input: {
     )).orderBy(desc(onbReadinessSlaAttestations.id)).limit(1);
 
   if (
+    !input.readOnlyCaseAnalysis &&
     !adoptedSnapshot &&
     execution.kind === "live" &&
     decisions.some((decision) => {
@@ -512,10 +515,20 @@ export async function evaluateStoredCaseGovernanceGate(input: {
       }],
     };
   }
+  // An explanation reads recorded evidence, not a newly adopted operational
+  // plan. Evaluate current reviewed disclosure decisions without rewriting or
+  // rebasing the historical case. Ordinary effects retain snapshot semantics.
+  const analysisDecisions = input.readOnlyCaseAnalysis ? decisions.flatMap(decision => {
+    const scope = sensitiveDecisionDomain(decision);
+    return scope ? [{
+      key: decision.key, revision: decision.revision, status: decision.status,
+      domain: scope.domain, impactedWorkflows: [...scope.impactedWorkflows],
+    }] : [];
+  }) : null;
   return evaluateGovernanceExecutionGate({
     workflow,
     execution,
-    decisions: (adoptedSnapshot?.decisions ?? []).map((adopted) => {
+    decisions: (analysisDecisions ?? adoptedSnapshot?.decisions ?? []).map((adopted) => {
       const persisted = allDecisionRevisions.find((decision) =>
         decision.key === adopted.key && decision.revision === adopted.revision);
       // Approval made after this case adopted the exact same revision is

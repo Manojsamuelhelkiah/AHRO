@@ -16,6 +16,8 @@ export type ExplainabilityCompletionMetadata = {
   finishReason?: string;
   code?: string;
   status?: number;
+  /** Server-generated policy denial only; never model output or evidence text. */
+  denialReason?: string;
 };
 
 export class ExplainabilityCompletionError extends Error {
@@ -138,6 +140,7 @@ export async function completeExplainabilityJson(
       operation: `onboarding-case-explainability:${caseRow.id}:${stage}`,
       providerId: "openai",
       dataClass: "candidate-contact",
+      readOnlyCaseAnalysis: true,
       dispatch: async () => {
         const { dispatchHroAi } = await import("../hro-context/manager");
         return dispatchHroAi({
@@ -167,7 +170,7 @@ export async function completeExplainabilityJson(
     if (!guarded.dispatched) {
       throw new ExplainabilityCompletionError(
         "Explainability model dispatch is not approved.",
-        { stage, code: "provider_governance_or_lifecycle_denied" },
+        { stage, code: "provider_governance_or_lifecycle_denied", denialReason: guarded.reason },
       );
     }
     response = guarded.value;
