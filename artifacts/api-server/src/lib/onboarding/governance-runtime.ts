@@ -12,6 +12,7 @@ import {
   onbSystemChecks,
 } from "@workspace/db";
 import { ensureGovernanceSeeded } from "./governance";
+import { isRetiredGovernanceDecision } from "./governance-catalog";
 import { recordedHumanPermissionDecisionCurrent } from "../human-permissions";
 import {
   acquireCaseDispatchMutationLock,
@@ -260,6 +261,7 @@ export function evaluateGovernanceExecutionGate(input: {
     });
   }
   for (const decision of input.decisions) {
+    if (isRetiredGovernanceDecision(decision.key)) continue;
     if (!validRevision(decision)) {
       throw new Error("Governance decision runtime state contains an invalid key or revision.");
     }
@@ -306,6 +308,7 @@ function sensitiveDecisionDomain(row: {
   key: string;
   proposedValue: unknown;
 }): { domain: GovernanceDecisionDomain; impactedWorkflows: readonly string[] } | null {
+  if (isRetiredGovernanceDecision(row.key)) return null;
   // This catalog is a server-owned contract. Decision titles, rationale,
   // risks, and accountable-role labels are mutable review content and must
   // never select an execution gate.
@@ -321,18 +324,6 @@ export const GOVERNANCE_DECISION_RUNTIME_CATALOG: Readonly<Record<string, {
   "GD-04": { domain: "legal", impactedWorkflows: ["background-verification", "it-identity-access", "assets-workplace"] },
   "GD-06": { domain: "safety", impactedWorkflows: ["assets-workplace", "frontline-deployment"] },
   "GD-07": { domain: "legal", impactedWorkflows: ["background-verification"] },
-  "GD-10": {
-    domain: "privacy",
-    impactedWorkflows: [
-      "worker-record-documents",
-      "payroll-benefits",
-      "frontline-deployment",
-      "candidate-communications",
-      "candidate-voice",
-      "candidate-portal",
-    ],
-  },
-  "GD-11": { domain: "safety", impactedWorkflows: ["*"] },
 });
 
 const CUSTOM_RUNTIME_WORKFLOWS = new Set([
@@ -394,7 +385,7 @@ async function currentGovernanceRows(
       eq(onbGovernanceDecisions.organizationId, organizationId),
       eq(onbGovernanceDecisions.isCurrent, true),
     ));
-  return { decisions };
+  return { decisions: decisions.filter(decision => !isRetiredGovernanceDecision(decision.key)) };
 }
 
 /**
@@ -759,6 +750,7 @@ export function assessGovernanceCaseImpact(input: {
 }): GovernanceCaseImpact[] {
   const current = new Map(input.currentDecisions.map((decision) => [decision.key, decision]));
   const impacts: GovernanceCaseImpact[] = input.snapshot.decisions.flatMap((adopted): GovernanceCaseImpact[] => {
+    if (isRetiredGovernanceDecision(adopted.key)) return [];
     const decision = current.get(adopted.key);
     const sameRevision = decision?.revision === adopted.revision;
     // A same-revision approval that occurred after a provisional/draft case
@@ -780,6 +772,7 @@ export function assessGovernanceCaseImpact(input: {
   // snapshot. They still appear to an operator, including provisional state,
   // so a conscious locked rebase can decide whether to adopt them.
   for (const decision of input.currentDecisions) {
+    if (isRetiredGovernanceDecision(decision.key)) continue;
     if (input.snapshot.decisions.some((adopted) => adopted.key === decision.key)) continue;
     impacts.push({
       key: decision.key,

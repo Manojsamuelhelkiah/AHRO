@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import {
   GOVERNANCE_DECISIONS,
+  isRetiredGovernanceDecision,
 } from "./governance-catalog";
 import { canonicalAuthorityRoleId } from "./workforce-policies";
 import { isPlatformSuperAdmin } from "../private-platform-admin";
@@ -380,7 +381,8 @@ export async function listGovernanceDecisions(organizationId: string) {
   for (const row of revisions) {
     approvedByKey.set(row.key, Math.max(approvedByKey.get(row.key) ?? 0, row.revision));
   }
-  return rows.map((row) => decisionPublic(row, approvedByKey.get(row.key) ?? null));
+  return rows.filter(row => !isRetiredGovernanceDecision(row.key))
+    .map((row) => decisionPublic(row, approvedByKey.get(row.key) ?? null));
 }
 
 export async function createGovernanceDecision(
@@ -397,6 +399,7 @@ export async function createGovernanceDecision(
   // collision from replacing a governed seed with a self-routed record.
   await ensureGovernanceSeeded(organizationId);
   const key = governanceKey(input.key);
+  if (isRetiredGovernanceDecision(key)) throw new GovernanceValidationError("This legacy requirement is permanently retired.");
   const reviewDueAt = dueDate(input.reviewDueAt);
   const impactedWorkflows = cleanStringArray(input.impactedWorkflows, "impactedWorkflows");
   validateCustomRuntimeScope(input.proposedValue, impactedWorkflows);
@@ -445,6 +448,7 @@ export async function reviseGovernanceDecision(
 ) {
   requireEditor(actor);
   const key = governanceKey(keyInput);
+  if (isRetiredGovernanceDecision(key)) throw new GovernanceValidationError("This legacy requirement is permanently retired.");
   const expectedRevision = Number(input.expectedRevision);
   if (!Number.isInteger(expectedRevision) || expectedRevision < 1) {
     throw new GovernanceValidationError("expectedRevision must be a positive integer.");
@@ -547,6 +551,7 @@ export async function reviewGovernanceDecision(
   input: { revision?: unknown; outcome?: unknown; reason?: unknown; verificationReference?: unknown },
 ) {
   const key = governanceKey(keyInput);
+  if (isRetiredGovernanceDecision(key)) throw new GovernanceValidationError("This legacy requirement is permanently retired.");
   const revision = Number(input.revision);
   if (!Number.isInteger(revision) || revision < 1) throw new GovernanceValidationError("revision must be a positive integer.");
   const outcome = input.outcome === "approved" || input.outcome === "rejected" ? input.outcome : null;
@@ -826,6 +831,7 @@ export async function dispatchDueGovernanceReminders(organizationId: string, now
   )).orderBy(asc(onbGovernanceReminders.dueAt)).limit(100);
   let dispatched = 0;
   for (const candidate of due) {
+    if (isRetiredGovernanceDecision(candidate.decisionKey)) continue;
     const claimed = await db.transaction(async (tx) => {
       await assertGovernanceMutationAllowed(tx, organizationId);
       const [reminder] = await tx.select().from(onbGovernanceReminders).where(and(

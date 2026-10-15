@@ -134,26 +134,18 @@ describe("governance runtime execution gates", () => {
   });
 
   test("uses immutable catalog scopes, never mutable human workflow labels", () => {
-    assert.deepEqual(GOVERNANCE_DECISION_RUNTIME_CATALOG["GD-10"], {
-      domain: "privacy",
-      impactedWorkflows: [
-        "worker-record-documents",
-        "payroll-benefits",
-        "frontline-deployment",
-        "candidate-communications",
-        "candidate-voice",
-        "candidate-portal",
-      ],
+    assert.deepEqual(GOVERNANCE_DECISION_RUNTIME_CATALOG["GD-07"], {
+      domain: "legal", impactedWorkflows: ["background-verification"],
     });
     const blocked = evaluateGovernanceExecutionGate({
-      workflow: "worker-record-documents",
+      workflow: "background-verification",
       execution: { kind: "live" },
       decisions: [{
-        key: "GD-10",
+        key: "GD-07",
         revision: 1,
         status: "provisional",
-        domain: GOVERNANCE_DECISION_RUNTIME_CATALOG["GD-10"]!.domain,
-        impactedWorkflows: GOVERNANCE_DECISION_RUNTIME_CATALOG["GD-10"]!.impactedWorkflows,
+        domain: GOVERNANCE_DECISION_RUNTIME_CATALOG["GD-07"]!.domain,
+        impactedWorkflows: GOVERNANCE_DECISION_RUNTIME_CATALOG["GD-07"]!.impactedWorkflows,
       }],
     });
     assert.equal(blocked.allowed, false);

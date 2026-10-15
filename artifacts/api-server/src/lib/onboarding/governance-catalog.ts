@@ -8,6 +8,11 @@
  */
 
 export type GovernancePriority = "must" | "should" | "conditional";
+/** Product-retired requirements: retain old audit records, never seed or gate them again. */
+export const RETIRED_GOVERNANCE_DECISION_KEYS: readonly string[] = Object.freeze(["GD-10", "GD-11"]);
+export function isRetiredGovernanceDecision(key: string): boolean {
+  return RETIRED_GOVERNANCE_DECISION_KEYS.includes(key);
+}
 export type GovernanceCoverage = "gap" | "partial" | "covered";
 export type GovernanceImplementationState = "not-implemented" | "partial" | "implemented";
 export type GovernanceTestState = "not-tested" | "test-source-present";
@@ -442,22 +447,6 @@ export const GOVERNANCE_DECISIONS: readonly GovernanceDecision[] = [
     ["Incorrect deadline calculation across jurisdiction/timezone/holiday calendars", "deadline treated as a statutory or approved SLA"],
     "HR Operations", ["readiness SLA", "reminders", "Day-1 review"],
     ["BRD §4.6", "BRD §4.2, Step 09"], "development-and-simulation",
-  ),
-  provisionalDecision(
-    "GD-10", "No invented jurisdictional or retention defaults",
-    "Set no production default for payroll cutoff, jurisdiction calendars/timezone, medical/police/drug applicability, consent/residency, retention periods, or TUPE legal timelines.",
-    "The source document names these subjects but does not supply a tenant- and jurisdiction-approved value.",
-    ["Invented legal, privacy, payroll, or safety policy", "overwriting an approved tenant setting"],
-    "Legal / Privacy / Payroll", ["SLA scheduling", "frontline checks", "data retention", "M&A/TUPE"],
-    ["BRD §4.6", "BRD §10, BR-08", "BRD Appendix A §A.5 and §A.9", "BRD Appendix B §B.1 and §B.7"], "affected-live-actions-blocked",
-  ),
-  provisionalDecision(
-    "GD-11", "Live activation and human decision permissions",
-    "Development and isolated simulation may proceed. Unapproved legal, privacy, safety, provider configuration, real evidence, or missing current scoped permissions and explicit human review blocks the affected live action. Ordinary access does not establish professional qualifications.",
-    "This keeps implementation moving without using tenant membership or demo evidence as approval for external effects.",
-    ["Unauthorized live action", "membership mistaken for decision permission or professional qualification", "simulation treated as evidence"],
-    "AI Governance Lead", ["all live providers", "frontline release", "M&A/TUPE", "privacy-sensitive processing"],
-    ["BRD §3.3, AI Governance / Compliance", "BRD §10, BR-03 and BR-07"], "affected-live-actions-blocked",
   ),
   provisionalDecision(
     "GD-12", "Revision adoption and active cases",
