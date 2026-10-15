@@ -11,6 +11,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Disclosure } from '../detail/disclosure';
 import { ExchangePanel } from './exchange-panel';
 import { caseListReference } from '../case-presentation';
+import { OFFBOARDING_CASES_PATH } from '../list-navigation';
 import { ClosureWarning, ErrorBox, FACT_FIELDS, FactsForm, Field, Pill, SkeletonRows, areaCls, selectCls, statusTone, validateFacts } from './shared';
 
 const TRIGGERS = ['posh', 'whistleblower', 'litigation-hold', 'fraud-investigation', 'abscondment', 'death-in-service', 'statutory-position', 'unknown', 'conflicting'];
@@ -242,7 +243,7 @@ export function SeparationDetailPage() {
   if (!valid) return <ErrorBox error={new Error('Invalid case id.')} />;
   return (
     <div className="mx-auto max-w-7xl space-y-5">
-      <Link href="/cases/separations" className="inline-flex min-h-10 items-center gap-1 text-sm text-[var(--primary)]"><ArrowLeft className="h-4 w-4" /> Separations</Link>
+      <Link href={OFFBOARDING_CASES_PATH} className="inline-flex min-h-10 items-center gap-1 text-sm text-[var(--primary)]"><ArrowLeft className="h-4 w-4" /> Back to Cases</Link>
       {q.isLoading ? <SkeletonRows n={5} /> : q.isError ? <ErrorBox error={q.error} onRetry={() => q.refetch()} /> : d && (
         <>
           <header className="flex flex-wrap items-start justify-between gap-3">

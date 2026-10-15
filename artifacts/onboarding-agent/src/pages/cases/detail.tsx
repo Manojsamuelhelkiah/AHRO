@@ -246,7 +246,7 @@ export function CaseDetailPage() {
 
   if (!c) return <div className="p-8 text-center text-[var(--status-red)] font-bold">Case not found.</div>;
 
-  if (c.hireType === 'separation') return <Redirect to={`/cases/separations/${caseId}`} />;
+  if (c.hireType === 'separation') return <Redirect replace to={`/cases/separations/${caseId}${search ? `?${search}` : ''}${window.location.hash}`} />;
 
   const uatCoverageSample = isDemoCoverageCase(c);
 

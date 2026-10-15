@@ -32,7 +32,7 @@ test("controlled separation: intake, reviewed policy, workstream evidence, priva
     workerCategory: "employee", manager: "Receiving Test Manager",
   };
   await page.goto("/cases/separations/new");
-  await expect(page.getByRole("heading", { name: "New separation", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "New Offboarding case", exact: true })).toBeVisible();
   for (const [key, value] of Object.entries(facts)) await page.getByTestId(`input-${key}`).fill(value);
   await page.getByTestId("input-source-reference").fill(`browser-source-${Date.now()}`);
   await page.getByTestId("button-submit-separation").click();
@@ -75,8 +75,8 @@ test("controlled separation: intake, reviewed policy, workstream evidence, priva
     await page.setViewportSize(size);
     for (const { path, heading, slug } of [
       { path: `/cases/separations/${id}`, heading: null, slug: "detail" },
-      { path: "/cases/separations", heading: "Separations", slug: "list" },
-      { path: "/cases/separations/intake", heading: "Separation intake", slug: "intake" },
+      { path: "/cases/separations", heading: "Offboarding Cases", slug: "list" },
+      { path: "/cases/separations/intake", heading: "Offboarding intake", slug: "intake" },
       { path: "/cases/separations/policies", heading: "Offboarding policies", slug: "policies" },
        { path: "/settings/offboarding", heading: "Offboarding configuration", slug: "offboarding-settings" },
     ]) {

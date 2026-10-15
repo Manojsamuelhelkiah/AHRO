@@ -5,6 +5,7 @@ import { useCreateSeparationCase, useAdmitSeparationSourceEvent, getListSeparati
 import type { SeparationFacts } from '@workspace/api-client-react';
 import { Card, Input, PageHeader, Button } from '@/components/ui-shared';
 import { ErrorBox, Field, FactsForm, SubNav, LwdNote, emptyFacts, selectCls, validateFacts } from './shared';
+import { OFFBOARDING_CASES_PATH } from '../list-navigation';
 
 const CHANNELS = [
   { v: 'manual', l: 'Manual entry (HR compliance authority)' },
@@ -43,7 +44,7 @@ export function SeparationNewPage() {
   };
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <PageHeader title="New separation" subtitle="All thirteen facts are required. No employee contact details are collected." />
+      <PageHeader title="New Offboarding case" subtitle="All thirteen facts are required. No employee contact details are collected." />
       <SubNav active="new" />
       <LwdNote />
       <Card className="space-y-5 p-5">
@@ -62,7 +63,7 @@ export function SeparationNewPage() {
         {msg && <div role="status" className="rounded-md border border-[var(--status-amber)] bg-[var(--status-amber-bg)] p-3 text-sm text-[var(--status-amber-fg)]">{msg}</div>}
         <div className="flex gap-2">
           <Button data-testid="button-submit-separation" disabled={pending || channel === 'hris'} onClick={submit}>{pending ? 'Recording...' : 'Record separation'}</Button>
-          <Link href="/cases/separations"><Button variant="outline">Cancel</Button></Link>
+          <Link href={OFFBOARDING_CASES_PATH}><Button variant="outline">Cancel</Button></Link>
         </div>
       </Card>
     </div>

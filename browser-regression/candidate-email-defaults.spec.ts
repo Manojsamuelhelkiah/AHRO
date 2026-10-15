@@ -77,7 +77,7 @@ test("candidate email defaults, outcomes and retry controls stay clear and usabl
     if (request.method() === "POST" && path === `/api/onboarding/cases/${CASE_ID}/offer-package-request`) {
       sendRequests.push(path);
       if (holdSend) await new Promise<void>((resolve) => { releaseHeldSend = resolve; });
-      const id = nextMessageId++;
+      const id = Number(retryMatch[1]);
       communications.push({ ...candidateMessage(id, sendOutcome), failureReason: sendFailure });
       await route.fulfill({ status: 200, json: { id, caseId: CASE_ID, status: sendOutcome, failureReason: sendFailure } });
       return;
@@ -97,6 +97,9 @@ test("candidate email defaults, outcomes and retry controls stay clear and usabl
     }
     if (path === `/api/onboarding/cases/${CASE_ID}`) return void await route.fulfill({ json: caseProjection() });
     if (path === `/api/onboarding/cases/${CASE_ID}/access-permissions`) return void await route.fulfill({ json: permissions });
+    if (path === `/api/onboarding/cases/${CASE_ID}/governance-impact`) {
+      return void await route.fulfill({ json: { caseId: CASE_ID, snapshot: null, impacts: [] } });
+    }
     if (path === `/api/onboarding/cases/${CASE_ID}/communications`) return void await route.fulfill({ json: communications });
     if (path === `/api/onboarding/cases/${CASE_ID}/governance-impact`) {
       return void await route.fulfill({ json: { snapshot: null, impacts: [] } });

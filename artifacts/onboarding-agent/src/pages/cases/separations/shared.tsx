@@ -8,6 +8,7 @@ import { Children, cloneElement, isValidElement, useId, type ReactNode } from 'r
 import { Link } from 'wouter';
 import type { SeparationFacts } from '@workspace/api-client-react';
 import { Button, Input, Label } from '@/components/ui-shared';
+import { OFFBOARDING_CASES_PATH } from '../list-navigation';
 
 export const CLOSURE_WARNING = 'Final closure blocked: section 4.6 requirements pending';
 
@@ -109,11 +110,11 @@ export function SkeletonRows({ n = 4 }: { n?: number }) {
 }
 
 export function SubNav({ active }: { active: 'list' | 'new' | 'intake' | 'policies' }) {
-  const items = [['list', '/cases/separations', 'Separations'], ['new', '/cases/separations/new', 'New separation'], ['intake', '/cases/separations/intake', 'Batch and mailbox'], ['policies', '/cases/separations/policies', 'Policies']] as const;
+  const items = [['list', OFFBOARDING_CASES_PATH, 'Cases'], ['new', '/cases/separations/new', 'New Offboarding case'], ['intake', '/cases/separations/intake', 'Offboarding intake'], ['policies', '/settings/offboarding', 'Offboarding configuration']] as const;
   return (
-    <nav aria-label="Separation sections" className="flex gap-1 overflow-x-auto border-b border-[var(--border)]">
+    <nav aria-label="Offboarding navigation" className="flex max-w-full min-w-0 gap-1 overflow-x-auto border-b border-[var(--border)]">
       {items.map(([k, href, label]) => (
-        <Link key={k} href={href} data-testid={`link-sep-${k}`} className={`shrink-0 border-b-2 px-3 py-2 text-sm ${active === k ? 'border-[var(--primary)] font-semibold text-[var(--primary)]' : 'border-transparent text-[var(--text-muted)]'}`}>{label}</Link>
+        <Link key={k} href={href} aria-current={active === k ? 'page' : undefined} data-testid={`link-sep-${k}`} className={`shrink-0 border-b-2 px-3 py-2 text-sm ${active === k ? 'border-[var(--primary)] font-semibold text-[var(--primary)]' : 'border-transparent text-[var(--text-muted)]'}`}>{label}</Link>
       ))}
     </nav>
   );

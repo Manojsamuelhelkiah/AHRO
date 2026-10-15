@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { caseListReference } from "../artifacts/onboarding-agent/src/pages/cases/case-presentation";
 
 test("client email saves reach existing and future cases without sending; overrides, pauses and queued-send fences persist", async ({ page }) => {
   const session = await page.request.post("/api/test/offboarding-session", { data: { profile: "offboarding-operator" } });
@@ -38,9 +39,20 @@ test("client email saves reach existing and future cases without sending; overri
     }
   });
   await page.goto("/cases/separations");
+  // These retained fixtures are not approved fixed-inventory ordinary examples.
+  // Keep the shared list's history boundary rather than upgrading their identity.
+  await page.getByRole("checkbox", { name: "Show all historical test records" }).check();
+  const envelopesResponse = await page.request.get("/api/onboarding/cases", { headers: { "X-Organization-Id": "demo" } });
+  expect(envelopesResponse.ok()).toBeTruthy();
+  const envelopes = await envelopesResponse.json();
   for (const id of fixture.caseIds) {
-    await expect(page.getByTestId(`row-separation-${id}`)).toContainText(`S${id}`);
-    await expect(page.getByTestId(`row-separation-${id}`)).not.toContainText("FICTIONAL");
+    const envelope = envelopes.find((record: { id: number }) => record.id === id);
+    expect(envelope).toBeTruthy();
+    const reference = caseListReference(envelope);
+    const row = page.locator(`tr[aria-label^="Open case ${reference}"]:visible`)
+      .or(page.getByRole('button').filter({ hasText: reference }));
+    await expect(row).toContainText(reference);
+    await expect(row).not.toContainText("FICTIONAL");
     expect((await get(id)).enrollment.enabled).toBe(false);
   }
   await page.goto(`/cases/separations/${overrideId}`);

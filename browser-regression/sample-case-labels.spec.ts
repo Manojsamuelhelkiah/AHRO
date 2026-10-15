@@ -27,7 +27,7 @@ test('sample labels, reference cleanup and read-only navigation at phone, tablet
       localStorage.setItem('activeOrganizationId', 'demo');
     });
     await page.route('**/api/**', async route => {
-      const path = new URL(route.request().url()).pathname;
+    const path = new URL(route.request().url()).pathname;
       const json = path === '/api/organizations/current'
         ? { needsSetup: false, activeOrganizationId: 'demo', demoProfile: 'reviewer', memberships: [{ organizationId: 'demo', name: 'Demo Organization', role: 'member' }] }
         : path.endsWith('/settings/operations') ? { configuration: { defaults: { dateFormat: 'MMM d, yyyy' } } }

@@ -113,7 +113,8 @@ const caseFixture = {
   orchestrationStatus: "completed", createdAt: "2026-01-01T00:00:00.000Z",
 };
 
-async function mountCases(client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })) {
+async function mountCases(client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }), path = '/cases') {
+  testWindow.history.replaceState(null, '', path);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -161,6 +162,24 @@ test("CasesPage renders program rows/cards without counting program go as case c
   const programTab = Array.from(mounted.container.querySelectorAll("button")).find((b) => b.textContent?.startsWith("Workforce Transfer Programs "));
   await act(async () => programTab!.click());
   assert.match(mounted.container.textContent ?? "", /Showing 0 individual cases · 1 programs/);
+});
+
+test("Cases URL selects Offboarding envelopes once and type navigation preserves unrelated context", async t => {
+  pinOrganizationIdForPage("cases-test");
+  installFetch(({ url }) => jsonResponse(url.includes("workforce-transfers") ? [] : [
+    caseFixture, { ...caseFixture, id: 359, workerName: "Separation Worker", hireType: "separation" },
+  ]));
+  const mounted = await mountCases(undefined, '/cases?caseType=Offboarding&source=email#saved');
+  t.after(mounted.cleanup);
+  await eventually(() => assert.match(mounted.container.textContent ?? "", /Separation Worker/), "separation envelope visible through URL filter");
+  assert.doesNotMatch(mounted.container.textContent ?? "", /Individual Worker/);
+  assert.equal(mounted.container.querySelectorAll('tr[aria-label^="Open case HRO-2026-00359"]').length, 1);
+  assert.match(mounted.container.textContent ?? "", /Showing 1 individual cases/);
+  const all = Array.from(mounted.container.querySelectorAll("button")).find(button => button.textContent?.startsWith("All Cases "));
+  await act(async () => all!.click());
+  assert.match(mounted.container.textContent ?? "", /Individual Worker/);
+  assert.equal(testWindow.location.search, "?source=email");
+  assert.equal(testWindow.location.hash, "#saved");
 });
 
 test("offline-only lists keep permission refreshes and discard cached case metadata on denial", async t => {

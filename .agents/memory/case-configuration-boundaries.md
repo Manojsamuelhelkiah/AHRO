@@ -28,6 +28,27 @@ Do not add an Offboarding/Separations shortcut button to the main Cases header.
 **How to apply:** Keep the existing Offboarding routes and Client Setup case links;
 do not restore the main case-list header shortcut to solve discoverability.
 
+Separations are ordinary Offboarding cases within Cases, not a separate product
+destination. This does not combine the Onboarding and Offboarding workflows.
+
+**Why:** The product owner explicitly wants one case-browsing experience while
+retaining the specialized Offboarding evidence gates and administrative actions.
+
+**How to apply:** Route browsing and back links through Cases and its Offboarding
+filter; preserve specialized detail, intake and policy deep links. Navigation
+must never provision examples, send messages, activate workflows or grant closure.
+
+Use the existing New Case and Batch Intake actions contextually for Offboarding,
+not an additional Offboarding shortcut. Generic onboarding intake is not a
+substitute for controlled separation creation.
+
+**Why:** A unified list must retain discoverable workflow entry points without
+restoring the extra header destination the product owner removed.
+
+**How to apply:** When Offboarding is selected, existing creation/intake controls
+should open the specialized routes; reusable configuration still belongs in
+Settings or Client Setup.
+
 **Why:** The product owner explicitly said the additional Operational preparation
 section was not requested and made the already complicated case page unusable.
 Repeated fictional-source explanations were also rejected; the S-number is the

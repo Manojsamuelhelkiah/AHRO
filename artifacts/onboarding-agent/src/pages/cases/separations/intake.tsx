@@ -155,7 +155,7 @@ function MailboxPanel() {
 export function SeparationIntakePage() {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <PageHeader title="Separation intake" subtitle="Batch upload, mailbox review and readiness." />
+      <PageHeader title="Offboarding intake" subtitle="Batch upload, mailbox review and readiness." />
       <SubNav active="intake" />
       <ClosureWarning />
       <div className="grid gap-5 lg:grid-cols-2"><BatchPanel /><MailboxPanel /></div>

@@ -168,6 +168,8 @@ export function caseTitleOf(c: CaseLike): string {
   const presentation = casePresentationOf(c);
   if (presentation) return presentation.title;
   switch (c.hireType) {
+    case 'separation':
+    case 'offboarding': return 'Offboarding';
     case 'contractor': return 'Contractor Onboarding';
     case 'rehire': return 'Rehire Onboarding';
     case 'internal-transfer': return 'Employee Transfer';

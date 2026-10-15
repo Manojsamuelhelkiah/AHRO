@@ -18,6 +18,7 @@ import { StandardIntakeForm } from './standard-intake';
 import { listJobProfiles, parseWorkforceTriState } from '@/lib/workforce-policy-api';
 import { listWorkforceTransferPrograms } from '@/lib/workforce-transfers-api';
 import { PROGRAM_FILTER, matchesTransferProgram, TransferProgramRow, TransferProgramCard } from './transfer-presentation';
+import { caseListPath, caseTypeFromSearch, type WorkItemFilter } from './list-navigation';
 import {
   CASE_TYPES,
   caseTitleOf as presentedCaseTitleOf,
@@ -226,7 +227,8 @@ export function CasesPage() {
   const [showBatch, setShowBatch] = useState(false);
   const [showStandardIntake, setShowStandardIntake] = useState(false);
   const [, setLocation] = useLocation();
-  const [typeFilter, setTypeFilter] = useState<CaseTypeFilter | typeof PROGRAM_FILTER>('All Cases');
+  const typeFilter = caseTypeFromSearch(search);
+  const setTypeFilter = (type: WorkItemFilter) => setLocation(caseListPath(search, type, window.location.hash));
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
@@ -320,8 +322,9 @@ export function CasesPage() {
   const clearAll = () => {
     setFilters(EMPTY_FILTERS);
     setQuery('');
-    setTypeFilter('All Cases');
-    if (checklistProfileId) setLocation('/cases');
+    const params = new URLSearchParams(search);
+    params.delete('checklistProfileId');
+    setLocation(caseListPath(params.toString(), 'All Cases', window.location.hash));
   };
 
   const selectStyle = 'flex h-[32px] w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[10px] py-[6px] text-[var(--text-sm)] shadow-sm transition-colors focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]';
@@ -332,15 +335,15 @@ export function CasesPage() {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Link href="/email-intake"><Button variant="outline" className="gap-2" data-testid="link-email-intake">Email intake</Button></Link>
           {!organization.data?.demoProfile && <>
-          <Button onClick={() => setShowNew(!showNew)} className="gap-2">
+          <Button onClick={() => typeFilter === 'Offboarding' ? setLocation('/cases/separations/new') : setShowNew(!showNew)} className="gap-2">
             <Plus className="h-4 w-4" /> New Case
           </Button>
-          <Button variant="outline" onClick={() => setShowBatch(!showBatch)} className="gap-2">
+          <Button variant="outline" onClick={() => typeFilter === 'Offboarding' ? setLocation('/cases/separations/intake') : setShowBatch(!showBatch)} className="gap-2">
             <Users className="h-4 w-4" /> Batch Intake
           </Button>
-           <Button variant="outline" onClick={() => setShowStandardIntake(!showStandardIntake)} className="gap-2">
+           {typeFilter !== 'Offboarding' && <Button variant="outline" onClick={() => setShowStandardIntake(!showStandardIntake)} className="gap-2">
              <ShieldCheck className="h-4 w-4" /> Trusted Intake
-           </Button>
+           </Button>}
           </>}
         </div>
       </PageHeader>
@@ -353,9 +356,9 @@ export function CasesPage() {
       </p>}
 
 
-      {showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
-       {showBatch && <BatchIntakeForm onClose={() => setShowBatch(false)} />}
-       {showStandardIntake && <StandardIntakeForm onClose={() => setShowStandardIntake(false)} />}
+      {typeFilter !== 'Offboarding' && showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
+       {typeFilter !== 'Offboarding' && showBatch && <BatchIntakeForm onClose={() => setShowBatch(false)} />}
+       {typeFilter !== 'Offboarding' && showStandardIntake && <StandardIntakeForm onClose={() => setShowStandardIntake(false)} />}
 
       <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'visible' }}>
         {/* search + filters row */}

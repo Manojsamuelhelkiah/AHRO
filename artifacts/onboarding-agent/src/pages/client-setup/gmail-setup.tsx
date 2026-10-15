@@ -92,7 +92,7 @@ function Enrollment({ caseId, scope, choices, draft, onDraft }: { caseId: number
     <p className="text-sm">{view.enrollment.inheritsClientDefaults ? "This case uses the client's email settings. Saving below creates a case-specific override." : "Case-specific email settings."}</p>
     <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
       <Link href={`/cases/separations/${caseId}`} className="inline-flex min-h-11 items-center font-medium text-[var(--primary)] underline">Open case S{caseId}</Link>
-      <Link href="/cases/separations" className="inline-flex min-h-11 items-center text-[var(--primary)] underline">View Offboarding cases</Link>
+      <Link href="/cases?caseType=Offboarding" className="inline-flex min-h-11 items-center text-[var(--primary)] underline">View Offboarding cases</Link>
     </div>
     {view.blockers.length > 0 && <ul className="list-disc pl-5 text-sm">{view.blockers.map(b => <li key={b}>{b}</li>)}</ul>}
     {stale && <p role="alert">These settings changed. <Button type="button" variant="outline" onClick={() => onDraft(fresh(view, choices))}>Reload saved settings</Button></p>}

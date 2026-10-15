@@ -10,6 +10,7 @@ import type { SeparationPolicy, SeparationPolicyRecord } from '@workspace/api-cl
 import { Card, Input, PageHeader, Button } from '@/components/ui-shared';
 import { Plus, Trash2 } from 'lucide-react';
 import { ErrorBox, Field, Pill, SkeletonRows, SubNav, LwdNote, areaCls, statusTone } from './shared';
+import { OFFBOARDING_CASES_PATH } from '../list-navigation';
 
 type Ob = { id: string; label: string; stream: string; scope: string; prerequisites: string; dueOffsetDays: string };
 const blank = { country: '', role: '', workerCategory: '', timeZone: '', endOfLwd: '18:00', rulesReference: '', retentionReference: '', assets: '' };
@@ -112,7 +113,7 @@ function ScopedPolicyManagement({ context, scope }: { context: 'cases' | 'settin
       <PageHeader title={context === 'settings' ? 'Offboarding configuration' : 'Offboarding policies'} subtitle="Client-scoped, versioned separation policies. Proposals require independent human approval and explicit case adoption.">
         <Button className="gap-2" data-testid="button-new-policy" disabled={!canManage || q.isLoading || q.isError || form !== null} onClick={() => setForm({})}><Plus className="h-4 w-4" /> Propose policy</Button>
       </PageHeader>
-      {context === 'cases' ? <SubNav active="policies" /> : <nav aria-label="Offboarding settings navigation" className="flex flex-wrap gap-4 text-sm text-[var(--primary)]"><Link href="/settings">Back to Settings</Link><Link href="/cases/separations/policies">Cases → Separations → Policies</Link></nav>}
+      {context === 'cases' ? <SubNav active="policies" /> : <nav aria-label="Offboarding settings navigation" className="flex flex-wrap gap-4 text-sm text-[var(--primary)]"><Link href="/settings">Back to Settings</Link><Link href={OFFBOARDING_CASES_PATH}>View Offboarding cases</Link></nav>}
       <p className="text-sm text-[var(--text-muted)]">Configure exact country, role, worker category and time-zone applicability, last-working-day end time, rules and retention references, default assets, and obligations with prerequisites and relative deadlines. Both entry points manage the same saved revisions and decisions.</p>
       <LwdNote />
       {permissions.isLoading ? <p role="status">Checking policy permissions…</p> : permissions.isError ? <ErrorBox error={permissions.error} onRetry={() => permissions.refetch()} /> : !canManage && <p role="status" className="rounded-md border p-3 text-sm">Permission-limited view. Current policy-management, case-flow and profile edit permissions are required to propose, revise or decide policies. Only policies the server permits you to view are shown.</p>}
