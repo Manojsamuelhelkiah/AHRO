@@ -83,7 +83,53 @@ before-case destruction. Cleanup minimizes private fields and storage while
 retaining minimal provider deduplication tombstones. The application never deletes
 or mutates real Gmail messages.
 
-## Regression checks
+## Table suggestions and explicit retry
+
+Email bodies may use either colon-separated template keys, an explicit two-column
+key/value HTML table, or one header row followed by exactly one employee value row.
+Headers accept registry keys and registry display labels (case and spaces,
+underscores or hyphens are equivalent). HTML is tokenized inertly: no HTML is
+rendered, no URL is fetched, and no attached message or spreadsheet is imported.
+The MIME ceiling remains 32 KiB decoded, 100 nodes and 12 levels; HTML processing
+also caps tables, rows, columns, token count and nesting. Incomplete, nested,
+merged-cell, irregular or multi-employee layouts produce review warnings.
+A flattened header-list/value-list text alternative is never reconstructed into
+an invented table. Structured HTML still participates when plain text exists.
+
+Only documented unambiguous variants become suggestions:
+- Country codes are uppercased. USA / United States / United States of America
+  map to US; UK / United Kingdom to GB; India, Canada and Australia to IN, CA and AU.
+- Valid ISO dates remain unchanged. DD-MM-YYYY becomes ISO only when the first
+  number exceeds 12 or day equals month. Ambiguous dates such as 10-11-2026 remain
+  problems requiring correction.
+- Exact `mailto:address`, `<mailto:address>`, `address <mailto:address>` and
+  `[address](mailto:address)` wrappers are removed; HTML email-link display text
+  is treated as text, not fetched or trusted.
+- Choice values accept case-only differences. “External FTE” is **not** employee,
+  and “Low” is **not** a yes/no site-exposure value.
+
+Each source representation contributes to a common conflict check after
+normalization. Equivalent values agree; conflicting values are withheld and
+shown against their field, with allowed choices and source provenance. Missing
+source facts are distinguished from unsupported, conflicting or malformed input.
+Unknown fields and invalid values are not retained as typed employee fields.
+These suggestions never verify identity, employment, source evidence or authority.
+
+On an individually selected non-final request, **Preview extraction** reads
+the exact original mailbox/message through current permissions, route/source
+eligibility, collection and malware safeguards. It does not update the request.
+**Adopt suggestions, not review** repeats those checks and compares the preview
+digest and request version. Changed source, stale versions, unavailable Gmail,
+unsafe/unavailable scans and minimized sources fail without changing saved fields.
+The service preserves reviewer-authored values; the form also preserves unsaved
+edits and explicit clears. A changed draft classification must be saved first.
+Adoption always clears prior human review. **Save review** and explicit held-case
+conversion remain separate actions with their existing protections.
+
+Deployment adds metadata storage only. There is no inbox replay, historical
+rewrite, additional request creation or automatic conversion.
+
+### Automated checks
 
 `TEST_FILE=src/lib/hro-email-intake.test.ts node artifacts/api-server/run-tests.mjs`
 uses denied/stubbed providers and private in-memory storage. It covers the full

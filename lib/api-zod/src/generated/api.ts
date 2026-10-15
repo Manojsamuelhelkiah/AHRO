@@ -1950,6 +1950,14 @@ export const ListHroEmailRequestsQueryParams = zod.object({
 })
 
 export const ListHroEmailRequestsResponseItem = zod.object({
+  "extraction": zod.object({
+  "issues": zod.array(zod.object({
+  "field": zod.string(),
+  "kind": zod.string(),
+  "message": zod.string()
+})).optional(),
+  "provenance": zod.record(zod.string(), zod.array(zod.string())).optional()
+}).optional(),
   "reviewed": zod.boolean().optional(),
   "id": zod.string(),
   "templateId": zod.string().nullable(),
@@ -1978,6 +1986,14 @@ export const GetHroEmailRequestParams = zod.object({
 })
 
 export const GetHroEmailRequestResponse = zod.object({
+  "extraction": zod.object({
+  "issues": zod.array(zod.object({
+  "field": zod.string(),
+  "kind": zod.string(),
+  "message": zod.string()
+})).optional(),
+  "provenance": zod.record(zod.string(), zod.array(zod.string())).optional()
+}).optional(),
   "reviewed": zod.boolean().optional(),
   "id": zod.string(),
   "templateId": zod.string().nullable(),
@@ -2012,6 +2028,14 @@ export const ReviewHroEmailRequestBody = zod.object({
 })
 
 export const ReviewHroEmailRequestResponse = zod.object({
+  "extraction": zod.object({
+  "issues": zod.array(zod.object({
+  "field": zod.string(),
+  "kind": zod.string(),
+  "message": zod.string()
+})).optional(),
+  "provenance": zod.record(zod.string(), zod.array(zod.string())).optional()
+}).optional(),
   "reviewed": zod.boolean().optional(),
   "id": zod.string(),
   "templateId": zod.string().nullable(),
@@ -2034,6 +2058,69 @@ export const ReviewHroEmailRequestResponse = zod.object({
 })
 
 
+/**
+ * @summary Preview or adopt exact-source suggestions without saving human review
+ */
+export const RetryHroEmailExtractionParams = zod.object({
+  "requestId": zod.coerce.string()
+})
+
+export const retryHroEmailExtractionBodyPreviewDigestMax = 64;
+
+
+
+export const RetryHroEmailExtractionBody = zod.object({
+  "expectedVersion": zod.number(),
+  "action": zod.enum(['preview', 'apply']),
+  "previewDigest": zod.string().max(retryHroEmailExtractionBodyPreviewDigestMax).optional()
+})
+
+export const RetryHroEmailExtractionResponse = zod.object({
+  "version": zod.number(),
+  "templateId": zod.string().nullable(),
+  "fields": zod.record(zod.string(), zod.string()),
+  "metadata": zod.object({
+  "issues": zod.array(zod.object({
+  "field": zod.string(),
+  "kind": zod.string(),
+  "message": zod.string()
+})).optional(),
+  "provenance": zod.record(zod.string(), zod.array(zod.string())).optional()
+}),
+  "previewDigest": zod.string(),
+  "preservedFields": zod.array(zod.string()),
+  "request": zod.object({
+  "extraction": zod.object({
+  "issues": zod.array(zod.object({
+  "field": zod.string(),
+  "kind": zod.string(),
+  "message": zod.string()
+})).optional(),
+  "provenance": zod.record(zod.string(), zod.array(zod.string())).optional()
+}).optional(),
+  "reviewed": zod.boolean().optional(),
+  "id": zod.string(),
+  "templateId": zod.string().nullable(),
+  "family": zod.string().nullable(),
+  "status": zod.enum(['received', 'needs-review', 'blocked', 'converted', 'rejected']),
+  "reason": zod.string().nullable(),
+  "fields": zod.record(zod.string(), zod.string()),
+  "fieldSources": zod.record(zod.string(), zod.enum(['email', 'reviewer'])),
+  "missingFields": zod.array(zod.string()),
+  "version": zod.number(),
+  "receivedAt": zod.string(),
+  "attachments": zod.array(zod.object({
+  "name": zod.string(),
+  "status": zod.string()
+})),
+  "caseId": zod.number().nullable(),
+  "caseKind": zod.string().nullable(),
+  "sourceUrl": zod.string(),
+  "potentialDuplicates": zod.number()
+}).optional()
+})
+
+
 export const ConvertHroEmailRequestParams = zod.object({
   "requestId": zod.coerce.string()
 })
@@ -2045,6 +2132,14 @@ export const ConvertHroEmailRequestBody = zod.object({
 })
 
 export const ConvertHroEmailRequestResponse = zod.object({
+  "extraction": zod.object({
+  "issues": zod.array(zod.object({
+  "field": zod.string(),
+  "kind": zod.string(),
+  "message": zod.string()
+})).optional(),
+  "provenance": zod.record(zod.string(), zod.array(zod.string())).optional()
+}).optional(),
   "reviewed": zod.boolean().optional(),
   "id": zod.string(),
   "templateId": zod.string().nullable(),

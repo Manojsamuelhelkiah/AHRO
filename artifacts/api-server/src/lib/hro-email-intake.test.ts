@@ -14,6 +14,9 @@ import { configureEmailIntake, reviewEmailRequest, convertEmailRequest, getEmail
 import { readEmailPrivateBody } from "./hro-email-private-source";
 import { getEmailRotation, stageEmailRotation, readmitEmailRequests } from "./hro-email-rotation";
 import type { GmailMessage } from "./onboarding/inbound-email";
+import { retryEmailExtraction } from "./hro-email-reextraction";
+import { tableEmailFixture } from "../test-utils/hro-email-table-fixtures";
+import { emailHtmlStructure } from "./hro-email-structure";
 const mailbox = `provider-denied-${randomUUID()}@example.invalid`;
 const provider: EmailProvider = { get: async path => {
   assert.equal(path, "/gmail/v1/users/me/profile", "No real provider reads or mutations are permitted in fixture tests.");
@@ -58,6 +61,65 @@ test("MIME is bounded, remote links are inert and operational mail ownership is 
   }
   assert.equal(intakeMessageReserved(message("sent", "New hire", "", { labelIds: ["SENT"] }), ""), true);
 });
+test("bounded 19-column HTML and multipart tables map canonical suggestions without inventing choices", () => {
+  const fixture = tableEmailFixture();
+  assert.equal(HRO_EMAIL_TEMPLATES[0].columns.length, 19);
+  for (const multipart of [false, true]) {
+    const htmlPart = { mimeType: "text/html", body: { data: Buffer.from(fixture.html).toString("base64url") } };
+    const msg = message("table", "", fixture.plain);
+    msg.payload = multipart ? { mimeType: "multipart/alternative", parts: [{ mimeType: "text/plain", body: msg.payload!.body }, htmlPart] } : htmlPart;
+    const content = boundedEmailContent(msg), c = classifyEmail("", content.body, content.structure);
+    assert.equal(c.templateId, "onboarding-external-fte");
+    assert.equal(c.fields.worker_name, "Example Carter");
+    assert.equal(c.fields.work_country, "US");
+    assert.equal(c.fields.joining_date, "2026-10-20");
+    assert.equal(c.fields.work_environment, "office");
+    assert.equal(c.fields.safety_critical, "no"); assert.equal(c.fields.assisted_intake, "yes");
+    assert.equal(c.fields.worker_category, undefined); assert.equal(c.fields.site_exposure, undefined);
+    assert.ok(c.issues.some(i => i.field === "worker_category" && i.message.includes("employee, contractor")));
+    assert.ok(c.issues.some(i => i.field === "site_exposure" && i.message.includes("yes, no")));
+    assert.ok(c.provenance.worker_name.includes("html-table-1"));
+    assert.equal(Object.keys(c.fields).length, 16, "17 usable columns minus absent optional job profile");
+  }
+});
+test("key/value, text normalization, MIME conflicts, malformed layouts and bounds fail visibly", () => {
+  const t = HRO_EMAIL_TEMPLATES[0], example = emailExample(t);
+  const kv = `<table>${example.split("\n").map(line => { const i = line.indexOf(":"); return `<tr><td>${line.slice(0, i)}</td><td>${line.slice(i + 1).trim()}</td></tr>`; }).join("")}</table>`;
+  assert.equal(validateEmailReview(t.id, classifyEmail("", "", emailHtmlStructure(kv)).fields).valid, true);
+  const text = example.replace("work_country: US", "work_country: usa").replace("joining_date: 2030-01-15", "joining_date: 20-10-2026")
+    .replace("worker_email: worker@example.invalid", "worker_email: worker@example.invalid <mailto:worker@example.invalid>").replace("worker_category: employee", "worker_category: Employee");
+  const c = classifyEmail("", text);
+  assert.equal(validateEmailReview(t.id, c.fields).valid, true);
+  const fixture = tableEmailFixture();
+  const conflict = classifyEmail("", "work_country: GB\nworker_name: Other Example", emailHtmlStructure(fixture.html));
+  assert.equal(conflict.fields.work_country, undefined); assert.equal(conflict.fields.worker_name, undefined);
+  assert.ok(conflict.issues.filter(i => i.kind === "conflict").length >= 2);
+  const equivalent = classifyEmail("", "work_country: US\nwork_environment: office", emailHtmlStructure(fixture.html));
+  assert.equal(equivalent.fields.work_country, "US"); assert.equal(equivalent.fields.work_environment, "office");
+  for (const html of [
+    fixture.html.replace("</tbody>", fixture.html.match(/<tr><td>[\s\S]*?<\/tr>/)![0] + "</tbody>"),
+    fixture.html.replace("<td>onboarding", '<td colspan="2">onboarding'),
+    fixture.html.replace("</td>", ""), fixture.html + fixture.html,
+    "<table><tr><td>Unknown key</td><td>Value</td></tr></table>",
+    "<table>".repeat(66) + fixture.html + "</table>".repeat(66),
+  ]) {
+    const bad = classifyEmail("", "", emailHtmlStructure(html));
+    assert.ok(bad.issues.length, html.slice(0, 80));
+    assert.equal(bad.fields.worker_name, undefined);
+  }
+  const ambiguousDate = classifyEmail("", example.replace("2030-01-15", "10-11-2026"));
+  assert.equal(ambiguousDate.fields.joining_date, undefined);
+  assert.ok(ambiguousDate.issues.some(i => i.field === "joining_date"));
+  const duplicate = classifyEmail("", `${example}\nworker_name: Other Example`);
+  assert.equal(duplicate.fields.worker_name, undefined);
+  const unsupportedId = classifyEmail("New hire", "template_id: unsupported\nwork_country: US");
+  assert.equal(unsupportedId.templateId, null);
+  assert.ok(unsupportedId.issues.some(i => i.field === "template_id"));
+  const deep = message("deep", "", "");
+  let part = deep.payload!;
+  for (let i = 0; i < 14; i++) { part.parts = [{}]; part = part.parts[0]; }
+  assert.equal(boundedEmailContent(deep).blocked, true);
+});
 test("tenant isolation, full conversion matrix, private source retention, stale edits and concurrent exactly-once conversion", { timeout: 180_000 }, async () => {
   const org = `email-intake-${randomUUID()}`, other = `${org}-other`, actor = `${org}:reviewer`;
   const setup = async (id: string) => {
@@ -73,6 +135,60 @@ test("tenant isolation, full conversion matrix, private source retention, stale 
     const a = await configureEmailIntake(org, actor, { reference: "fixture-reviewed-primary-mailbox", backfillHours: 1 }, provider);
     const b = await configureEmailIntake(other, actor, { reference: "fixture-reviewed-second-client", backfillHours: 1 }, provider);
     const routes = await db.select().from(hroMailboxIngress).where(inArray(hroMailboxIngress.id, [a.id, b.id]));
+    const tableFixture = tableEmailFixture();
+    const tableMsg = message(`${org}:table-retry`, a.subjectMarker, tableFixture.plain);
+    tableMsg.payload = { ...tableMsg.payload, mimeType: "multipart/alternative", body: undefined, parts: [
+      { mimeType: "text/plain", body: { data: Buffer.from(tableFixture.plain).toString("base64url") } },
+      { mimeType: "text/html", body: { data: Buffer.from(tableFixture.html).toString("base64url") } },
+    ] };
+    // Reproduce the historical empty non-final row without deployment rewriting it.
+    await receiveIntakeMessage(mailbox, tableMsg, [], provider, sourceDeps);
+    const tableRow = await requestFor(tableMsg.id);
+    await db.update(hroEmailRequests).set({ templateId: null, fields: {}, fieldSources: {}, extraction: {} }).where(eq(hroEmailRequests.id, tableRow.id));
+    let sourceAvailable = true, verdict = "clean", reads = 0;
+    const retryProvider: EmailProvider = { get: async path => {
+      if (path.endsWith("/profile")) return provider.get(path);
+      assert.equal(path, `/gmail/v1/users/me/messages/${encodeURIComponent(tableMsg.id)}?format=full`);
+      reads++; return { ok: sourceAvailable, json: async () => tableMsg };
+    } };
+    const retry = (raw: unknown, tenant = org, who = actor) => retryEmailExtraction(tenant, who, tableRow.id, raw, retryProvider, { scan: async () => verdict });
+    await assert.rejects(retry({ expectedVersion: 1, action: "preview" }, other), /not found/);
+    await assert.rejects(retry({ expectedVersion: 1, action: "preview" }, org, `${org}:unauthorized`));
+    assert.equal(reads, 0, "Unauthorized retries cannot read provider content");
+    sourceAvailable = false;
+    await assert.rejects(retry({ expectedVersion: 1, action: "preview" }), /unavailable/);
+    sourceAvailable = true; verdict = "unavailable";
+    await assert.rejects(retry({ expectedVersion: 1, action: "preview" }), /scan/);
+    verdict = "clean";
+    const proposed = await retry({ expectedVersion: 1, action: "preview" });
+    assert.equal(proposed.fields.work_country, "US"); assert.equal((await requestFor(tableMsg.id)).templateId, null);
+    await assert.rejects(retry({ expectedVersion: 1, action: "apply", previewDigest: "stale" }), /preview.*changed/);
+    const applied = await retry({ expectedVersion: 1, action: "apply", previewDigest: proposed.previewDigest });
+    assert.ok("request" in applied);
+    assert.equal(applied.request?.reviewed, false);
+    await assert.rejects(convertEmailRequest(org, actor, tableRow.id, { expectedVersion: applied.request!.version }, provider), /reviewed/);
+    await assert.rejects(retry({ expectedVersion: 1, action: "preview" }), /changed/);
+    const manual = await reviewEmailRequest(org, actor, tableRow.id, { expectedVersion: applied.request!.version, action: "save", templateId: proposed.templateId,
+      fields: { ...proposed.fields, worker_name: "Reviewed Example", worker_category: "employee", site_exposure: "no" } });
+    const secondPreview = await retry({ expectedVersion: manual.version, action: "preview" });
+    assert.equal(secondPreview.fields.worker_name, "Reviewed Example");
+    const subjectHeader = tableMsg.payload!.headers!.find(h => h.name === "Subject")!;
+    subjectHeader.value += " source revision";
+    await assert.rejects(retry({ expectedVersion: manual.version, action: "apply", previewDigest: secondPreview.previewDigest }), /preview.*changed/);
+    subjectHeader.value = a.subjectMarker;
+    const secondApply = await retry({ expectedVersion: manual.version, action: "apply", previewDigest: secondPreview.previewDigest });
+    assert.ok("request" in secondApply);
+    assert.equal(secondApply.request!.fields.worker_name, "Reviewed Example");
+    assert.equal(secondApply.request!.reviewed, false);
+    const [privateBody] = await db.select().from(hroEmailSources).where(and(eq(hroEmailSources.requestId, tableRow.id), eq(hroEmailSources.kind, "body")));
+    assert.ok(privateBody);
+    await db.update(hroEmailSources).set({ state: "minimized" }).where(eq(hroEmailSources.id, privateBody.id));
+    await assert.rejects(retry({ expectedVersion: secondApply.request!.version, action: "preview" }), /minimized/);
+    await db.update(hroEmailSources).set({ state: privateBody.state }).where(eq(hroEmailSources.id, privateBody.id));
+    const pausedForRetry = await updateEmailRoute(org, actor, a.id, { expectedVersion: a.version, enabled: false });
+    await assert.rejects(retry({ expectedVersion: secondApply.request!.version, action: "preview" }), /route approval/);
+    const resumedForRetry = await updateEmailRoute(org, actor, a.id, { expectedVersion: pausedForRetry.version, enabled: true }, provider);
+    a.version = resumedForRetry.version;
     assert.equal(resolveEmailRoute(a.subjectMarker, mailbox, new Date(), routes)?.organizationId, org);
     assert.equal(resolveEmailRoute(`${a.subjectMarker} ${b.subjectMarker}`, mailbox, new Date(), routes), null);
     assert.equal(resolveEmailRoute("Client name in body is not a route", mailbox, new Date(), routes), null);
@@ -90,6 +206,7 @@ test("tenant isolation, full conversion matrix, private source retention, stale 
       await assert.rejects(reviewEmailRequest(org, actor, initial.id, { expectedVersion: initial.version, action: "reject" }), /changed/);
       const conversions = await Promise.all(Array.from({ length: 3 }, () => convertEmailRequest(org, actor, initial.id, { expectedVersion: reviewed.version }, provider)));
       assert.ok(conversions.every(r => r.caseId === conversions[0].caseId));
+      await assert.rejects(retryEmailExtraction(org, actor, initial.id, { expectedVersion: conversions[0].version, action: "preview" }, provider), /Final/);
       const [created] = await db.select().from(onbCases).where(eq(onbCases.id, conversions[0].caseId!));
       assert.equal(created.offerAcceptanceComplete, false);
       assert.equal(created.orchestrationCheckpoint, null);
@@ -257,6 +374,11 @@ test("tenant isolation, full conversion matrix, private source retention, stale 
     await db.update(accessNamedGrants).set({ revokedAt: new Date() }).where(and(
       eq(accessNamedGrants.organizationId, org), eq(accessNamedGrants.principalId, independent),
       eq(accessNamedGrants.resourceKey, "data.case.profile.edit"),
+    ));
+    // Client admins intentionally retain full client rights despite individual
+    // grant removal; revoke the fixture's actual administrator eligibility.
+    await db.update(organizationMembershipsTable).set({ role: "member" }).where(and(
+      eq(organizationMembershipsTable.organizationId, org), eq(organizationMembershipsTable.clerkUserId, independent),
     ));
     const unselected = await requestFor(pageMessages[0].id);
     await assert.rejects(readmitEmailRequests(org, actor, a.id, { ...admittedInput, requests: [select(unselected)] }, provider), /current independent review/);

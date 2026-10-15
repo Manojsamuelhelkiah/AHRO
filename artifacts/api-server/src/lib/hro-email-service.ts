@@ -145,7 +145,7 @@ export async function updateEmailRoute(org: string, actor: string, id: string, r
     return emailRouteView(updated);
   }));
 }
-async function loadRequest(tx: Tx, org: string, id: string) {
+export async function loadRequest(tx: Tx, org: string, id: string) {
   const [row] = await tx.select().from(hroEmailRequests).where(and(eq(hroEmailRequests.organizationId, org), eq(hroEmailRequests.id, id))).for("update");
   if (!row) throw new SeparationError("Email request not found in this client.", 404);
   return row;
@@ -164,10 +164,11 @@ async function duplicateCount(tx: Tx, org: string, row: RequestRow) {
   ));
   return count?.count ?? 0;
 }
-async function requestView(tx: Tx, org: string, row: RequestRow) {
+export async function requestView(tx: Tx, org: string, row: RequestRow) {
   return {
     id: row.id, templateId: row.templateId, family: findHroTemplate(row.templateId)?.family ?? null,
     status: row.status, reason: row.reason, fields: row.fields, fieldSources: row.fieldSources,
+    extraction: row.extraction,
     missingFields: row.templateId ? missingEmailFields(row.templateId, row.fields) : ["template_id"],
     version: row.version, receivedAt: row.createdAt.toISOString(), attachments: row.attachments,
     caseId: row.caseId, caseKind: row.caseKind, sourceUrl: `/email-intake/${row.id}`,

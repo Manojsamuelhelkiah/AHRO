@@ -20,3 +20,9 @@ Discovery of built-in blank templates is separate from permission to submit empl
 **Why:** New clients need to discover the available transaction types before their intake grants and approved collection policies are configured; gating discovery on intake authority made the selectors appear empty.
 
 **How to apply:** Membership-only discovery applies only to built-in schemas and fictional examples. Keep filled uploads, import history, case records and client-private customizations behind their own appropriate permissions. Always explain unavailable catalog or submission access rather than hiding the reason behind empty controls.
+
+Email-template normalization must not infer workforce semantics from descriptive labels.
+
+**Why:** The reported email used “External FTE” as a worker category and “Low” for site exposure, but the product's choices are different concepts. Plausible-looking conversions would invent facts the source did not supply.
+
+**How to apply:** Normalize only unambiguous representation differences. New semantic aliases require an explicit supported rule, not a model guess, hire-template assumption or sender-derived default. Show source problems separately from absent facts, and preserve human edits when retrying extraction.

@@ -21,6 +21,7 @@ export const hroEmailRequests = pgTable("hro_email_requests", {
   templateId: text("template_id"),
   fields: jsonb("fields").$type<Record<string, string>>().notNull().default({}),
   fieldSources: jsonb("field_sources").$type<Record<string, "email" | "reviewer">>().notNull().default({}),
+  extraction: jsonb("extraction").$type<{ issues?: Array<{ field: string; kind: string; message: string }>; provenance?: Record<string, string[]> }>().notNull().default({}),
   attachments: jsonb("attachments").$type<Array<{ name: string; status: string }>>().notNull().default([]),
   status: text("status").notNull().default("received"),
   reason: text("reason"),

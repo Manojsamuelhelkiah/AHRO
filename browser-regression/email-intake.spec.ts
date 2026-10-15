@@ -4,6 +4,8 @@ test("reviewed email intake: real isolated router, held conversion and responsiv
   const session = await page.request.post("/api/test/offboarding-session", { data: { profile: "offboarding-operator" } });
   expect(session.ok()).toBeTruthy();
   const fixture = await session.json();
+
+  const headers = { "x-organization-id": fixture.organizationId };
   await page.addInitScript(org => {
     localStorage.setItem("onboarding-e2e-demo-profile", "offboarding-operator");
     localStorage.setItem("activeOrganizationId", org);
@@ -42,9 +44,11 @@ test("reviewed email intake: real isolated router, held conversion and responsiv
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
       await page.goto("/email-intake");
     }
-    const added = await page.request.post("/api/test/email-intake-message", { data: { templateId: "leave-request" } });
+    const added = await page.request.post("/api/test/email-intake-message", { data: { templateId: "onboarding-external-fte", table: true, legacyEmpty: true } });
     expect(added.ok(), await added.text()).toBeTruthy();
     const request = await added.json();
+
+    const endpoint = `/api/onboarding/email-intake/requests/${request.id}`;
     await page.reload();
     await page.getByTestId(`${label === "phone" ? "link-request-mobile" : "link-request"}-${request.id}`).click();
     await expect(page.getByRole("heading", { name: "Review email request", exact: true })).toBeVisible();
@@ -68,7 +72,15 @@ test("reviewed email intake: real isolated router, held conversion and responsiv
     // mobile cards retain the shorter label. Check this request's visible link.
     const sourceHistory = page.getByRole("link", { name: /^Email source history(?: for .+)?$/ })
       .and(page.locator(`a[href="/email-intake/${encodeURIComponent(request.id)}"]`));
-    await expect(sourceHistory).toBeVisible();
+    expect(stale.status()).toBe(409);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
   }
 });
+
+    const after = await (await page.request.get(endpoint, { headers })).json();
+
+    const stale = await page.request.post(`${endpoint}/extraction`, { headers, data: { expectedVersion: 1, action: "preview" } });
+
+  const readiness = await page.request.get("/api/onboarding/email-intake", { headers });
+
+    const configured = await page.request.post("/api/onboarding/email-intake", { headers, data: { reference: "controlled-table-route-review", backfillHours: 1 } });

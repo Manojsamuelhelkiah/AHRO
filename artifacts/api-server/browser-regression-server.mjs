@@ -334,17 +334,23 @@ for (const [id, label] of [
 }
 const { withControlledEmailIntakeProvider, receiveIntakeMessage } = await import("./src/lib/hro-email-ingestion.ts");
 const { HRO_EMAIL_TEMPLATES, emailExample } = await import("./src/lib/hro-email-registry.ts");
+const { tableEmailFixture } = await import("./src/test-utils/hro-email-table-fixtures.ts");
+const { withControlledEmailExtractionScan } = await import("./src/lib/hro-email-reextraction.ts");
 const controlledMailbox = `email-intake-${suffix}@example.invalid`;
+const controlledIntakeMessages = new Map();
 const intakeProvider = { get: async path => {
-  assert.equal(path, "/gmail/v1/users/me/profile", "No real inbox may be fetched in browser tests");
-  return { ok: true, json: async () => ({ emailAddress: controlledMailbox }) };
+  if (path === "/gmail/v1/users/me/profile") return { ok: true, json: async () => ({ emailAddress: controlledMailbox }) };
+  const match = path.match(/^\/gmail\/v1\/users\/me\/messages\/([^/]+)\?format=full$/);
+  assert.ok(match, "No real inbox may be fetched in browser tests");
+  const msg = controlledIntakeMessages.get(decodeURIComponent(match[1]));
+  return { ok: Boolean(msg), json: async () => msg };
 }};
 // Admit the test dependency while this process is still in test mode.
 // The admin-proof adapter later models development/production semantics.
 // Bind both scopes together: capturing only the provider would discard the
 // request's separate provider-deny ALS fence when restoring the snapshot.
 const enterControlledRequest = runWithProviderDeny(() =>
-  withControlledEmailIntakeProvider(intakeProvider, () => AsyncLocalStorage.bind(next => next())));
+  withControlledEmailIntakeProvider(intakeProvider, () => withControlledEmailExtractionScan(async () => "clean", () => AsyncLocalStorage.bind(next => next()))));
 await db.insert(accessNamedGrants).values(["data.case.notes.read", "data.case.notes.edit"].map(resourceKey => ({
   organizationId: offboardingFixture.org, principalType: "human", principalId: offboardingFixture.actor,
   resourceKey, scope: "tenant", resourceType: "field", effect: "allow", source: "named", status: "active",
@@ -360,12 +366,24 @@ app.post("/api/test/email-intake-message", async (req, res, next) => {
     const template = HRO_EMAIL_TEMPLATES.find(t => t.id === req.body.templateId);
     if (!template) return res.status(400).json({ error: "Unknown controlled template" });
     const id = `controlled-email-${randomUUID()}`;
-    await receiveIntakeMessage(controlledMailbox, { id, internalDate: String(Date.now()), payload: {
+    const msg = { id, internalDate: String(Date.now()), payload: {
       mimeType: "text/plain", headers: [{ name: "From", value: "requester@example.invalid" }, { name: "Subject", value: `[HRO-INTAKE:${route.token}] Controlled request` }],
       body: { data: Buffer.from(emailExample(template)).toString("base64url") },
-    }}, [], intakeProvider, { storage: { save: async () => {}, read: async () => Buffer.alloc(0), delete: async () => {} },
+    }};
+    if (req.body.table === true) {
+      const fixture = tableEmailFixture(template);
+      msg.payload = { ...msg.payload, mimeType: "multipart/alternative", body: undefined, parts: [
+        { mimeType: "text/plain", body: { data: Buffer.from(fixture.plain).toString("base64url") } },
+        { mimeType: "text/html", body: { data: Buffer.from(fixture.html).toString("base64url") } },
+      ] };
+    }
+    controlledIntakeMessages.set(id, msg);
+    await receiveIntakeMessage(controlledMailbox, msg, [], intakeProvider, { storage: { save: async () => {}, read: async () => Buffer.alloc(0), delete: async () => {} },
       scan: async () => "unavailable" });
-    const [row] = await db.select().from(hroEmailRequests).where(eq(hroEmailRequests.providerMessageId, id));
+    let [row] = await db.select().from(hroEmailRequests).where(eq(hroEmailRequests.providerMessageId, id));
+    if (req.body.legacyEmpty === true) {
+      [row] = await db.update(hroEmailRequests).set({ fields: {}, fieldSources: {}, extraction: {}, templateId: null }).where(eq(hroEmailRequests.id, row.id)).returning();
+    }
     res.json({ id: row.id, templateId: row.templateId });
   } catch (error) { next(error); }
 });

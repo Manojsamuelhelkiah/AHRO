@@ -154,6 +154,8 @@ import type {
   HroContextRetentionStatus,
   HroEmailConfiguration,
   HroEmailConversion,
+  HroEmailExtractionInput,
+  HroEmailExtractionResult,
   HroEmailPrivateSource,
   HroEmailReadiness,
   HroEmailReadmissionInput,
@@ -3012,6 +3014,78 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getReviewHroEmailRequestMutationOptions(options));
+    }
+
+export const getRetryHroEmailExtractionUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/onboarding/email-intake/requests/${requestId}/extraction`
+}
+
+/**
+ * @summary Preview or adopt exact-source suggestions without saving human review
+ */
+export const retryHroEmailExtraction = async (requestId: string,
+    hroEmailExtractionInput: HroEmailExtractionInput, options?: RequestInit): Promise<HroEmailExtractionResult> => {
+
+  return customFetch<HroEmailExtractionResult>(getRetryHroEmailExtractionUrl(requestId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(hroEmailExtractionInput)
+  }
+);}
+
+
+
+
+
+export const getRetryHroEmailExtractionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryHroEmailExtraction>>, TError,{requestId: string;data: BodyType<HroEmailExtractionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryHroEmailExtraction>>, TError,{requestId: string;data: BodyType<HroEmailExtractionInput>}, TContext> => {
+
+const mutationKey = ['retryHroEmailExtraction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryHroEmailExtraction>>, {requestId: string;data: BodyType<HroEmailExtractionInput>}> = (props) => {
+          const {requestId,data} = props ?? {};
+
+          return  retryHroEmailExtraction(requestId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryHroEmailExtractionMutationResult = NonNullable<Awaited<ReturnType<typeof retryHroEmailExtraction>>>
+    export type RetryHroEmailExtractionMutationBody = BodyType<HroEmailExtractionInput>
+    export type RetryHroEmailExtractionMutationError = ErrorType<void>
+
+    /**
+ * @summary Preview or adopt exact-source suggestions without saving human review
+ */
+export const useRetryHroEmailExtraction = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryHroEmailExtraction>>, TError,{requestId: string;data: BodyType<HroEmailExtractionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryHroEmailExtraction>>,
+        TError,
+        {requestId: string;data: BodyType<HroEmailExtractionInput>},
+        TContext
+      > => {
+      return useMutation(getRetryHroEmailExtractionMutationOptions(options));
     }
 
 export const getConvertHroEmailRequestUrl = (requestId: string,) => {

@@ -1246,12 +1246,26 @@ export type HroEmailRequestFields = {[key: string]: string};
 
 export type HroEmailRequestFieldSources = {[key: string]: 'email' | 'reviewer'};
 
+export interface HroEmailExtractionIssue {
+  field: string;
+  kind: string;
+  message: string;
+}
+
+export type HroEmailExtractionMetadataProvenance = {[key: string]: string[]};
+
+export interface HroEmailExtractionMetadata {
+  issues?: HroEmailExtractionIssue[];
+  provenance?: HroEmailExtractionMetadataProvenance;
+}
+
 export interface HroEmailAttachment {
   name: string;
   status: string;
 }
 
 export interface HroEmailRequest {
+  extraction?: HroEmailExtractionMetadata;
   reviewed?: boolean;
   id: string;
   /** @nullable */
@@ -1273,6 +1287,34 @@ export interface HroEmailRequest {
   caseKind: string | null;
   sourceUrl: string;
   potentialDuplicates: number;
+}
+
+export type HroEmailExtractionInputAction = typeof HroEmailExtractionInputAction[keyof typeof HroEmailExtractionInputAction];
+
+
+export const HroEmailExtractionInputAction = {
+  preview: 'preview',
+  apply: 'apply',
+} as const;
+
+export interface HroEmailExtractionInput {
+  expectedVersion: number;
+  action: HroEmailExtractionInputAction;
+  /** @maxLength 64 */
+  previewDigest?: string;
+}
+
+export type HroEmailExtractionResultFields = {[key: string]: string};
+
+export interface HroEmailExtractionResult {
+  version: number;
+  /** @nullable */
+  templateId: string | null;
+  fields: HroEmailExtractionResultFields;
+  metadata: HroEmailExtractionMetadata;
+  previewDigest: string;
+  preservedFields: string[];
+  request?: HroEmailRequest;
 }
 
 export type HroEmailReviewAction = typeof HroEmailReviewAction[keyof typeof HroEmailReviewAction];

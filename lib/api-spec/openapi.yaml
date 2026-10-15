@@ -700,6 +700,25 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/HroEmailRequest" }
+  /onboarding/email-intake/requests/{requestId}/extraction:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: retryHroEmailExtraction
+      tags: [onboarding]
+      summary: Preview or adopt exact-source suggestions without saving human review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HroEmailExtractionInput" }
+      responses:
+        "200":
+          description: Live-authorized preview or version-fenced adoption
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HroEmailExtractionResult" }
+        "409": { description: "Stale request, route, source or preview; saved fields unchanged" }
   /onboarding/email-intake/requests/{requestId}/convert:
     parameters:
       - { name: requestId, in: path, required: true, schema: { type: string } }
@@ -8205,6 +8224,7 @@ components:
       type: object
       required: [id, templateId, family, status, reason, fields, fieldSources, missingFields, version, receivedAt, attachments, caseId, caseKind, sourceUrl, potentialDuplicates]
       properties:
+        extraction: { $ref: "#/components/schemas/HroEmailExtractionMetadata" }
         reviewed: { type: boolean }
         id: { type: string }
         templateId: { type: [string, "null"] }
@@ -8221,6 +8241,41 @@ components:
         caseKind: { type: [string, "null"] }
         sourceUrl: { type: string }
         potentialDuplicates: { type: integer }
+    HroEmailExtractionMetadata:
+      type: object
+      properties:
+        issues:
+          type: array
+          items: { $ref: "#/components/schemas/HroEmailExtractionIssue" }
+        provenance:
+          type: object
+          additionalProperties: { type: array, items: { type: string } }
+    HroEmailExtractionIssue:
+      type: object
+      required: [field, kind, message]
+      properties:
+        field: { type: string }
+        kind: { type: string }
+        message: { type: string }
+    HroEmailExtractionInput:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, action]
+      properties:
+        expectedVersion: { type: integer }
+        action: { type: string, enum: [preview, apply] }
+        previewDigest: { type: string, maxLength: 64 }
+    HroEmailExtractionResult:
+      type: object
+      required: [version, templateId, fields, metadata, previewDigest, preservedFields]
+      properties:
+        version: { type: integer }
+        templateId: { type: [string, "null"] }
+        fields: { type: object, additionalProperties: { type: string } }
+        metadata: { $ref: "#/components/schemas/HroEmailExtractionMetadata" }
+        previewDigest: { type: string }
+        preservedFields: { type: array, items: { type: string } }
+        request: { $ref: "#/components/schemas/HroEmailRequest" }
     HroEmailAttachment:
       type: object
       required: [name, status]

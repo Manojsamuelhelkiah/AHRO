@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import {
   ConfigureHroEmailIntakeBody, UpdateHroEmailRouteBody, ReviewHroEmailRequestBody, ConvertHroEmailRequestBody, ResolveHroEmailTriageBody,
-  StageHroEmailRotationBody, ReadmitHroEmailRequestsBody, GetHroEmailRotationResponse,
+  StageHroEmailRotationBody, ReadmitHroEmailRequestsBody, GetHroEmailRotationResponse, RetryHroEmailExtractionBody,
 } from "@workspace/api-zod";
 import {
   emailIntakeReadiness, configureEmailIntake, updateEmailRoute, listEmailRequests, getEmailRequest,
@@ -17,6 +17,7 @@ import { db } from "@workspace/db";
 import { resolveEffectiveAccessInTransaction } from "../lib/access-governance";
 import { isSharedDemoPrincipalInTransaction } from "../lib/human-permissions";
 import { EmailIntakeAccessError } from "../lib/hro-email-authorization";
+import { retryEmailExtraction } from "../lib/hro-email-reextraction";
 const router: IRouter = Router();
 const handle = (fn: (r: Request, s: Response) => Promise<unknown>) => async (r: Request, s: Response) => {
   s.setHeader("Cache-Control", "no-store");
@@ -55,6 +56,7 @@ router.post("/onboarding/email-intake/routes/:routeId/readmissions", handle(asyn
 router.get("/onboarding/email-intake/requests", handle(async (r, s) => s.json(await listEmailRequests(getOrganizationId(r), actor(r), typeof r.query.before === "string" ? r.query.before : undefined))));
 router.get("/onboarding/email-intake/requests/:requestId", handle(async (r, s) => s.json(await getEmailRequest(getOrganizationId(r), actor(r), String(r.params.requestId)))));
 router.get("/onboarding/email-intake/requests/:requestId/source", handle(async (r, s) => s.json(await readEmailPrivateBody(getOrganizationId(r), actor(r), String(r.params.requestId)))));
+router.post("/onboarding/email-intake/requests/:requestId/extraction", handle(async (r, s) => s.json(await retryEmailExtraction(getOrganizationId(r), actor(r), String(r.params.requestId), parse(RetryHroEmailExtractionBody, r.body)))));
 router.patch("/onboarding/email-intake/requests/:requestId", handle(async (r, s) => s.json(await reviewEmailRequest(getOrganizationId(r), actor(r), String(r.params.requestId), parse(ReviewHroEmailRequestBody, r.body)))));
 router.post("/onboarding/email-intake/requests/:requestId/convert", handle(async (r, s) => s.json(await convertEmailRequest(getOrganizationId(r), actor(r), String(r.params.requestId), parse(ConvertHroEmailRequestBody, r.body)))));
 router.get("/onboarding/email-intake/triage", handle(async (r, s) => s.json(await listEmailTriage(actor(r)))));

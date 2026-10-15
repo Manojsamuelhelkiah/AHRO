@@ -38,6 +38,7 @@
     "drizzle-orm": "catalog:",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
+    "htmlparser2": "^10.1.0",
     "http-proxy-middleware": "^4.2.0",
     "mammoth": "^1.13.0",
     "multer": "^2.2.0",

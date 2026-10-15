@@ -3,10 +3,10 @@ import { Link, useParams } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetHroEmailIntake, useGetHroEmailRequest, useReviewHroEmailRequest, useConvertHroEmailRequest,
-  useGetHroEmailPrivateSource,
+  useGetHroEmailPrivateSource, useRetryHroEmailExtraction,
   getGetHroEmailIntakeQueryKey, getGetHroEmailRequestQueryKey, getListHroEmailRequestsQueryKey,
 } from '@workspace/api-client-react';
-import type { HroEmailRequest, HroEmailTemplate } from '@workspace/api-client-react';
+import type { HroEmailRequest, HroEmailTemplate, HroEmailExtractionResult } from '@workspace/api-client-react';
 import { Card, Button, PageHeader } from '@/components/ui-shared';
 import { ArrowLeft, Lock } from 'lucide-react';
 import { ErrorNote, Pill, Skeleton, fmtDate, inputCls, statusTone, useEmailScope, emailAccessRefresh, useClearDeniedEmailData } from './common';
@@ -23,6 +23,8 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
   const [ackFiles, setAckFiles] = useState(false);
   const [ackDup, setAckDup] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
+  const [preview, setPreview] = useState<HroEmailExtractionResult | null>(null);
+  const extraction = useRetryHroEmailExtraction({ request: { headers } });
   const review = useReviewHroEmailRequest({ request: { headers } });
   const convert = useConvertHroEmailRequest({ request: { headers } });
   const source = useGetHroEmailPrivateSource(current.id, { query: { queryKey: ['hro-email-private-source', scope, current.id], enabled: canReview,
@@ -31,7 +33,8 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
   const tpl = templates.find((t) => t.template.id === templateId)?.template;
   const allowed = useMemo(() => [...new Set([...CONTROL, ...(tpl?.columns.map((c) => c.key) ?? [])])], [tpl]);
   const closed = current.status === 'converted' || current.status === 'rejected';
-  const readOnly = !canReview || closed;
+  const busy = extraction.isPending || review.isPending || convert.isPending;
+  const readOnly = !canReview || closed || busy;
 
   const missing = useMemo(() => tpl ? tpl.columns.filter((c) => c.required && !(fields[c.key] ?? '').trim()).map((c) => c.key) : current.missingFields, [tpl, fields, current.missingFields]);
   const ctlMissing = tpl ? CONTROL.filter((k) => !(fields[k] ?? '').trim()) : [];
@@ -44,8 +47,9 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
   };
   const setField = (k: string, v: string) => { setFields((f) => ({ ...f, [k]: v })); setDirty(true); };
   const touchSaved = (r: HroEmailRequest) => {
+    setPreview(null);
     setCurrent(r); setFields({ ...r.fields }); setTemplateId(r.templateId ?? templateId); setDirty(false);
-    qc.setQueryData(getGetHroEmailRequestQueryKey(r.id), r);
+    qc.setQueryData([...getGetHroEmailRequestQueryKey(r.id), scope], r);
     qc.invalidateQueries({ queryKey: getListHroEmailRequestsQueryKey() });
     qc.invalidateQueries({ queryKey: getGetHroEmailIntakeQueryKey() });
   };
@@ -55,6 +59,22 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
     review.mutate({ requestId: current.id, data: { expectedVersion: current.version, action: 'save', ...(templateId ? { templateId } : {}), fields: out } }, { onSuccess: (r) => { setSavedHere(true); touchSaved(r); } });
   };
   const reject = () => review.mutate({ requestId: current.id, data: { expectedVersion: current.version, action: 'reject' } }, { onSuccess: (r) => { setConfirmReject(false); touchSaved(r); } });
+  const retryExtraction = () => {
+    setPreview(null);
+    extraction.mutate({ requestId: current.id, data: { expectedVersion: current.version, action: 'preview' } }, { onSuccess: setPreview });
+  };
+  const adoptExtraction = () => {
+    if (!preview) return;
+    // Unsaved changes, including explicit clears, stay in the draft after adoption.
+    const edits = Object.fromEntries(Object.entries(fields).filter(([k, v]) => v !== (current.fields[k] ?? '')));
+    extraction.mutate({ requestId: current.id, data: { expectedVersion: current.version, action: 'apply', previewDigest: preview.previewDigest } }, {
+      onSuccess: result => {
+        if (!result.request) return;
+        touchSaved(result.request); setSavedHere(false);
+        if (Object.keys(edits).length) { setFields(f => ({ ...f, ...edits })); setDirty(true); }
+      },
+    });
+  };
 
   const hasAttach = current.attachments.length > 0;
   const dup = current.potentialDuplicates > 0;
@@ -76,23 +96,39 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
           <p className="text-xs text-[var(--text-muted)]">Source: {current.sourceUrl ? 'linked mailbox message (content is not shown here)' : 'mailbox'}. Received {fmtDate(current.receivedAt)}.</p>
         </Card>
 
+        {canReview && !closed && <Card className="space-y-3 p-4" data-testid="section-extraction">
+          <h2 className="text-base font-semibold">Retry source extraction</h2>
+          <p className="text-xs text-[var(--text-muted)]">Read the exact original mailbox message again. Preview does not change saved fields. Adoption preserves reviewer-authored fields and unsaved edits, clears prior review, and never creates a case.</p>
+          <Button variant="secondary" data-testid="button-preview-extraction" disabled={busy} onClick={retryExtraction}>{extraction.isPending ? 'Checking source...' : 'Preview extraction'}</Button>
+          {extraction.isError && <ErrorNote error={extraction.error} />}
+          {preview && <div className="space-y-2" data-testid="extraction-preview">
+            <p className="break-words text-sm">Proposed template: {preview.templateId ?? 'unclassified'}</p>
+            <p className="text-xs">Protected reviewer fields: {preview.preservedFields.join(', ') || 'none'}. Unsaved draft edits also remain.</p>
+            <dl className="grid gap-2 sm:grid-cols-2">{Object.entries(preview.fields).map(([k, v]) => <div key={k} className="min-w-0 rounded border border-[var(--border)] p-2 text-xs"><dt className="break-words font-medium">{k}</dt><dd className="break-words">{v}</dd><dd className="text-[var(--text-muted)]">{preview.metadata.provenance?.[k]?.join(', ')}</dd></div>)}</dl>
+            {preview.metadata.issues?.map((issue, i) => <p key={i} className="break-words text-xs text-[var(--status-amber-fg)]">{issue.field}: {issue.message}</p>)}
+            {dirty && templateId !== (current.templateId ?? '') && <p role="status" className="text-xs">Save your changed classification before adopting source suggestions.</p>}
+            <div className="flex flex-wrap gap-2"><Button data-testid="button-adopt-extraction" disabled={busy || (dirty && templateId !== (current.templateId ?? ''))} onClick={adoptExtraction}>Adopt suggestions, not review</Button><Button variant="ghost" disabled={busy} onClick={() => setPreview(null)}>Dismiss preview</Button></div>
+          </div>}
+        </Card>}
+
         <Card className="space-y-3 p-4" data-testid="section-fields">
           <h2 className="text-base font-semibold">Allowed fields</h2>
           {!tpl ? <p className="rounded-md bg-[var(--surface-alt)] p-4 text-sm text-[var(--text-muted)]">Select a template to see the fields that can be recorded.</p> : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {[...CONTROL.map((k) => ({ key: k, label: k, required: true, kind: 'text' as const, description: 'Binding field' , values: undefined as string[] | undefined })), ...tpl.columns].map((c) => {
+              {tpl.columns.map((c) => {
                 const id = `f-${c.key}`; const val = fields[c.key] ?? '';
                 const src = current.fieldSources[c.key];
                 const isMissing = c.required && !val.trim();
+                const problems = current.extraction?.issues?.filter(i => i.field === c.key) ?? [];
                 return (
                   <div key={c.key} className="space-y-1">
                     <label htmlFor={id} className="flex flex-wrap items-center gap-1.5 text-xs font-medium">{c.label}{c.required && <span className="text-[var(--status-red-fg)]" aria-label="required">*</span>}{src && <Pill tone={src === 'email' ? 'blue' : 'green'}>{src}</Pill>}</label>
                     {c.kind === 'choice' && c.values?.length ? (
-                      <select id={id} disabled={readOnly} className={inputCls} value={val} onChange={(e) => setField(c.key, e.target.value)}><option value="">Not set</option>{c.values.map((v) => <option key={v} value={v}>{v}</option>)}</select>
+                      <select id={id} disabled={readOnly} className={inputCls} value={val} aria-invalid={isMissing || problems.length > 0} aria-describedby={`${id}-d`} onChange={(e) => setField(c.key, e.target.value)}><option value="">Not set</option>{c.values.map((v) => <option key={v} value={v}>{v}</option>)}</select>
                     ) : (
                       <input id={id} data-testid={`input-field-${c.key}`} disabled={readOnly} className={inputCls} type={c.kind === 'date' ? 'date' : c.kind === 'email' ? 'email' : 'text'} value={val} onChange={(e) => setField(c.key, e.target.value)} aria-invalid={isMissing} aria-describedby={`${id}-d`} />
                     )}
-                    <p id={`${id}-d`} className={`text-[11px] ${isMissing ? 'text-[var(--status-amber-fg)]' : 'text-[var(--text-muted)]'}`}>{isMissing ? 'Missing. ' : ''}{c.description}</p>
+                    <p id={`${id}-d`} className={`text-[11px] ${isMissing || problems.length ? 'text-[var(--status-amber-fg)]' : 'text-[var(--text-muted)]'}`}>{problems.length ? `Source extraction needs review: ${problems.map(p => p.message).join(' ')} ` : isMissing ? 'Not supplied in the source or draft. ' : ''}{c.description}{c.values?.length ? ` Allowed: ${c.values.join(', ')}.` : ''}</p>
                   </div>);
               })}
             </div>)}
@@ -100,7 +136,7 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
           {canReview && !closed && (
             <div className="flex flex-wrap gap-2">
               <Button data-testid="button-save-review" disabled={readOnly || review.isPending || !tpl} onClick={save}>{review.isPending ? 'Saving...' : 'Save review'}</Button>
-              <Button variant="destructive" data-testid="button-reject-request" disabled={review.isPending} onClick={() => setConfirmReject(true)}>Reject request</Button>
+              <Button variant="destructive" data-testid="button-reject-request" disabled={busy} onClick={() => setConfirmReject(true)}>Reject request</Button>
             </div>)}
           {confirmReject && (
             <div role="alertdialog" aria-label="Confirm rejection" className="space-y-2 rounded-md border border-[var(--status-red)] bg-[var(--status-red-bg)] p-3 text-sm">
@@ -121,9 +157,11 @@ function Editor({ request, templates, canReview, headers, scope }: { request: Hr
           {source.isError && <ErrorNote error={source.error} />}
         </Card>
         <Card className="space-y-2 p-4" data-testid="section-missing">
-          <h2 className="text-base font-semibold">Missing fields</h2>
+          <h2 className="text-base font-semibold">Missing fields and source problems</h2>
           {missing.length === 0 && ctlMissing.length === 0 ? <p className="text-sm text-[var(--status-green-fg)]">No required fields are missing{dirty ? ' in this draft' : ''}.</p>
-            : <ul className="list-disc space-y-0.5 pl-5 text-sm">{[...ctlMissing, ...missing].map((m) => <li key={m} className="font-mono text-xs">{m}</li>)}</ul>}
+            : <ul className="list-disc space-y-0.5 pl-5 text-sm">{[...new Set([...ctlMissing, ...missing])].map((m) => <li key={m} className="break-words text-xs">{m}: {current.extraction?.issues?.some(i => i.field === m) ? 'source value needs correction; see field guidance' : 'no usable value supplied'}</li>)}</ul>}
+          {current.extraction?.issues?.filter(i => i.field === 'table' || i.field === 'template_id').map((issue, i) => <p key={i} role="status" className="text-xs text-[var(--status-amber-fg)]">{issue.message}</p>)}
+          <p className="text-xs text-[var(--text-muted)]">Extraction suggests source values only. It does not verify identity, employment, evidence or authority.</p>
         </Card>
 
         <Card className="space-y-2 p-4" data-testid="section-attachments">

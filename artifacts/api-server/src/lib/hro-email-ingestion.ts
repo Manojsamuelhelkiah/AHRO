@@ -7,6 +7,7 @@ import { db, hroEmailRequests, hroEmailScan, hroMailboxIngress, hroMailboxReques
 import { header, type GmailMessage } from "./onboarding/inbound-email";
 import { mailboxTokens } from "./hro-mailbox-ingress";
 import { classifyEmail } from "./hro-email-registry";
+import { emailHtmlStructure, type EmailStructure } from "./hro-email-structure";
 import { emailRouteReceiptCurrent as currentReceipt } from "./hro-email-authorization";
 import { withSensitiveLifecycleFence, evaluateCaseDerivedLifecycleGateInTransaction } from "./onboarding/sensitive-lifecycle";
 
@@ -17,6 +18,7 @@ const provider: EmailProvider = { get: path => {
   return connectors.proxy("google-mail", path, { method: "GET" });
 }};
 const controlledProvider = new AsyncLocalStorage<EmailProvider>();
+export function intakeEmailProvider(): EmailProvider { return controlledProvider.getStore() ?? provider; }
 /** Read-only test dependency; inaccessible from browser headers and forbidden outside the isolated harness. */
 export function withControlledEmailIntakeProvider<T>(p: EmailProvider, action: () => T): T {
   if (process.env.NODE_ENV !== "test" || process.env.ONBOARDING_E2E_TEST !== "true") throw new Error("Controlled mailbox provider is test-only.");
@@ -32,7 +34,7 @@ export async function connectedIntakeMailbox(p?: EmailProvider): Promise<string 
 }
 export const MAX_EMAIL_BYTES = 32_768;
 /** Never recurse into attached message/rfc822 or fetch remote URLs. Reject MIME bombs before decoding. */
-export function boundedEmailContent(msg: GmailMessage): { body: string; attachments: Array<{ name: string; status: string }>; blocked: boolean } {
+export function boundedEmailContent(msg: GmailMessage): { body: string; structure: EmailStructure; scanContent: string; attachments: Array<{ name: string; status: string }>; blocked: boolean } {
   let nodes = 0, bytes = 0, blocked = false;
   const plain: string[] = [], html: string[] = [], attachments: Array<{ name: string; status: string }> = [];
   function walk(part: GmailMessage["payload"], depth: number) {
@@ -54,11 +56,13 @@ export function boundedEmailContent(msg: GmailMessage): { body: string; attachme
     for (const child of part.parts ?? []) walk(child, depth + 1);
   }
   walk(msg.payload, 0);
-  const body = plain.length ? plain.join("\n") : html.join("\n")
-    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
-    .replace(/<br\s*\/?>|<\/(?:p|div|li)>/gi, "\n").replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
-  return { body: blocked ? "" : body.replace(/\u0000/g, "").slice(0, MAX_EMAIL_BYTES), attachments, blocked };
+  const structures = blocked ? [] : html.map(emailHtmlStructure);
+  const structure = { tables: structures.flatMap(s => s.tables), htmlText: structures.map(s => s.htmlText).join("\n"), issues: structures.flatMap(s => s.issues) };
+  if (structure.tables.length > 8) { blocked = true; structure.tables = []; }
+  const body = plain.length ? plain.join("\n") : structure.htmlText;
+  return { body: blocked ? "" : body.replace(/\u0000/g, "").slice(0, MAX_EMAIL_BYTES),
+    structure: blocked ? { tables: [], htmlText: "", issues: [] } : structure,
+    scanContent: blocked ? "" : [...plain, ...html].join("\n"), attachments, blocked };
 }
 export function intakeMessageReserved(msg: GmailMessage, body: string, refs: string[] = []): boolean {
   const subject = header(msg, "Subject"), input = `${subject}\n${body}`;
@@ -98,7 +102,7 @@ async function alreadyOwned(id: string) {
 export async function receiveIntakeMessage(mailbox: string, msg: GmailMessage, refs: string[] = [], privateProvider: EmailProvider = provider,
   sourceDependencies: Parameters<typeof import("./hro-email-private-source").retainEmailSources>[3] = {}) {
   const content = boundedEmailContent(msg);
-  if (intakeMessageReserved(msg, content.body, refs)) {
+  if (intakeMessageReserved(msg, `${content.body}\n${content.structure.htmlText}`, refs)) {
     const automatic = (msg.labelIds ?? []).some(l => l === "SENT" || l === "DRAFT") ||
       /auto-generated|auto-replied/i.test(header(msg, "Auto-Submitted")) || /bulk|list|junk/i.test(header(msg, "Precedence")) ||
       /no-?reply|mailer-daemon|postmaster/i.test(header(msg, "From"));
@@ -145,7 +149,7 @@ export async function receiveIntakeMessage(mailbox: string, msg: GmailMessage, r
       }).onConflictDoNothing();
       return;
     }
-    const classified = classifyEmail(subject, content.body);
+    const classified = classifyEmail(subject, content.body, content.structure);
     const gate = await evaluateCaseDerivedLifecycleGateInTransaction(tx, {
       organizationId: live.organizationId, jurisdiction: classified.fields.work_country || "unknown",
     });
@@ -155,6 +159,7 @@ export async function receiveIntakeMessage(mailbox: string, msg: GmailMessage, r
       originalIngressId: live.id, originalRouteRevision: live.revision,
       mailboxAddress: mailbox, providerMessageId: msg.id, templateId: classified.templateId,
       fields, fieldSources: Object.fromEntries(Object.keys(fields).map(k => [k, "email" as const])),
+      extraction: !content.blocked ? { issues: classified.issues, provenance: gate.allowed ? classified.provenance : {} } : {},
       attachments: content.attachments,
       status: !gate.allowed || content.blocked || classified.blockedReason ? "blocked" : "needs-review",
       reason: content.blocked ? "MIME content exceeds safe processing limits." : !gate.allowed
