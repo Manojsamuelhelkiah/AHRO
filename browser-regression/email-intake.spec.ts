@@ -18,11 +18,35 @@ test("reviewed email intake: real isolated router, held conversion and responsiv
       await page.getByTestId("button-save-email-config").click();
       await expect(page.getByText("Route saved.", { exact: false })).toBeVisible();
     }
+    await expect(page.getByTestId("section-email-pending-summary")).toContainText(/pending requests?/);
+    await expect(page.getByTestId("section-review-turnaround")).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "Compare receipt cohorts" })).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+    if (label === "phone") {
+      await page.getByRole("link", { name: "View human review turnaround in Analytics" }).click();
+      await expect(page).toHaveURL(/\/analytics#human-review-turnaround$/);
+      const report = page.getByTestId("section-review-turnaround");
+      await expect(report).toBeVisible();
+      await expect(report).toContainText("Analytics case, domain, agent, region and period filters do not apply");
+      const cohorts = page.getByRole("combobox", { name: "Compare receipt cohorts" });
+      await cohorts.selectOption("weekly");
+      await cohorts.selectOption("monthly");
+      await page.locator('select:has(option[value="7"])').selectOption("7");
+      await expect(cohorts).toHaveValue("monthly");
+      const refresh = page.waitForRequest(request => request.method() === "GET" && new URL(request.url()).pathname === "/api/onboarding/email-intake");
+      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      await refresh;
+      await expect(cohorts).toHaveValue("monthly");
+      await cohorts.selectOption("all");
+      await expect(report.getByTestId("turnaround-mobile")).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+      await page.goto("/email-intake");
+    }
     const added = await page.request.post("/api/test/email-intake-message", { data: { templateId: "leave-request" } });
     expect(added.ok(), await added.text()).toBeTruthy();
     const request = await added.json();
     await page.reload();
-    await page.getByTestId(`link-request-${request.id}`).click();
+    await page.getByTestId(`${label === "phone" ? "link-request-mobile" : "link-request"}-${request.id}`).click();
     await expect(page.getByRole("heading", { name: "Review email request", exact: true })).toBeVisible();
     await expect(page.getByTestId("button-convert")).toBeDisabled();
     await page.getByTestId("button-save-review").click();

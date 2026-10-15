@@ -1,5 +1,5 @@
-import { useUser } from '@clerk/react';
-import { getPinnedOrganizationIdForPage } from '@workspace/api-client-react';
+import { useAuth, useUser } from '@clerk/react';
+import { getPinnedOrganizationIdForPage, useGetHroEmailIntake, getGetHroEmailIntakeQueryKey } from '@workspace/api-client-react';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { accessDenied } from '@/lib/session-access';
@@ -9,8 +9,19 @@ import { Button } from '@/components/ui-shared';
 
 export function useEmailScope() {
   const { user } = useUser();
+  const { sessionId } = useAuth();
   const org = getPinnedOrganizationIdForPage();
-  return { org, scope: `${org ?? 'no-tenant'}:${user?.id ?? 'signed-out'}`, headers: org ? { 'x-organization-id': org } : {} } as { org: string | null; scope: string; headers: Record<string, string> };
+  return { org, scope: `${org ?? 'no-tenant'}:${user?.id ?? 'signed-out'}:${sessionId ?? 'no-session'}`, headers: org ? { 'x-organization-id': org } : {} } as { org: string | null; scope: string; headers: Record<string, string> };
+}
+
+/** Same authorized read contract on both pages; never fetch request contents. */
+export function useEmailReadiness() {
+  const { scope, headers, org } = useEmailScope();
+  return useGetHroEmailIntake({ request: { headers }, query: {
+    queryKey: [...getGetHroEmailIntakeQueryKey(), scope], enabled: Boolean(org), retry: false,
+    refetchInterval: q => emailAccessRefresh(q) ? 60_000 : false,
+    refetchOnWindowFocus: emailAccessRefresh, refetchOnMount: 'always',
+  } });
 }
 
 export function safeError(e: unknown): string {

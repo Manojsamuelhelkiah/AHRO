@@ -2,15 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  useGetHroEmailIntake, useConfigureHroEmailIntake, useUpdateHroEmailRoute, useListHroEmailRequests,
+  useConfigureHroEmailIntake, useUpdateHroEmailRoute, useListHroEmailRequests,
   useListHroEmailTriage, useResolveHroEmailTriage,
   getGetHroEmailIntakeQueryKey, getListHroEmailRequestsQueryKey, getListHroEmailTriageQueryKey,
 } from '@workspace/api-client-react';
 import type { HroEmailReadiness, HroEmailRoute, HroEmailTriage } from '@workspace/api-client-react';
 import { Card, Button, Input, Label, PageHeader } from '@/components/ui-shared';
 import { Mail, ShieldAlert, Lock } from 'lucide-react';
-import { CopyButton, ErrorNote, Pill, Skeleton, fmtDate, inputCls, statusTone, useEmailScope, emailAccessRefresh, useClearDeniedEmailData } from './common';
-import { ReviewTurnaround } from './turnaround';
+import { CopyButton, ErrorNote, Pill, Skeleton, fmtDate, inputCls, statusTone, useEmailScope, useEmailReadiness, emailAccessRefresh, useClearDeniedEmailData } from './common';
+import { PendingEmailSummary } from './turnaround';
 import { MarkerRotation } from './rotation';
 
 function Templates({ data }: { data: HroEmailReadiness }) {
@@ -176,8 +176,7 @@ function Triage({ data, headers, scope }: { data: HroEmailReadiness; headers: Re
 
 export function EmailIntakePage() {
   const { scope, headers, org } = useEmailScope();
-  const intake = useGetHroEmailIntake({ request: { headers }, query: { queryKey: [...getGetHroEmailIntakeQueryKey(), scope], enabled: Boolean(org), retry: false,
-    refetchInterval: q => emailAccessRefresh(q) ? 60_000 : false, refetchOnWindowFocus: emailAccessRefresh, refetchOnMount: emailAccessRefresh } });
+  const intake = useEmailReadiness();
   useClearDeniedEmailData(intake.error, intake.isSuccess && intake.data?.canReview === false);
   const [before, setBefore] = useState<string | undefined>();
   const [previous, setPrevious] = useState<Array<string | undefined>>([]);
@@ -186,7 +185,7 @@ export function EmailIntakePage() {
     refetchInterval: q => emailAccessRefresh(q) ? 15_000 : false, refetchOnWindowFocus: emailAccessRefresh, refetchOnMount: emailAccessRefresh, staleTime: 0 } });
   const d = intake.data;
   return (
-    <div className="mx-auto max-w-7xl space-y-5 pb-12">
+    <div className="mx-auto min-w-0 max-w-7xl space-y-5 pb-12">
       <PageHeader title="Email intake" subtitle="Client requests received by email, reviewed by people before any case is created." />
       {intake.isLoading ? <Skeleton n={4} /> : intake.isError || !d ? <ErrorNote error={intake.error} onRetry={() => intake.refetch()} /> : (
         <>
@@ -208,7 +207,7 @@ export function EmailIntakePage() {
             <p className="text-xs text-[var(--text-muted)]" data-testid="text-permissions">Your permissions: {[d.canConfigure && 'configure routes', d.canReview && 'review requests', d.canTriage && 'platform triage'].filter(Boolean).join(', ') || 'view only'}.</p>
           </Card>
 
-          <ReviewTurnaround data={d.turnaround} />
+          <PendingEmailSummary data={d.turnaround} />
 
           <Card className="space-y-3 p-4" data-testid="section-routes">
             <h2 className="text-base font-semibold">Client routes</h2>
@@ -223,14 +222,31 @@ export function EmailIntakePage() {
             <Templates data={d} />
           </Card>
 
-          <Card className="space-y-3 p-4" data-testid="section-requests">
+          <Card className="min-w-0 space-y-3 p-4" data-testid="section-requests">
             <h2 className="text-base font-semibold">Client request queue</h2>
             <p className="text-xs text-[var(--text-muted)]">Confidential. The queue lists status and counts only; open a request to review its extracted fields.</p>
             {!d.canReview ? <p className="rounded-md bg-[var(--surface-alt)] p-4 text-sm" data-testid="text-no-review">You do not have permission to review client email requests.</p>
               : reqs.isLoading ? <Skeleton /> : reqs.isError ? <ErrorNote error={reqs.error} onRetry={() => reqs.refetch()} />
               : !reqs.data?.length ? <p className="rounded-md bg-[var(--surface-alt)] p-6 text-center text-sm text-[var(--text-muted)]" data-testid="text-requests-empty">No client requests yet. Mail sent to the address above with a route marker will appear here.</p>
               : (
-                <div className="overflow-x-auto">
+                <div className="min-w-0 space-y-3">
+                  <ul className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)] sm:hidden" aria-label="Client email requests">
+                    {reqs.data.map(r => <li key={r.id} className="min-w-0 space-y-2 p-3" data-testid={`card-request-${r.id}`}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-mono text-xs">{r.id.slice(0, 12)}</span>
+                        <Pill tone={statusTone(r.status)}>{r.status}</Pill>
+                      </div>
+                      {r.potentialDuplicates > 0 && <Pill tone="amber">{r.potentialDuplicates} possible duplicate</Pill>}
+                      <dl className="grid grid-cols-2 gap-2 text-xs">
+                        <div><dt className="text-[var(--text-muted)]">Family</dt><dd className="break-words">{r.family ?? 'Unclassified'}</dd></div>
+                        <div><dt className="text-[var(--text-muted)]">Received</dt><dd>{fmtDate(r.receivedAt)}</dd></div>
+                        <div><dt className="text-[var(--text-muted)]">Missing</dt><dd>{r.missingFields.length}</dd></div>
+                        <div><dt className="text-[var(--text-muted)]">Attachments</dt><dd>{r.attachments.length}</dd></div>
+                      </dl>
+                      <Link href={`/email-intake/${r.id}`} className="inline-block py-1 font-medium text-[var(--primary)] underline" data-testid={`link-request-mobile-${r.id}`}>Review</Link>
+                    </li>)}
+                  </ul>
+                  <div className="hidden min-w-0 max-w-full overflow-x-auto sm:block" role="region" aria-label="Client request queue table" tabIndex={0}>
                   <table className="w-full text-sm"><caption className="sr-only">Client email requests</caption>
                     <thead><tr className="text-left text-xs text-[var(--text-muted)]"><th className="py-2 pr-3">Request</th><th className="pr-3">Status</th><th className="pr-3">Family</th><th className="pr-3">Missing</th><th className="pr-3">Attachments</th><th className="pr-3">Received</th><th><span className="sr-only">Open</span></th></tr></thead>
                     <tbody>{reqs.data.map((r) => (
@@ -244,6 +260,7 @@ export function EmailIntakePage() {
                         <td><Link href={`/email-intake/${r.id}`} className="font-medium text-[var(--primary)] underline" data-testid={`link-request-${r.id}`}>Review</Link></td>
                       </tr>))}</tbody>
                   </table>
+                  </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" disabled={!previous.length} onClick={() => { setBefore(previous.at(-1)); setPrevious(p => p.slice(0, -1)); }}>Newer requests</Button>
                     <Button size="sm" variant="outline" disabled={reqs.data.length < 100} onClick={() => { const last = reqs.data?.at(-1); if (last) { setPrevious(p => [...p, before]); setBefore(`${last.receivedAt}|${last.id}`); } }}>Older requests</Button>

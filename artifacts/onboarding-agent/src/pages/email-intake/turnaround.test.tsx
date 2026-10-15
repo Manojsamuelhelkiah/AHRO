@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { Router } from 'wouter';
 import type { HroEmailTurnaround } from '@workspace/api-client-react';
-import { ReceiptCohortRows, ReviewTurnaround } from './turnaround';
+import { PendingEmailSummary, ReceiptCohortRows, ReviewTurnaround } from './turnaround';
 
 const empty: HroEmailTurnaround = {
   asOf: '2026-10-13T00:00:00Z',
@@ -15,13 +16,32 @@ const empty: HroEmailTurnaround = {
 test('turnaround renders empty measurements honestly and preserves held-outcome and privacy boundaries', () => {
   const html = renderToStaticMarkup(<ReviewTurnaround data={empty} />);
   assert.match(html, /No pending client requests/);
-  assert.equal(html.match(/Not measured/g)?.length, 6);
+  assert.equal(html.match(/Not measured/g)?.length, 12); // desktop table and small-screen cards
   assert.match(html, /not Gmail delivery/);
   assert.match(html, /not a completed HR outcome/);
   assert.match(html, /Unbound platform-triage mail and cases without operational evidence are excluded/);
   assert.match(html, /individual reviewer metrics/);
   assert.match(html, /<caption/);
   assert.doesNotMatch(html, /NaN|undefined/);
+});
+
+test('intake summary uses all waiting bands, includes reviewed/blocked items, and links to the Analytics report', () => {
+  const html = renderToStaticMarkup(<Router ssrPath="/email-intake"><PendingEmailSummary data={{ ...empty,
+    waiting: { under24Hours: 5, from24To72Hours: 4, from72To168Hours: 2, atLeast168Hours: 1 },
+  }} /></Router>);
+  assert.match(html, /12 pending requests · 3 waiting 72 hours or more/);
+  assert.match(html, /blocked items and reviewed requests still awaiting conversion/);
+  assert.match(html, /href="\/analytics#human-review-turnaround"/);
+  assert.doesNotMatch(html, /<table|<select|Mean|Median|unreviewed/);
+  const zero = renderToStaticMarkup(<Router ssrPath="/email-intake"><PendingEmailSummary data={empty} /></Router>);
+  assert.match(zero, /0 pending requests · 0 waiting 72 hours or more/);
+});
+
+test('report explicitly separates Analytics filters and offers responsive cards', () => {
+  const html = renderToStaticMarkup(<ReviewTurnaround data={empty} />);
+  assert.match(html, /Analytics case, domain, agent, region and period filters do not apply/);
+  assert.match(html, /data-testid="turnaround-mobile"/);
+  assert.match(html, /max-w-full min-w-0/);
 });
 
 test('turnaround renders measured sample sizes, missing evidence and all waiting bands', () => {

@@ -4,6 +4,7 @@ import {
   useGetOnboardingAnalytics, getGetOnboardingAnalyticsQueryKey,
   useListOnboardingCases, getListOnboardingCasesQueryKey,
   useListOnboardingApprovals, getListOnboardingApprovalsQueryKey,
+  getGetHroEmailIntakeQueryKey,
   // @ts-ignore
   getGetOnboardingOutcomeKpisQueryKey
 } from '@workspace/api-client-react';
@@ -17,9 +18,12 @@ import { CASE_TYPES } from './cases/case-presentation';
 
 import { OutcomeKpis } from './analytics/outcome-kpis';
 import { BottleneckSimulator } from './analytics/bottleneck-simulator';
+import { EmailTurnaroundReport } from './analytics/email-turnaround';
+import { useEmailScope } from './email-intake/common';
 
 export function AnalyticsPage() {
   const queryClient = useQueryClient();
+  const { scope: emailScope } = useEmailScope();
   
   const { data: analytics, isLoading: analyticsLoading } = useGetOnboardingAnalytics({
     query: {
@@ -38,6 +42,7 @@ export function AnalyticsPage() {
   const [agent, setAgent] = useState<string>('All agents');
 
   const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: [...getGetHroEmailIntakeQueryKey(), emailScope], exact: true });
     queryClient.invalidateQueries({ queryKey: getGetOnboardingAnalyticsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListOnboardingCasesQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListOnboardingApprovalsQueryKey() });
@@ -212,12 +217,8 @@ export function AnalyticsPage() {
 
   const isLoading = casesLoading || approvalsLoading || analyticsLoading;
 
-  if (isLoading && (!casesData || !analytics)) {
-    return <LoadingBlock className="mx-auto max-w-2xl mt-8">Loading HRO Intelligence workspace...</LoadingBlock>;
-  }
-
   return (
-    <div className="max-w-7xl mx-auto pb-16 pt-2">
+    <div className="min-w-0 max-w-7xl mx-auto pb-16 pt-2">
       <PageHeader 
         title="HRO Intelligence" 
         subtitle="Authorized online and offline cases are included in totals. Historical examples are not verified business outcomes."
@@ -234,6 +235,10 @@ export function AnalyticsPage() {
           <RefreshCw className="w-4 h-4" /> Refresh
         </Button>
       </div>
+
+      <EmailTurnaroundReport />
+
+      {isLoading && <LoadingBlock>Loading case analytics...</LoadingBlock>}
 
       <section className="mb-12">
         <div className="mb-4">

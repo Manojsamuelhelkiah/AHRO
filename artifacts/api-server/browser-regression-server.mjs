@@ -133,7 +133,6 @@ const {
   onbEffectJournal,
   onbEvents,
   onbGovernanceAuthorityAssignments,
-  onbGovernanceDecisions,
   onbSensitiveLifecyclePolicies,
   onbSettings,
   organizationMembershipsTable,
@@ -205,25 +204,11 @@ async function ensureFixture() {
     source: "named", createdByUserId: administrator, approvedByUserId: administrator, approvedAt: new Date(),
   });
   const { recordHumanPermissionDecision } = await import("./src/lib/human-permissions.ts");
-  // These approvals exist only in the disposable test schema, and authorize
-  // only the in-process fake provider behind the existing network deny fence.
-  const { ensureGovernanceSeeded, reviewGovernanceDecision } =
+  // Seed only current policy decisions. The former simulation/outreach
+  // decisions are permanently retired and must not be recreated for fixtures.
+  const { ensureGovernanceSeeded } =
     await import("./src/lib/onboarding/governance.ts");
   await ensureGovernanceSeeded(DEMO_ORGANIZATION_ID);
-  for (const key of ["GD-10", "GD-11"]) {
-    const [decision] = await db.select().from(onbGovernanceDecisions).where(and(
-      eq(onbGovernanceDecisions.organizationId, DEMO_ORGANIZATION_ID),
-      eq(onbGovernanceDecisions.key, key),
-      eq(onbGovernanceDecisions.isCurrent, true),
-    ));
-    if (!decision) throw new Error(`Missing browser-regression governance decision ${key}`);
-    await reviewGovernanceDecision(DEMO_ORGANIZATION_ID, { userId: policyReviewer, role: "member" }, key, {
-      revision: 1,
-      outcome: "approved",
-      reason: "Disposable browser fixture approval for fake controlled Demo email only.",
-      verificationReference: `browser-regression:${suffix}:${key}`,
-    });
-  }
   await db.insert(onbSettings).values([
     {
       organizationId: DEMO_ORGANIZATION_ID,

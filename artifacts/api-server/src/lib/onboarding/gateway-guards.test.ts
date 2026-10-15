@@ -65,7 +65,7 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       .where(eq(onbGovernanceDecisions.organizationId, DEMO_ORGANIZATION_ID));
     for (const decision of decisions) {
       const reviewer = `${suffix}:${decision.accountableRole}`;
-      if (decision.key === "GD-11") activationPolicyReviewer = reviewer;
+      if (decision.key === "GD-06") activationPolicyReviewer = reviewer;
       await db.insert(organizationMembershipsTable).values({
         organizationId: DEMO_ORGANIZATION_ID, clerkUserId: reviewer, role: "admin",
       }).onConflictDoNothing();
@@ -378,6 +378,7 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
   });
 
   test("Gate C waits behind fenced policy-review permission withdrawal and rejects stale evidence", async () => {
+    assert.ok(activationPolicyReviewer, "The active frontline deployment policy must have a reviewer");
     const id = await approvedReadyCase();
     let fenced!: () => void;
     let release!: () => void;
@@ -388,7 +389,6 @@ describe("three onboarding gateway guards", { skip: !hasDb }, () => {
       await tx.update(organizationMembershipsTable).set({ revokedAt: new Date() })
         .where(and(eq(organizationMembershipsTable.organizationId, DEMO_ORGANIZATION_ID),
           eq(organizationMembershipsTable.clerkUserId, activationPolicyReviewer))).returning();
-      assert.ok(activationPolicyReviewer);
       fenced();
       await unblock;
     });

@@ -1,9 +1,21 @@
 import { useState } from 'react';
+import { Link } from 'wouter';
 import type { HroEmailTurnaround } from '@workspace/api-client-react';
 import { Card } from '@/components/ui-shared';
 import { fmtDate } from './common';
 
 const hours = (value: number | null) => value == null ? 'Not measured' : `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} h`;
+
+export function PendingEmailSummary({ data }: { data: HroEmailTurnaround }) {
+  const w = data.waiting;
+  const older = w.from72To168Hours + w.atLeast168Hours;
+  const pending = w.under24Hours + w.from24To72Hours + older;
+  return <Card className="space-y-2 p-4" data-testid="section-email-pending-summary">
+    <p className="text-sm font-semibold">{pending} pending {pending === 1 ? 'request' : 'requests'} · {older} waiting 72 hours or more</p>
+    <p className="text-xs text-[var(--text-muted)]">Includes blocked items and reviewed requests still awaiting conversion. Age starts at recorded intake receipt.</p>
+    <Link href="/analytics#human-review-turnaround" className="inline-block text-sm text-[var(--primary)] underline">View human review turnaround in Analytics</Link>
+  </Card>;
+}
 
 export function ReviewTurnaround({ data }: { data: HroEmailTurnaround }) {
   const [period, setPeriod] = useState<'all' | 'weekly' | 'monthly'>('all');
@@ -15,8 +27,9 @@ export function ReviewTurnaround({ data }: { data: HroEmailTurnaround }) {
     ['7 days or more', data.waiting.atLeast168Hours],
   ] as const;
   return (
-    <Card className="space-y-3 p-4" data-testid="section-review-turnaround">
+    <Card className="min-w-0 space-y-3 p-4" data-testid="section-review-turnaround">
       <h2 className="text-base font-semibold">Human review turnaround</h2>
+      <p className="rounded-md bg-[var(--surface-alt)] p-2 text-xs">Independent email-intake report for the selected client. Analytics case, domain, agent, region and period filters do not apply. Use this report's receipt-cohort selector below.</p>
       <p className="text-xs text-[var(--text-muted)]">This client only · snapshot {fmtDate(data.asOf)}. Age starts at recorded intake receipt, not Gmail delivery. Pending requests include blocked items and reviewed requests still awaiting conversion.</p>
       <h3 className="text-sm font-medium">Current pending queue by receipt age</h3>
       <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
@@ -27,7 +40,7 @@ export function ReviewTurnaround({ data }: { data: HroEmailTurnaround }) {
         Compare receipt cohorts
         <select aria-label="Compare receipt cohorts" value={period}
           onChange={event => setPeriod(event.target.value as typeof period)}
-          className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+          className="max-w-full min-w-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
           <option value="all">All retained requests</option>
           <option value="weekly">Weekly (Monday start, UTC)</option>
           <option value="monthly">Monthly (calendar month, UTC)</option>
@@ -35,7 +48,17 @@ export function ReviewTurnaround({ data }: { data: HroEmailTurnaround }) {
       </label>
       <p className="text-xs text-[var(--text-muted)]">Cohorts use recorded intake receipt dates, not human event dates. Period starts are inclusive and ends exclusive in UTC. Only periods with retained eligible requests appear, newest first; this is not a complete history of deleted requests. Current periods are partial. Reviews and held conversions after a receipt period ends still count through this snapshot. Pending counts are current, not historical backlog. Switching cohorts does not filter the current pending queue above.</p>
       {period !== 'all' && cohorts.length === 0 && <p className="text-sm">No retained requests for receipt-cohort comparison.</p>}
-      <div className="overflow-x-auto">
+      <div className="lg:hidden space-y-3" data-testid="turnaround-mobile">
+        <p className="text-xs text-[var(--text-muted)]">Measured durations {period === 'all' ? 'across all retained client requests' : `by ${period} receipt cohort`}, using dated successful human audit events. Repeated reviews count once, at the first review or rejection. Small samples and newer cohorts with pending requests are not evidence of better or worse reviewer performance.</p>
+        {period === 'all' ? <DurationCards firstReview={data.firstReview} heldConversion={data.heldConversion} />
+          : cohorts.map(cohort => <div key={cohort.startAt} className="space-y-3 rounded-md border border-[var(--border)] p-3">
+            <h3 className="text-sm font-semibold">{cohort.startAt.slice(0, 10)} to {cohort.endAt.slice(0, 10)} (exclusive, UTC)</h3>
+            {Date.parse(cohort.endAt) > Date.parse(data.asOf) && <p className="text-xs">Partial period</p>}
+            <p className="text-xs">{cohort.requestCount} retained requests · {cohort.pendingCount} pending now</p>
+            <DurationCards firstReview={cohort.firstReview} heldConversion={cohort.heldConversion} />
+          </div>)}
+      </div>
+      <div className="hidden lg:block max-w-full overflow-x-auto" role="region" aria-label="Turnaround comparison table" tabIndex={0}>
         <table className="w-full text-sm">
           <caption className="mb-2 text-left text-xs text-[var(--text-muted)]">Measured durations {period === 'all' ? 'across all retained client requests' : `by ${period} receipt cohort`}, using dated successful human audit events. Repeated reviews count once, at the first review or rejection. Small samples and newer cohorts with pending requests are not evidence of better or worse reviewer performance.</caption>
           {period === 'all' ? <>
@@ -50,6 +73,20 @@ export function ReviewTurnaround({ data }: { data: HroEmailTurnaround }) {
       <p className="rounded-md bg-[var(--surface-alt)] p-2 text-xs">Conversion creates a held case requiring further approvals. It is not a completed HR outcome, evidence approval or operational release.</p>
     </Card>
   );
+}
+
+function DurationCards({ firstReview, heldConversion }: Pick<HroEmailTurnaround, 'firstReview' | 'heldConversion'>) {
+  return <div className="grid gap-3 sm:grid-cols-2">
+    {([['First human review / rejection', firstReview], ['Conversion to held case', heldConversion]] as const).map(([label, summary]) =>
+      <div key={label} className="min-w-0 rounded-md bg-[var(--surface-alt)] p-3">
+        <h4 className="mb-2 text-sm font-medium">{label}</h4>
+        <dl className="grid grid-cols-2 gap-2 text-xs">
+          {([['Measured requests', summary.sampleCount], ['Mean', hours(summary.meanHours)], ['Median', hours(summary.medianHours)],
+            ['90th percentile', hours(summary.p90Hours)], ['Missing dated evidence', summary.missingEvidenceCount]] as const).map(([term, value]) =>
+            <div key={term}><dt className="text-[var(--text-muted)]">{term}</dt><dd className="font-semibold">{value}</dd></div>)}
+        </dl>
+      </div>)}
+  </div>;
 }
 
 /** Shared by both selector modes; UTC ISO dates avoid browser timezone shifts. */
