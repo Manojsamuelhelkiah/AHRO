@@ -95,3 +95,4 @@
 - [Original intent boundaries](original-intent-boundaries.md) — originating requests outlive review questions; keep annotations outside fingerprinted fictional source definitions.
 - [Fictional case display](fictional-case-display-boundaries.md) — S-reference replaces repeated banners; exact trusted wording and actual unresolved assignments never grant authority.
 - [Action Center conversations](action-conversation-boundaries.md) — governed read-only annotations, descriptive agent selection, and no replay of ambiguous model attempts.
+- [Development preview hosts](development-preview-hosts.md) — similar development hostnames can serve different source versions; compare live code before changing data or permissions.
