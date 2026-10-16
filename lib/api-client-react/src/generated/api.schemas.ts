@@ -12227,6 +12227,24 @@ export type RetiredCapabilityResponse = {
   message: string;
 };
 
+export type GetWorkforceInsightsParams = {
+caseType?: ActionCenterCaseType;
+workforce?: GetWorkforceInsightsWorkforce;
+safetyCritical?: boolean;
+siteExposure?: boolean;
+};
+
+export type GetWorkforceInsightsWorkforce = typeof GetWorkforceInsightsWorkforce[keyof typeof GetWorkforceInsightsWorkforce];
+
+
+export const GetWorkforceInsightsWorkforce = {
+  'white-collar': 'white-collar',
+  'blue-collar-frontline': 'blue-collar-frontline',
+  mixed: 'mixed',
+  'needs-review': 'needs-review',
+  unclassified: 'unclassified',
+} as const;
+
 export type UpdateCaseListVisibility200 = {
   updatedCount: number;
 };

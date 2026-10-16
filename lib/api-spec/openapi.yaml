@@ -47,12 +47,26 @@ paths:
     get:
       operationId: getWorkforceInsights
       tags: [onboarding]
+      parameters:
+        - name: caseType
+          in: query
+          schema: { $ref: "#/components/schemas/ActionCenterCaseType" }
+        - name: workforce
+          in: query
+          schema: { type: string, enum: [white-collar, blue-collar-frontline, mixed, needs-review, unclassified] }
+        - name: safetyCritical
+          in: query
+          schema: { type: boolean }
+        - name: siteExposure
+          in: query
+          schema: { type: boolean }
       responses:
         "200":
           description: Client-scoped early-warning foundation; no prediction model is connected.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/WorkforceInsights" }
+        "400": { description: Invalid case-family or job-context discovery filters. }
         "403": { description: Current client administrator access is required. }
   /workforce-insights/reviews:
     post:

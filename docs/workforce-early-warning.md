@@ -46,7 +46,16 @@ eligible Demo identity, independently of the indicator's expiry or source revisi
 - Current client administrators can create explicitly **human-originated** review
   cases, with a source case, reason, recommended follow-up, priority, human owner
   and due date. This does not set a prediction or an authenticity verdict.
-- Open reviews appear on Cases and the dashboard. Analytics holds the full list
+- Open and in-progress reviews appear on Cases, the dashboard, and Action Center's
+  Needs Attention view. Action Center counts each persisted review once, sorts
+  critical human priorities first then due date, and links to Analytics and the source case.
+  Its shared case-family and job-context filters use the source's recorded attributes;
+  unknown safety/site context does not match an explicit filter.
+  Review discovery loads independently of other Action Center sources, with retry
+  and no cached disclosures after a failed or denied refresh. Caches are scoped to
+  client, authenticated account and session; review writes invalidate all review views,
+  and other sessions refresh every 30 seconds.
+  Analytics holds the full list
   and review history, including resolved and dismissed cases.
 - Reviews support open, in-progress, resolved and dismissed states. Closure needs
   a recorded outcome. No email, model call, employment decision or source workflow
@@ -59,7 +68,8 @@ eligible Demo identity, independently of the indicator's expiry or source revisi
 
 The OpenAPI contract defines:
 
-- `GET /api/workforce-insights`
+- `GET /api/workforce-insights` (optional `caseType`, `workforce`, `safetyCritical`,
+  `siteExposure` discovery filters; filters do not change storage or lifecycle)
 - `POST /api/workforce-insights/reviews`
 - `PATCH /api/workforce-insights/reviews/{reviewId}`
 

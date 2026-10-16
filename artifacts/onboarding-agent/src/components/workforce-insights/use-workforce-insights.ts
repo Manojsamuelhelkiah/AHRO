@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@clerk/react';
 import {
   useGetWorkforceInsights,
   useCreateWorkforceReviewCase,
@@ -8,10 +9,10 @@ import {
   getListOnboardingCasesQueryKey,
   getPinnedOrganizationIdForPage,
 } from '@workspace/api-client-react';
-import type { WorkforceInsights } from '@workspace/api-client-react';
+import type { WorkforceInsights, GetWorkforceInsightsParams } from '@workspace/api-client-react';
 
-export function workforceScopedKey(organizationId: string | null) {
-  return [...getGetWorkforceInsightsQueryKey(), organizationId] as const;
+export function workforceScopedKey(organizationId: string | null, userId?: string | null, sessionId?: string | null, filters?: GetWorkforceInsightsParams) {
+  return [...getGetWorkforceInsightsQueryKey(), organizationId, userId, sessionId, filters] as const;
 }
 
 export function errorStatus(e: unknown): number | null {
@@ -26,23 +27,26 @@ export function mutationMessage(e: unknown): string {
   return (e as Error)?.message || 'The request failed. Nothing was saved.';
 }
 
-/** Org-scoped early-warning data and mutations. Never exposes cached data after an error or org change. */
-export function useWorkforceScope() {
+/** Client/account/session-scoped reviews. Never exposes cached data after errors or scope changes. */
+export function useWorkforceScope(filters?: GetWorkforceInsightsParams) {
   const queryClient = useQueryClient();
+  const { userId, sessionId } = useAuth();
   const organizationId = getPinnedOrganizationIdForPage();
   const headers = useMemo(() => { const h: Record<string, string> = {}; if (organizationId) h['x-organization-id'] = organizationId; return h; }, [organizationId]);
-  const key = workforceScopedKey(organizationId);
+  const key = workforceScopedKey(organizationId, userId, sessionId, filters);
 
-  // Drop data cached for any other organization.
-  const lastOrg = useRef(organizationId);
+  // Account and session transitions must not reuse another principal's disclosure.
+  const identity = JSON.stringify([organizationId, userId, sessionId]);
+  const lastScope = useRef(identity);
   useEffect(() => {
-    if (lastOrg.current !== organizationId) {
-      lastOrg.current = organizationId;
-      queryClient.removeQueries({ queryKey: getGetWorkforceInsightsQueryKey(), predicate: (q) => q.queryKey[1] !== organizationId });
+    if (lastScope.current !== identity) {
+      lastScope.current = identity;
+      queryClient.removeQueries({ queryKey: getGetWorkforceInsightsQueryKey(), predicate: (q) =>
+        q.queryKey[1] !== organizationId || q.queryKey[2] !== userId || q.queryKey[3] !== sessionId });
     }
-  }, [organizationId, queryClient]);
+  }, [identity, organizationId, userId, sessionId, queryClient]);
 
-  const query = useGetWorkforceInsights({
+  const query = useGetWorkforceInsights(filters, {
     request: { headers },
     query: { queryKey: key as unknown as readonly unknown[] as never, enabled: Boolean(organizationId), retry: false, refetchInterval: 30_000, staleTime: 0, refetchOnMount: 'always' },
   });

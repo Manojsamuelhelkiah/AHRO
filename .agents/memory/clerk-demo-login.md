@@ -26,3 +26,9 @@ The fixed development verification code applies to reserved test identities, not
 **Why:** Broad documentation summaries can omit the reserved-address qualifier. A test alias or developer shortcut cannot establish ownership of a real operator's mailbox.
 
 **How to apply:** Verify the current [Clerk test-email rules](https://clerk.com/docs/guides/development/testing/test-emails-and-phones) before suggesting test codes. For real-email delivery failures, inspect the actual form error and provider delivery restrictions instead of bypassing verification.
+
+Do not assume the browser testing notebook can consume workspace secrets through `process.env`; it may not be a Node runtime. Prefer an isolated, owned non-demo testing identity for ordinary client-administrator journeys.
+
+**Why:** A browser check stalled at the private Super Admin password because the notebook had no `process`. Public Demo identities cannot substitute for administrator authority.
+
+**How to apply:** Use the supported programmatic Clerk testing flow and verify the actual tenant owner identity before exercising review permissions. Never print a password or broaden a shared demo login to bridge the browser runtime boundary.

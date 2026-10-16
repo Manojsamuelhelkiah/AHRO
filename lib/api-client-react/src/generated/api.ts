@@ -103,6 +103,7 @@ import type {
   GetOnboardingGuardrails200,
   GetOnboardingOutcomeKpisParams,
   GetPolicyUploadApprovalSettings200,
+  GetWorkforceInsightsParams,
   GlobalAssumption,
   GovernanceDecisionHistoryResponse,
   GovernanceDecisionInput,
@@ -465,17 +466,24 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getGetWorkforceInsightsUrl = () => {
+export const getGetWorkforceInsightsUrl = (params?: GetWorkforceInsightsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/workforce-insights`
+  return stringifiedParams.length > 0 ? `/api/workforce-insights?${stringifiedParams}` : `/api/workforce-insights`
 }
 
-export const getWorkforceInsights = async ( options?: RequestInit): Promise<WorkforceInsights> => {
+export const getWorkforceInsights = async (params?: GetWorkforceInsightsParams, options?: RequestInit): Promise<WorkforceInsights> => {
 
-  return customFetch<WorkforceInsights>(getGetWorkforceInsightsUrl(),
+  return customFetch<WorkforceInsights>(getGetWorkforceInsightsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -488,23 +496,23 @@ export const getWorkforceInsights = async ( options?: RequestInit): Promise<Work
 
 
 
-export const getGetWorkforceInsightsQueryKey = () => {
+export const getGetWorkforceInsightsQueryKey = (params?: GetWorkforceInsightsParams,) => {
     return [
-    `/api/workforce-insights`
+    `/api/workforce-insights`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetWorkforceInsightsQueryOptions = <TData = Awaited<ReturnType<typeof getWorkforceInsights>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkforceInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetWorkforceInsightsQueryOptions = <TData = Awaited<ReturnType<typeof getWorkforceInsights>>, TError = ErrorType<void>>(params?: GetWorkforceInsightsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkforceInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetWorkforceInsightsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkforceInsightsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkforceInsights>>> = ({ signal }) => getWorkforceInsights({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkforceInsights>>> = ({ signal }) => getWorkforceInsights(params, { signal, ...requestOptions });
 
 
 
@@ -519,11 +527,11 @@ export type GetWorkforceInsightsQueryError = ErrorType<void>
 
 
 export function useGetWorkforceInsights<TData = Awaited<ReturnType<typeof getWorkforceInsights>>, TError = ErrorType<void>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkforceInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetWorkforceInsightsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkforceInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetWorkforceInsightsQueryOptions(options)
+  const queryOptions = getGetWorkforceInsightsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

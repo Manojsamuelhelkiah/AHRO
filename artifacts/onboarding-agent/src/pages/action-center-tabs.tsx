@@ -27,6 +27,9 @@ import { ActionCenterCreateWork } from './action-center-create-work';
 import { getEarlyTenureReminderInbox, postEarlyTenureInboxEvidence, type EarlyTenureInboxReminder } from '../lib/early-tenure-api';
 import { useActionCenter, useActionCenterCaseType, useActionCenterScope } from '../hooks/use-action-center-filter';
 import { ActionCaseSummaries, DomainRecords, ActionReference, useActionCase, ActionConversationLink } from './action-center-domain-records';
+import { useWorkforceScope } from '../components/workforce-insights/use-workforce-insights';
+import { pendingActionReviews } from '../components/workforce-insights/action-review-projection';
+import { ActionReviewSection } from '../components/workforce-insights/action-review-section';
 
 function WorkforceContextTags({ c }: { c: OnbActionCenter['documentFollowups'][0]['case'] }) {
   const label = (c.workforceClassification as { label?: string } | null)?.label ?? 'unclassified';
@@ -50,6 +53,9 @@ export function NeedsAttentionTab() {
   const [workforce, setWorkforce] = useState<'white-collar' | 'blue-collar-frontline' | 'mixed' | 'needs-review' | 'unclassified' | ''>('');
   const [safetyOnly, setSafetyOnly] = useState(false);
   const [siteOnly, setSiteOnly] = useState(false);
+  const caseType = useActionCenterCaseType();
+  const reviews = useWorkforceScope({ caseType, workforce: workforce || undefined,
+    safetyCritical: safetyOnly || undefined, siteExposure: siteOnly || undefined });
   const { data, isLoading, isFetching } = useActionCenter({
     scope: 'active',
     workforce: workforce || undefined,
@@ -57,11 +63,8 @@ export function NeedsAttentionTab() {
     siteExposure: siteOnly || undefined,
   });
 
-  if (isLoading) return <div className="py-12 text-center text-sm text-[var(--text-muted)]">Loading actionable items...</div>;
-  if (!data) return <div className="py-12 text-center text-sm text-[var(--status-red)]">Failed to load action center.</div>;
-
-  const totalActionable = data.notifications.length + data.documentFollowups.length + data.workItems.length + data.opportunities.length +
-    (data.domainRecords ?? []).filter(r => r.category === 'attention').length;
+  const totalActionable = (data ? data.notifications.length + data.documentFollowups.length + data.workItems.length + data.opportunities.length +
+    (data.domainRecords ?? []).filter(r => r.category === 'attention').length : 0) + pendingActionReviews(reviews.data).length;
 
   return (
     <div className="space-y-6 relative">
@@ -72,7 +75,7 @@ export function NeedsAttentionTab() {
       )}
 
       
-      {data.pausedOffline && (
+      {data?.pausedOffline && (
         <div className="mb-4 bg-[var(--status-amber-bg)] border border-[var(--status-amber)] text-[var(--status-amber)] px-4 py-3 rounded-md flex items-center gap-3 text-sm font-medium">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <p>Paused offline cases are read-only. Other cases retain their permitted actions.</p>
@@ -94,9 +97,12 @@ export function NeedsAttentionTab() {
         <p className="w-full text-xs text-[var(--text-muted)]">Applies only to recorded case job context. Unknown safety or site context does not match an explicit filter. Separation cases do not inherit onboarding job context.</p>
       </div>
       <EarlyTenureReminderInbox workforce={workforce || undefined} safetyCritical={safetyOnly || undefined} siteExposure={siteOnly || undefined} />
+      <ActionReviewSection data={reviews.data} failed={reviews.failed} denied={reviews.denied} refreshing={reviews.query.isFetching} retry={() => void reviews.query.refetch()} />
+      <p role="status" className="text-sm font-semibold" data-testid="attention-total">{totalActionable} matching attention {totalActionable === 1 ? 'item' : 'items'}{!data || !reviews.data ? ' in available sources — total incomplete' : ''}</p>
+      {isLoading ? <p role="status">Loading other actionable items…</p> : !data ? <p role="alert">Other actionable items are unavailable. Reload to retry their sources.</p> : <>
       <ActionCaseSummaries data={data} />
       <DomainRecords data={data} category="attention" />
-      {totalActionable === 0 ? (
+      {totalActionable === 0 && reviews.data ? (
         <Card className="text-center border-dashed py-16" style={{ borderColor: 'var(--border)', backgroundColor: 'transparent', boxShadow: 'none' }}>
           <CheckCircle2 className="mx-auto h-12 w-12 text-[var(--status-green)] opacity-50 mb-4" />
            <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-1">No matching attention items</h3>
@@ -157,6 +163,7 @@ export function NeedsAttentionTab() {
           )}
         </>
       )}
+      </>}
     </div>
   );
 }

@@ -60,8 +60,8 @@ export function Legend() {
 export function ReviewLinks({ review }: { review: WorkforceReviewCase }) {
   return (
     <span className="flex flex-wrap gap-3 text-[12px] font-semibold">
-      <Link href={`/analytics#review-${review.id}`} className="text-[var(--primary)] hover:underline" data-testid={`link-review-${review.id}`}>Review details</Link>
-      <Link href={`/cases/${review.caseId}`} className="text-[var(--primary)] hover:underline" data-testid={`link-source-case-${review.id}`}>Source case</Link>
+      <Link href={`/analytics#review-${review.id}`} className="inline-flex min-h-11 items-center text-[var(--primary)] hover:underline focus-visible:outline focus-visible:outline-2" data-testid={`link-review-${review.id}`}>Review details</Link>
+      <Link href={`/cases/${review.caseId}`} className="inline-flex min-h-11 items-center text-[var(--primary)] hover:underline focus-visible:outline focus-visible:outline-2" data-testid={`link-source-case-${review.id}`}>Source case</Link>
     </span>
   );
 }

@@ -8,6 +8,13 @@
 import * as zod from 'zod';
 
 
+export const GetWorkforceInsightsQueryParams = zod.object({
+  "caseType": zod.enum(['Onboarding', 'Employee Changes', 'Payroll', 'Benefits', 'Leave', 'Compliance', 'Offboarding', 'HR Helpdesk', 'IT Access', 'Learning', 'Mobility', 'Documents']).optional(),
+  "workforce": zod.enum(['white-collar', 'blue-collar-frontline', 'mixed', 'needs-review', 'unclassified']).optional(),
+  "safetyCritical": zod.coerce.boolean().optional(),
+  "siteExposure": zod.coerce.boolean().optional()
+})
+
 export const GetWorkforceInsightsResponse = zod.object({
   "organizationId": zod.string(),
   "version": zod.number(),

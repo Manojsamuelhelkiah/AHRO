@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import express from "express";
 import { and, eq } from "drizzle-orm";
-import { db, organizationsTable, organizationMembershipsTable, onbCases, onbSettings } from "@workspace/db";
+import { db, organizationsTable, organizationMembershipsTable, onbCases, onbSettings, accessNamedGrants } from "@workspace/db";
 import { createTenantContextMiddleware, lookupMembership } from "../middlewares/tenant-context";
 import { createWorkforceInsightsRouter } from "./workforce-insights";
 import { WORKFORCE_INSIGHTS_KEY } from "../lib/workforce-insights";
@@ -32,6 +32,13 @@ test("client-scoped persisted review lifecycle, deduplication, conflicts and rev
   const [caseA, caseB] = await db.insert(onbCases).values([
     source(orgA, "Warning fixture A"), source(orgB, "Private warning fixture B"),
   ]).returning();
+  // Source read grants alone must never substitute for live administrator admission.
+  await db.insert(accessNamedGrants).values(["flow.case.read", "data.case.profile.read", "data.case.notes.read"].map(resourceKey => ({
+    organizationId: orgA, principalType: "human" as const, principalId: member, scope: "case" as const, caseId: caseA.id,
+    resourceType: resourceKey.startsWith("flow.") ? "flow" as const : "field" as const,
+    resourceKey, effect: "allow" as const, source: "named" as const, createdByUserId: adminA,
+    approvedByUserId: adminA, approvedAt: new Date(),
+  })));
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => { req.authUserId = req.header("x-fixture-user") ?? adminA; next(); });
@@ -73,6 +80,19 @@ test("client-scoped persisted review lifecycle, deduplication, conflicts and rev
     const id = created.data.reviews[0].id;
     const persisted = await request();
     assert.equal(persisted.data.reviews[0].id, id);
+    for (const query of ["caseType=Payroll", "workforce=blue-collar-frontline", "safetyCritical=true", "siteExposure=true", "safetyCritical=false", "siteExposure=false"]) {
+      const filtered = await request(`?${query}`);
+      assert.equal(filtered.status, 200);
+      assert.deepEqual(filtered.data.reviews, [], `unknown source context must not match ${query}`);
+      assert.deepEqual(filtered.data.subjects, []);
+    }
+    assert.equal((await request("?caseType=Onboarding")).data.reviews[0].id, id);
+    assert.equal((await request("?workforce=unclassified")).data.reviews[0].id, id);
+    assert.equal((await request("?caseType=Invented")).status, 400);
+    assert.equal((await request("?siteExposure=unknown")).status, 400);
+    await db.update(onbCases).set({ workforceContext: { safetyCritical: true, siteExposure: false } }).where(eq(onbCases.id, caseA.id));
+    assert.equal((await request("?caseType=Onboarding&safetyCritical=true&siteExposure=false")).data.reviews[0].id, id);
+    assert.deepEqual((await request("?siteExposure=true")).data.reviews, []);
     assert.equal((await request("", "GET", undefined, adminB, orgB)).data.reviews.length, 0);
     const duplicate = await request("/reviews", "POST", { ...input, version: 1 });
     assert.equal(duplicate.data.version, 1);
@@ -146,5 +166,13 @@ test("the day after example expiry, permitted reviews and outcomes remain visibl
     await db.update(onbCases).set({ workerEmail: "person@example.com" }).where(eq(onbCases.id, sources[0].id));
     const changed = await (await fetch(url, { headers: { "x-organization-id": "demo" } })).json() as any;
     assert.equal(changed.reviews.length, 2);
+    const filtered = await (await fetch(`${url}?caseType=Employee%20Changes`, { headers: { "x-organization-id": "demo" } })).json() as any;
+    assert.equal(filtered.reviews.length, 2, "family filtering must not revive ineligible catalogue sources");
+    const excluded = await (await fetch(`${url}?caseType=Onboarding`, { headers: { "x-organization-id": "demo" } })).json() as any;
+    assert.deepEqual(excluded.reviews, []);
+    // Unfiltered history and the filtered Action Center projection both apply
+    // source eligibility; a mismatched catalogue identity cannot leak via a filter.
+    const safety = await (await fetch(`${url}?caseType=Employee%20Changes&safetyCritical=true`, { headers: { "x-organization-id": "demo" } })).json() as any;
+    assert.ok(safety.reviews.every((row: any) => row.caseId !== sources[0].id));
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });

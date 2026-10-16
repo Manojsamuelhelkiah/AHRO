@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, eq, isNull, sql, desc } from "drizzle-orm";
 import { db, onbCases, onbSettings, organizationMembershipsTable, DEMO_ORGANIZATION_ID } from "@workspace/db";
 import {
-  CreateWorkforceReviewCaseBody, UpdateWorkforceReviewCaseBody, GetWorkforceInsightsResponse,
+  CreateWorkforceReviewCaseBody, UpdateWorkforceReviewCaseBody, GetWorkforceInsightsResponse, GetWorkforceInsightsQueryParams,
 } from "@workspace/api-zod";
 import { getOrganizationId } from "../lib/organization-scope";
 import { isPlatformSuperAdmin } from "../lib/private-platform-admin";
@@ -15,6 +15,7 @@ import {
 } from "../lib/workforce-insights";
 import { eligibleRiskExampleSource, riskExampleStore, visibleRiskExamples, WORKFORCE_EXAMPLES_KEY } from "../lib/workforce-risk-examples";
 import { isFictionalOfflineExampleCase } from "../lib/onboarding/offline-example-display";
+import { actionCenterFamily, matchesActionCenterContext } from "../lib/onboarding/action-center-family";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 async function administrator(tx: Tx, organizationId: string, userId: string): Promise<boolean> {
@@ -66,11 +67,13 @@ async function owners(tx: Tx, organizationId: string, actor: string) {
   if (!result.some(row => row.userId === actor)) result.push({ userId: actor, label: "Me — current administrator" });
   return result.sort((left, right) => Number(right.userId === actor) - Number(left.userId === actor));
 }
-async function snapshot(tx: Tx, organizationId: string, actor: string, state: WorkforceState) {
+async function snapshot(tx: Tx, organizationId: string, actor: string, state: WorkforceState, filters: typeof GetWorkforceInsightsQueryParams._type = {}) {
   const rows = await tx.select().from(onbCases)
     .where(eq(onbCases.organizationId, organizationId)).orderBy(desc(onbCases.id));
   const subjects = [];
   for (const row of rows) {
+    if (filters.caseType && actionCenterFamily(row) !== filters.caseType) continue;
+    if (!matchesActionCenterContext(row, filters)) continue;
     if (!await casePermission(tx, organizationId, actor, row.id, false)) continue;
     subjects.push({ caseId: row.id, reference: `${row.syntheticProvenance ? "S" : "HRO"}${row.id}`,
       displayName: isFictionalOfflineExampleCase(row) ? row.workerName.replace(/^(?:Example|Demo sample)\s*—\s*/, "") : row.workerName,
@@ -104,10 +107,19 @@ export function createWorkforceInsightsRouter(): IRouter {
   router.get("/workforce-insights", async (req, res, next): Promise<void> => {
     try {
       const organizationId = getOrganizationId(req), actor = req.authUserId!;
+      // Generated boolean coercion treats the string "false" as true.
+      const raw: Record<string, unknown> = { ...req.query };
+      for (const key of ["safetyCritical", "siteExposure"]) {
+        if (raw[key] === "true") raw[key] = true;
+        else if (raw[key] === "false") raw[key] = false;
+        else if (raw[key] !== undefined) { res.status(400).json({ message: "Invalid job-context filter." }); return; }
+      }
+      const filters = GetWorkforceInsightsQueryParams.safeParse(raw);
+      if (!filters.success) { res.status(400).json({ message: "Invalid early-warning discovery filters." }); return; }
       const result = await db.transaction(async tx => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${organizationId}))`);
         if (!await administrator(tx, organizationId, actor)) fail(403, "Current client administrator access is required for workforce insights.");
-        return snapshot(tx, organizationId, actor, await loadState(tx, organizationId));
+        return snapshot(tx, organizationId, actor, await loadState(tx, organizationId), filters.data);
       });
       res.json(result);
     } catch (error) {
