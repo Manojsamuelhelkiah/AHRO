@@ -9,7 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 export function PageHeader({ title, subtitle, children }: { title: string, subtitle?: string, children?: React.ReactNode }) {
   return (
     <div 
-      className="flex items-center justify-between"
+      className="ct-band flex flex-wrap gap-3 items-center justify-between"
       style={{ 
         padding: 'var(--space-lg) var(--space-xl) var(--space-md)', 
         borderBottom: '1px solid var(--border)', 
@@ -53,10 +53,10 @@ export const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttrib
 Button.displayName = 'Button';
 
 export const Card = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]', className)} {...props} />
+  <div className={cn('ct-card-accent rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]', className)} {...props} />
 );
 export const CardHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex flex-col space-y-1 p-[var(--space-lg)] pb-[var(--space-sm)]', className)} {...props} />
+  <div className={cn('ct-card-header flex flex-col space-y-1 p-[var(--space-lg)] pb-[var(--space-sm)]', className)} {...props} />
 );
 export const CardTitle = ({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
   <h3 className={cn('text-[var(--text-lg)] font-semibold leading-none tracking-tight', className)} {...props} />
@@ -67,7 +67,7 @@ export const CardContent = ({ className, ...props }: React.HTMLAttributes<HTMLDi
 
 export function SectionHeading({ icon: Icon, title, description }: { icon?: React.ComponentType<{ className?: string }>, title: string, description?: string }) {
   return (
-    <div className="border-b pb-2" style={{ borderColor: 'var(--border)' }}>
+    <div className="ct-section-heading border-b pb-2" style={{ borderColor: 'var(--border)' }}>
       <h2 className="text-[var(--text-sm)] font-semibold flex items-center gap-2 text-[var(--text-primary)] m-0">
         {Icon && <Icon className="w-4 h-4 text-[var(--primary)]" />} {title}
       </h2>

@@ -179,7 +179,7 @@ export function DashboardPage() {
       {/* Activity + Human Attention */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 overflow-hidden p-0 shadow-sm order-2 lg:order-1">
-          <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
+          <div className="ct-section-band" style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
             <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }} className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-[var(--primary)]" /> Agent Activity
             </h2>
@@ -207,7 +207,7 @@ export function DashboardPage() {
         </Card>
 
         <Card className="overflow-hidden p-0 shadow-sm order-1 lg:order-2">
-          <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
+          <div className="ct-section-band" style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
             <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }} className="flex items-center gap-2">
               <UserCheck className="w-4 h-4" style={{ color: 'var(--status-amber)' }} /> Human Attention Required
             </h2>
@@ -248,7 +248,7 @@ export function DashboardPage() {
       {/* Cases by domain + execution model */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 p-0 overflow-hidden shadow-sm">
-          <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
+          <div className="ct-section-band" style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
             <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Cases by HRO Domain</h2>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>Active workload across the HR lifecycle.</p>
           </div>
@@ -282,7 +282,7 @@ export function DashboardPage() {
         </Card>
 
         <Card className="p-0 overflow-hidden shadow-sm">
-          <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
+          <div className="ct-section-band" style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
             <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Execution Model</h2>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>How completed work was resolved.</p>
           </div>
@@ -316,9 +316,9 @@ export function DashboardPage() {
 type Tone = 'indigo' | 'amber' | 'red' | 'green' | 'neutral';
 const TONE_COLOR: Record<Tone, string> = {
   indigo: 'var(--primary)',
-  amber: 'var(--status-amber)',
+  amber: 'var(--status-amber-fg)',
   red: 'var(--status-red)',
-  green: 'var(--status-green)',
+  green: 'var(--status-green-fg)',
   neutral: 'var(--text-muted)',
 };
 
@@ -382,7 +382,7 @@ function OpsBriefing({ loading, unavailable, active, blocked, atRisk, interventi
 
 function KpiCard({ title, value, context, icon: Icon, tone, loading }: { title: string; value: React.ReactNode; context: string; icon: React.ComponentType<any>; tone: Tone; loading?: boolean }) {
   return (
-    <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="shadow-sm hover:border-[var(--border-strong)] transition-colors">
+    <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="ct-summary shadow-sm">
       <div className="flex items-center gap-1.5">
         <Icon style={{ width: '14px', height: '14px', color: TONE_COLOR[tone] }} aria-hidden />
         <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-secondary)', fontWeight: 700 }}>{title}</span>
@@ -392,14 +392,14 @@ function KpiCard({ title, value, context, icon: Icon, tone, loading }: { title: 
       ) : (
         <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, marginTop: '6px', letterSpacing: '-0.02em' }}>{value}</div>
       )}
-      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>{context}</div>
+      <div className="ct-summary-muted" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>{context}</div>
     </Card>
   );
 }
 
 function StageSummaryCard({ title, metrics, loading }: { title: string; metrics: { pending: number; 'human-review': number; blocked: number; }; loading?: boolean }) {
   return (
-    <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="min-w-0 shadow-sm hover:border-[var(--border-strong)] transition-colors flex flex-col gap-3">
+    <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="min-w-0 shadow-sm flex flex-col gap-3">
       <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-secondary)', fontWeight: 700 }}>{title}</div>
       {loading ? (
         <div role="status" aria-label={`${title} loading`} className="animate-pulse rounded" style={{ height: '44px', backgroundColor: 'var(--surface-alt)' }} />

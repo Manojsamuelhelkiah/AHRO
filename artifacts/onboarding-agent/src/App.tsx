@@ -11,6 +11,7 @@ import { Route, Switch, useLocation, Router as WouterRouter, Redirect } from 'wo
 import { Server } from 'lucide-react';
 
 import { Layout } from './components/layout';
+import { AppearanceControl } from './components/appearance-control';
 import { DashboardPage } from './pages/dashboard';
 import { CasesPage } from './pages/cases/index';
 import { CaseDetailPage } from './pages/cases/detail';
@@ -92,41 +93,41 @@ const clerkAppearance = {
     logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
   },
   variables: {
-    colorPrimary: 'hsl(243 75% 59%)',
-    colorForeground: 'hsl(222 47% 11%)',
-    colorMutedForeground: 'hsl(215 16% 47%)',
-    colorDanger: 'hsl(0 84% 60%)',
-    colorBackground: '#ffffff',
-    colorInput: '#ffffff',
-    colorInputForeground: 'hsl(222 47% 11%)',
-    colorNeutral: 'hsl(215 20% 65%)',
+    colorPrimary: 'var(--primary)',
+    colorForeground: 'var(--text-primary)',
+    colorMutedForeground: 'var(--text-muted)',
+    colorDanger: 'var(--status-red-fg)',
+    colorBackground: 'var(--surface)',
+    colorInput: 'var(--surface-alt)',
+    colorInputForeground: 'var(--text-primary)',
+    colorNeutral: 'var(--text-secondary)',
     fontFamily: "'Plus Jakarta Sans', sans-serif",
     borderRadius: '0.5rem',
   },
   elements: {
     rootBox: 'w-full flex justify-center',
-    cardBox: 'bg-white rounded-2xl w-[440px] max-w-full overflow-hidden shadow-xl border border-slate-200',
+    cardBox: 'bg-[var(--surface)] rounded-2xl w-[440px] max-w-full overflow-hidden shadow-xl border border-[var(--border)]',
     card: '!shadow-none !border-0 !bg-transparent !rounded-none',
     footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    headerTitle: 'text-slate-900 font-bold',
-    headerSubtitle: 'text-slate-500',
-    socialButtonsBlockButtonText: 'text-slate-700 font-medium',
-    formFieldLabel: 'text-slate-700 font-medium',
-    footerActionLink: 'text-indigo-600 font-semibold hover:text-indigo-700',
-    footerActionText: 'text-slate-500',
-    dividerText: 'text-slate-400',
-    identityPreviewEditButton: 'text-indigo-600',
-    formFieldSuccessText: 'text-emerald-600',
-    alertText: 'text-red-600',
+    headerTitle: 'text-[var(--text-primary)] font-bold',
+    headerSubtitle: 'text-[var(--text-muted)]',
+    socialButtonsBlockButtonText: 'text-[var(--text-secondary)] font-medium',
+    formFieldLabel: 'text-[var(--text-secondary)] font-medium',
+    footerActionLink: 'text-[var(--primary)] font-semibold hover:underline',
+    footerActionText: 'text-[var(--text-muted)]',
+    dividerText: 'text-[var(--text-muted)]',
+    identityPreviewEditButton: 'text-[var(--primary)]',
+    formFieldSuccessText: 'text-[var(--status-green-fg)]',
+    alertText: 'text-[var(--status-red-fg)]',
     logoBox: 'justify-center',
     logoImage: 'h-10 w-10 rounded-lg',
-    socialButtonsBlockButton: 'border-slate-200 hover:bg-slate-50',
-    formButtonPrimary: 'bg-indigo-600 hover:bg-indigo-700 text-white font-semibold',
-    formFieldInput: 'border-slate-200 focus:border-indigo-500',
+    socialButtonsBlockButton: 'border-[var(--border)] hover:bg-[var(--surface-soft)]',
+    formButtonPrimary: 'bg-[var(--primary)] hover:bg-[var(--primary-dark)] text-white font-semibold',
+    formFieldInput: 'border-[var(--border)] focus:border-[var(--primary)]',
     footerAction: 'justify-center',
-    dividerLine: 'bg-slate-200',
-    alert: 'border-red-200 bg-red-50',
-    otpCodeFieldInput: 'border-slate-200',
+    dividerLine: 'bg-[var(--border)]',
+    alert: 'border-[var(--status-red)] bg-[var(--status-red-bg)]',
+    otpCodeFieldInput: 'border-[var(--border)]',
     formFieldRow: 'gap-2',
     main: 'gap-6',
   },
@@ -134,7 +135,8 @@ const clerkAppearance = {
 
 function AuthScreenShell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4 py-10 gap-8">
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-[var(--surface-alt)] px-4 py-16 gap-8">
+      <div className="absolute right-4 top-3"><AppearanceControl /></div>
       <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-primary">
         <Server className="h-6 w-6" />
         <span>Agentic HRO Suite</span>

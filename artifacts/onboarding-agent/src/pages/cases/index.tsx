@@ -110,9 +110,12 @@ function HroStatusBadge({ status }: { status: HroStatus }) {
 }
 
 const FAMILY_TINTS = [
-  ['#EEF0FE', '#3730C9'], ['#F3E8FF', '#7E22CE'], ['#E6F4FA', '#0B6585'], ['#E7FBF1', '#067647'],
-  ['#FEF4E6', '#9A4A07'], ['#FCE9F3', '#A3195B'], ['#EAEFF9', '#2B4A8B'], ['#F0F4E3', '#4F6B12'],
-  ['#E5F5F3', '#11665D'], ['#FBEDE5', '#9A4420'], ['#EFEAFA', '#61418A'], ['#EBF3FB', '#285A85'],
+  ['var(--family-1-bg, #EEF0FE)', 'var(--family-1-fg, #3730C9)'], ['var(--family-2-bg, #F3E8FF)', 'var(--family-2-fg, #7E22CE)'],
+  ['var(--family-3-bg, #E6F4FA)', 'var(--family-3-fg, #0B6585)'], ['var(--family-4-bg, #E7FBF1)', 'var(--family-4-fg, #067647)'],
+  ['var(--family-5-bg, #FEF4E6)', 'var(--family-5-fg, #9A4A07)'], ['var(--family-6-bg, #FCE9F3)', 'var(--family-6-fg, #A3195B)'],
+  ['var(--family-7-bg, #EAEFF9)', 'var(--family-7-fg, #2B4A8B)'], ['var(--family-8-bg, #F0F4E3)', 'var(--family-8-fg, #4F6B12)'],
+  ['var(--family-9-bg, #E5F5F3)', 'var(--family-9-fg, #11665D)'], ['var(--family-10-bg, #FBEDE5)', 'var(--family-10-fg, #9A4420)'],
+  ['var(--family-11-bg, #EFEAFA)', 'var(--family-11-fg, #61418A)'], ['var(--family-12-bg, #EBF3FB)', 'var(--family-12-fg, #285A85)'],
 ];
 function familyTint(type: string) {
   const index = CASE_TYPES.indexOf(type as CaseTypeFilter) - 1;
@@ -348,7 +351,7 @@ export function CasesPage() {
   return (
     <div className="cases-page space-y-3 w-full min-w-0" data-testid="cases-page">
       {opsSettings.isError && <p role="alert" data-testid="text-date-format-warning" className="text-xs text-[var(--status-amber-fg)]">Client date format could not be loaded; dates use the product format (MMM d, yyyy). <button className="underline min-h-10 px-2" onClick={() => void opsSettings.refetch()}>Retry</button></p>}
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-3">
+      <header className="ct-band ct-case-band flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-3">
         <div className="min-w-0">
           <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 650, color: 'var(--text-primary)', lineHeight: 1.2, margin: 0, letterSpacing: '-0.01em' }}>{context.title}</h1>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: '2px 0 0' }}>{context.subtitle}</p>
@@ -388,7 +391,7 @@ export function CasesPage() {
               <SlidersHorizontal className="h-3.5 w-3.5" />
               Filters
               {activeFilterCount > 0 && (
-                <span style={{ backgroundColor: 'var(--primary)', color: '#fff', borderRadius: '999px', fontSize: '10px', fontWeight: 700, padding: '1px 6px', lineHeight: '14px' }}>{activeFilterCount}</span>
+                <span style={{ backgroundColor: 'var(--action-primary)', color: '#fff', borderRadius: '999px', fontSize: '10px', fontWeight: 700, padding: '1px 6px', lineHeight: '14px' }}>{activeFilterCount}</span>
               )}
             </Button>
             {showFilters && (
@@ -499,7 +502,7 @@ export function CasesPage() {
             const unavailable = isProg && (transferQuery.isError || !organizationId);
             const loading = isProg && !unavailable && transferQuery.isPending;
             const badge = isProg ? (unavailable ? '!' : loading ? '…' : String(programs?.length ?? 0)) : t === 'All Cases' ? String(counts.all) : String(caseTypeCounts[t]);
-            const [tbg, tfg] = isProg ? ['#F3E8FF', '#7E22CE'] : t === 'All Cases' ? ['#EEF0FE', '#3730C9'] : familyTint(t);
+            const [tbg, tfg] = isProg ? ['var(--family-2-bg, #F3E8FF)', 'var(--family-2-fg, #7E22CE)'] : t === 'All Cases' ? ['var(--family-1-bg, #EEF0FE)', 'var(--family-1-fg, #3730C9)'] : familyTint(t);
             return (
               <button
                 key={t}

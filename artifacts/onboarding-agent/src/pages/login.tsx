@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AppearanceControl } from '@/components/appearance-control';
 import { useSignIn } from '@clerk/react';
 import { Server, Loader2, Lock, ArrowRight, Workflow, ShieldCheck, UserCheck } from 'lucide-react';
 
@@ -89,7 +90,8 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] lg:h-[100dvh] lg:overflow-hidden flex flex-col-reverse lg:flex-row">
+    <div className="relative min-h-[100dvh] lg:h-[100dvh] lg:overflow-hidden flex flex-col-reverse lg:flex-row">
+      <div className="absolute right-4 top-3 z-20"><AppearanceControl /></div>
       {/* LEFT — branding panel (65%) */}
       <div
         className="lg:w-[65%] lg:h-full lg:overflow-hidden text-[var(--dark-text)] flex flex-col px-8 py-10 lg:px-12 lg:py-8 min-h-[50dvh] relative"
@@ -128,7 +130,7 @@ export function LoginPage() {
             {CAPABILITIES.map((c) => (
               <div
                 key={c.title}
-                className="rounded-[var(--radius-lg)] px-5 py-5 transition-all duration-200 hover:-translate-y-0.5 border border-[var(--dark-border)] bg-[var(--dark-raised)]"
+                className="rounded-[var(--radius-lg)] px-5 py-5 border border-[var(--dark-border)] bg-[var(--dark-raised)]"
               >
                 <c.icon className="h-5 w-5 text-[var(--lavender)]" aria-hidden="true" />
                 <p className="mt-3 text-[11px] uppercase tracking-widest font-semibold text-[var(--lavender)]">{c.title}</p>

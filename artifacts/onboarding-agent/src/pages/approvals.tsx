@@ -321,7 +321,7 @@ export function ApprovalCard({ approval, statusParam: _statusParam }: { approval
 
           {!isPending && (
             <div className="shrink-0 md:text-right w-full md:w-auto mt-4 md:mt-0 flex md:flex-col justify-between items-center md:items-end">
-              <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', backgroundColor: approval.status === 'approved' ? 'var(--status-green)' : 'var(--status-red)', color: '#ffffff' }}>
+              <span style={{ padding: '4px 12px', borderRadius: '4px', fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', backgroundColor: approval.status === 'approved' ? 'var(--status-green-bg)' : 'var(--status-red-bg)', color: approval.status === 'approved' ? 'var(--status-green-fg)' : 'var(--status-red-fg)' }}>
                 {approval.status}
               </span>
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'right', marginTop: '8px' }}>

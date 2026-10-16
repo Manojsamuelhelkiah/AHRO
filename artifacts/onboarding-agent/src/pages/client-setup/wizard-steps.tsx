@@ -449,20 +449,20 @@ export function StepReview({ onSimulate, onCommit, rollup, scenario, isSimulatin
                 </div>
                 
                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                   <div className="p-5 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-sm transition-transform hover:-translate-y-0.5">
+                   <div className="p-5 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-sm">
                       <div className="text-[var(--text-xs)] text-[var(--text-muted)] uppercase tracking-wider font-semibold mb-1">Total Cost</div>
                        <div className="text-[var(--text-2xl)] font-bold text-[var(--text-primary)]">${rollup.commercialSummary.clientImplementationCostUsd.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
                    </div>
-                   <div className="p-5 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-sm transition-transform hover:-translate-y-0.5 relative overflow-hidden">
+                   <div className="p-5 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-sm relative overflow-hidden">
                       <div className="absolute top-0 right-0 w-16 h-16 bg-[var(--status-green)] opacity-5 rounded-bl-full pointer-events-none" />
                       <div className="text-[var(--text-xs)] text-[var(--text-muted)] uppercase tracking-wider font-semibold mb-1">Net Benefit</div>
                        <div className="text-[var(--text-2xl)] font-bold text-[var(--status-green-fg)]">${rollup.totals.netUsd.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
                    </div>
-                   <div className="p-5 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-sm transition-transform hover:-translate-y-0.5">
+                   <div className="p-5 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-sm">
                       <div className="text-[var(--text-xs)] text-[var(--text-muted)] uppercase tracking-wider font-semibold mb-1">Target ROI</div>
                        <div className="text-[var(--text-2xl)] font-bold text-[var(--text-primary)]">{(rollup.totals.roi * 100).toFixed(1)}%</div>
                    </div>
-                   <div className="p-5 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-sm transition-transform hover:-translate-y-0.5">
+                   <div className="p-5 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] shadow-sm">
                       <div className="text-[var(--text-xs)] text-[var(--text-muted)] uppercase tracking-wider font-semibold mb-1">Payback</div>
                        <div className="text-[var(--text-2xl)] font-bold text-[var(--text-primary)]">{rollup.commercialSummary.plannedPaybackMonths.toFixed(1)} mo</div>
                    </div>

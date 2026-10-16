@@ -5,6 +5,7 @@ import { useGetOnboardingChannels, getGetOnboardingChannelsQueryKey } from '@wor
 import { useOrganizationRole } from '../hooks/use-organization-role';
 import { cn } from './ui-shared';
 import { OrganizationSwitcher } from './organization-switcher';
+import { AppearanceControl } from './appearance-control';
 import { TowerControl, Users, CheckSquare, Server, BarChart3, LogOut, AlertTriangle, Settings, Shield, Bell, Search, Hexagon, Compass, Presentation, Bot, FlaskConical, BookOpen, Waypoints, ClipboardCheck, History, ListTree } from 'lucide-react';
 
 const NAV_GROUPS: { label: string; items: { path: string; label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }[] }[] = [
@@ -116,15 +117,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       style={{
                         height: '34px',
                         padding: '0 var(--space-sm)',
-                        backgroundColor: isActive ? 'var(--surface-selected)' : 'transparent',
-                        color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
+                        backgroundColor: isActive ? 'var(--nav-selected-bg)' : 'transparent',
+                        color: isActive ? 'var(--nav-selected-fg)' : 'var(--text-secondary)',
                         fontSize: 'var(--text-sm)',
                         fontWeight: isActive ? 600 : 500,
                       }}
                     >
                       <item.icon
                         className="h-4 w-4 shrink-0 transition-colors"
-                        style={{ color: isActive ? 'var(--primary)' : 'var(--text-muted)' }}
+                        style={{ color: isActive ? 'var(--nav-selected-fg)' : 'var(--text-muted)' }}
                       />
                       <span className="truncate">{item.label}</span>
                     </Link>
@@ -176,12 +177,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2 md:w-auto">
             <OrganizationSwitcher />
+            <AppearanceControl />
             <div className="relative cursor-pointer">
               <Bell className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} />
               <div className="absolute top-0 right-0 w-2 h-2 rounded-full border-2" style={{ backgroundColor: 'var(--status-amber)', borderColor: 'var(--surface)' }} />
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-[24px] h-[24px] rounded-full flex items-center justify-center font-bold shrink-0" style={{ backgroundColor: 'var(--primary)', color: '#ffffff', fontSize: 'var(--text-xs)' }}>
+              <div className="w-[24px] h-[24px] rounded-full flex items-center justify-center font-bold shrink-0" style={{ backgroundColor: 'var(--action-primary)', color: '#ffffff', fontSize: 'var(--text-xs)' }}>
                 {initials || 'U'}
               </div>
               <span style={{ fontSize: 'var(--text-xs)', padding: '2px 6px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '999px', lineHeight: 1 }} className="font-semibold hidden md:block capitalize">
@@ -218,8 +220,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 aria-current={isActive ? 'page' : undefined}
                 className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-3 text-[var(--text-xs)] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
                 style={{
-                  backgroundColor: isActive ? 'var(--surface-selected)' : 'transparent',
-                  color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
+                  backgroundColor: isActive ? 'var(--nav-selected-bg)' : 'transparent',
+                  color: isActive ? 'var(--nav-selected-fg)' : 'var(--text-secondary)',
                 }}
               >
                 <item.icon className="h-3.5 w-3.5" />

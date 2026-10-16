@@ -2,6 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Run before CSS or React; only this artifact reads this preference.
+      (() => {
+        const base = '%BASE_URL%'.replace(/\/$/, '');
+        if (location.pathname === `${base}/candidate`) return;
+        let theme = 'classic';
+        try {
+          const saved = localStorage.getItem('onboarding-agent:appearance');
+          if (['classic', 'vibrant', 'midnight'].includes(saved)) theme = saved;
+        } catch { /* Storage can be blocked; Classic is always available. */ }
+        document.documentElement.dataset.controlTowerTheme = theme;
+        document.documentElement.style.colorScheme = theme === 'midnight' ? 'dark' : 'light';
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>Agentic HRO Suite</title>
     <meta name="description" content="Agentic HRO Suite — built on Replit. Update this description to reflect the app." />
