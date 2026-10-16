@@ -1,4 +1,4 @@
-import { deleteTestOrganizations } from "../test-support/organization-fixtures";
+import { deleteTestOrganizations, requireOwnedOrganizationTestSchema } from "../test-support/organization-fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { Request } from "express";
@@ -78,6 +78,11 @@ import {
 } from "../lib/onboarding/governance-runtime";
 import { SENSITIVE_DATA_CLASSES } from "../lib/onboarding/sensitive-lifecycle";
 import { demoPrincipalSettingKey } from "../lib/demo-principal";
+import {
+  FlowTransitionError,
+  readBoundDefinition,
+  reconcileBindingInTransaction,
+} from "../lib/flow-manager/manager";
 
 /**
  * This suite uses only test-owned organizations and cases.  The one Demo
@@ -353,6 +358,7 @@ async function insertCommunicationRows(caseId: number, organizationId: string): 
 }
 
 before(async () => {
+  await requireOwnedOrganizationTestSchema();
   await db.insert(organizationsTable).values([
     {
       id: orgA,
@@ -592,6 +598,23 @@ before(async () => {
     name: `Action Center Live ${suffix}`,
     email: `action-center-live-${suffix}@fake-provider.mailhost.com`,
     candidateAuthorized: true,
+  });
+  // A terminal row alone is not a reviewed executable workflow. Supply the
+  // known completed recovery boundary and let the real compatibility
+  // reconciler register/pin immutable definition bytes. This neither starts
+  // orchestration nor replaces any of the live dispatch/authority checks.
+  await db.transaction(async tx => {
+    const [reviewed] = await tx.update(onbCases).set({
+      orchestrationCheckpoint: "review-complete",
+    }).where(and(
+      eq(onbCases.organizationId, orgA),
+      eq(onbCases.id, liveCaseId),
+    )).returning();
+    assert.ok(reviewed);
+    await reconcileBindingInTransaction(tx, reviewed);
+    const { binding, definition } = await readBoundDefinition(tx, orgA, liveCaseId);
+    assert.equal(binding?.compatibility, "bound");
+    assert.equal(definition?.family, "onboarding");
   });
   await createDocument(orgA, liveCaseId, {
     key: `pending-${suffix}`,
@@ -1721,6 +1744,33 @@ describe("Action Center reminder boundary and projection delivery labels", () =>
       proxy: typeof ReplitConnectors.prototype.proxy;
     }).proxy);
     try {
+      // The same reviewed tenant governance and candidate consent cannot
+      // release a terminal fixture with no compatible executable binding.
+      const unboundCaseId = await createCase(orgA, {
+        name: `Unreviewed reminder ${suffix}`,
+        candidateAuthorized: true,
+      });
+      const unboundDocumentId = await createDocument(orgA, unboundCaseId, {
+        key: `unreviewed-${suffix}`,
+      });
+      await assert.rejects(recordDocumentReminder({
+        organizationId: orgA,
+        actorUserId: ownerA,
+        actorName,
+        organizationRole: "owner",
+        requestId: `unreviewed-live-${suffix}`,
+        caseId: unboundCaseId,
+        documentId: unboundDocumentId,
+        mode: "live",
+      }), (error: unknown) =>
+        error instanceof FlowTransitionError && error.reason === "compatibility_review_required");
+      assert.equal(providerCalls, 0, "compatibility-held fixtures must not reach even the fake provider");
+      const [unboundDocument] = await db.select().from(onbDocuments).where(eq(
+        onbDocuments.id, unboundDocumentId,
+      ));
+      assert.equal(unboundDocument?.reminderCount, 0);
+      assert.equal(unboundDocument?.reminderNextAt, null);
+
       const sent = await recordDocumentReminder({
         organizationId: orgA,
         actorUserId: ownerA,
@@ -1786,6 +1836,7 @@ describe("Action Center reminder boundary and projection delivery labels", () =>
       assert.equal(reconciled.idempotent, true);
       assert.equal(reconciled.action.status, "sent");
       assert.equal(reconciled.action.providerEffectId, sent.action.providerEffectId);
+      assert.equal(providerCalls, 1, "receipt recovery must not dispatch again");
 
       // A stale updatedAt alone must not bypass the explicit 48-hour next-due
       // cooldown promised by the reminder contract.
@@ -1805,6 +1856,12 @@ describe("Action Center reminder boundary and projection delivery labels", () =>
         }),
         ActionCenterConflictError,
       );
+      assert.equal(providerCalls, 1, "the 48-hour correction cooldown must prevent another dispatch");
+      const [afterReplay] = await db.select().from(onbDocuments).where(eq(
+        onbDocuments.id, correctionDocumentId,
+      ));
+      assert.equal(afterReplay?.reminderCount, 1);
+      assert.equal(afterReplay?.reminderNextAt?.getTime(), afterSent.reminderNextAt.getTime());
 
       const concurrentDocumentId = await createDocument(orgA, caseIds[0]!, {
         key: `concurrent-${suffix}`,
@@ -1847,6 +1904,8 @@ describe("Action Center reminder boundary and projection delivery labels", () =>
         concurrentDocumentId,
       ));
       assert.equal(afterConcurrent?.reminderCount, 1);
+      assert.ok(afterConcurrent?.reminderNextAt);
+      assert.ok(Math.abs(afterConcurrent.reminderNextAt.getTime() - Date.now() - 48 * 3_600_000) < 60_000);
     } finally {
       setOnboardingConnectorProxyForTests(null);
       (ReplitConnectors.prototype as unknown as {
