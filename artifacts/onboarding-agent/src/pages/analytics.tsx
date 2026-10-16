@@ -17,6 +17,7 @@ import { statusOf, caseTypeOf } from './cases/index';
 import { CASE_TYPES } from './cases/case-presentation';
 
 import { WorkforceInsightsSection } from '@/components/workforce-insights/workforce-insights-section';
+import { CurrentActionWorkload } from './analytics/current-action-workload';
 import { OutcomeKpis } from './analytics/outcome-kpis';
 import { BottleneckSimulator } from './analytics/bottleneck-simulator';
 import { EmailTurnaroundReport } from './analytics/email-turnaround';
@@ -315,6 +316,8 @@ export function AnalyticsPage() {
           />
         </div>
       </section>
+
+      <CurrentActionWorkload cases={filteredCases} />
 
       <section className="mb-14">
         <div className="mb-6">

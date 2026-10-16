@@ -13638,6 +13638,8 @@ export const RunOnboardingScenarioParams = zod.object({
   "key": zod.coerce.string()
 })
 
+export const runOnboardingScenarioResponseCurrentActionAdditionalCountMin = 0;
+
 export const runOnboardingScenarioResponseReadinessItemOrderMin = 0;
 
 
@@ -13707,6 +13709,13 @@ export const runOnboardingScenarioResponseWorkforceContextLanguagePreferenceMax 
 
 
 export const RunOnboardingScenarioResponse = zod.object({
+  "currentAction": zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['pending', 'in-progress', 'blocked']),
+  "source": zod.enum(['action-center', 'workstream']),
+  "additionalCount": zod.number().min(runOnboardingScenarioResponseCurrentActionAdditionalCountMin)
+}).nullish().describe('Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.'),
   "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
@@ -13909,6 +13918,8 @@ export const RunOnboardingScenarioResponse = zod.object({
 /**
  * @summary List onboarding cases (newest first)
  */
+export const listOnboardingCasesResponseCurrentActionAdditionalCountMin = 0;
+
 export const listOnboardingCasesResponseReadinessItemOrderMin = 0;
 
 
@@ -13978,6 +13989,13 @@ export const listOnboardingCasesResponseWorkforceContextLanguagePreferenceMax = 
 
 
 export const ListOnboardingCasesResponseItem = zod.object({
+  "currentAction": zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['pending', 'in-progress', 'blocked']),
+  "source": zod.enum(['action-center', 'workstream']),
+  "additionalCount": zod.number().min(listOnboardingCasesResponseCurrentActionAdditionalCountMin)
+}).nullish().describe('Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.'),
   "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
@@ -14273,6 +14291,8 @@ export const CreateOnboardingCaseBody = zod.object({
   "jobProfileId": zod.string().min(1).optional()
 }).describe('Manual onboarding trigger (intake form). The Intake Agent classifies and routes it.')
 
+export const createOnboardingCaseResponseCurrentActionAdditionalCountMin = 0;
+
 export const createOnboardingCaseResponseReadinessItemOrderMin = 0;
 
 
@@ -14342,6 +14362,13 @@ export const createOnboardingCaseResponseWorkforceContextLanguagePreferenceMax =
 
 
 export const CreateOnboardingCaseResponse = zod.object({
+  "currentAction": zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['pending', 'in-progress', 'blocked']),
+  "source": zod.enum(['action-center', 'workstream']),
+  "additionalCount": zod.number().min(createOnboardingCaseResponseCurrentActionAdditionalCountMin)
+}).nullish().describe('Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.'),
   "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
@@ -14548,6 +14575,8 @@ export const GetOnboardingCaseParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const getOnboardingCaseResponseCurrentActionAdditionalCountMin = 0;
+
 export const getOnboardingCaseResponseReadinessItemOrderMin = 0;
 
 
@@ -14617,6 +14646,13 @@ export const getOnboardingCaseResponseWorkforceContextLanguagePreferenceMax = 12
 
 
 export const GetOnboardingCaseResponse = zod.object({
+  "currentAction": zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['pending', 'in-progress', 'blocked']),
+  "source": zod.enum(['action-center', 'workstream']),
+  "additionalCount": zod.number().min(getOnboardingCaseResponseCurrentActionAdditionalCountMin)
+}).nullish().describe('Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.'),
   "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
@@ -14915,6 +14951,8 @@ export const ConfirmOnboardingOfferAcceptanceBody = zod.object({
   "note": zod.string().min(1)
 })
 
+export const confirmOnboardingOfferAcceptanceResponseCurrentActionAdditionalCountMin = 0;
+
 export const confirmOnboardingOfferAcceptanceResponseReadinessItemOrderMin = 0;
 
 
@@ -14984,6 +15022,13 @@ export const confirmOnboardingOfferAcceptanceResponseWorkforceContextLanguagePre
 
 
 export const ConfirmOnboardingOfferAcceptanceResponse = zod.object({
+  "currentAction": zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['pending', 'in-progress', 'blocked']),
+  "source": zod.enum(['action-center', 'workstream']),
+  "additionalCount": zod.number().min(confirmOnboardingOfferAcceptanceResponseCurrentActionAdditionalCountMin)
+}).nullish().describe('Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.'),
   "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
@@ -15207,6 +15252,8 @@ export const RecalculateOnboardingChecklistProfileBody = zod.object({
   "expectedChecklistProfileVersion": zod.number().min(1).describe('Checklist profile version currently displayed for this case.')
 })
 
+export const recalculateOnboardingChecklistProfileResponseCurrentActionAdditionalCountMin = 0;
+
 export const recalculateOnboardingChecklistProfileResponseReadinessItemOrderMin = 0;
 
 
@@ -15276,6 +15323,13 @@ export const recalculateOnboardingChecklistProfileResponseWorkforceContextLangua
 
 
 export const RecalculateOnboardingChecklistProfileResponse = zod.object({
+  "currentAction": zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['pending', 'in-progress', 'blocked']),
+  "source": zod.enum(['action-center', 'workstream']),
+  "additionalCount": zod.number().min(recalculateOnboardingChecklistProfileResponseCurrentActionAdditionalCountMin)
+}).nullish().describe('Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.'),
   "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
@@ -18200,6 +18254,8 @@ export const UpdateOnboardingChecklistItemBody = zod.object({
   "note": zod.string().max(updateOnboardingChecklistItemBodyNoteMax).nullish()
 })
 
+export const updateOnboardingChecklistItemResponseCurrentActionAdditionalCountMin = 0;
+
 export const updateOnboardingChecklistItemResponseReadinessItemOrderMin = 0;
 
 
@@ -18269,6 +18325,13 @@ export const updateOnboardingChecklistItemResponseWorkforceContextLanguagePrefer
 
 
 export const UpdateOnboardingChecklistItemResponse = zod.object({
+  "currentAction": zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['pending', 'in-progress', 'blocked']),
+  "source": zod.enum(['action-center', 'workstream']),
+  "additionalCount": zod.number().min(updateOnboardingChecklistItemResponseCurrentActionAdditionalCountMin)
+}).nullish().describe('Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.'),
   "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
@@ -18511,6 +18574,8 @@ export const VerifyOnboardingChecklistEvidenceBody = zod.object({
 }).describe('Exact case policy provenance the server locks and compares before recording independently verified evidence.')
 })
 
+export const verifyOnboardingChecklistEvidenceResponseCurrentActionAdditionalCountMin = 0;
+
 export const verifyOnboardingChecklistEvidenceResponseReadinessItemOrderMin = 0;
 
 
@@ -18580,6 +18645,13 @@ export const verifyOnboardingChecklistEvidenceResponseWorkforceContextLanguagePr
 
 
 export const VerifyOnboardingChecklistEvidenceResponse = zod.object({
+  "currentAction": zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['pending', 'in-progress', 'blocked']),
+  "source": zod.enum(['action-center', 'workstream']),
+  "additionalCount": zod.number().min(verifyOnboardingChecklistEvidenceResponseCurrentActionAdditionalCountMin)
+}).nullish().describe('Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.'),
   "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),
@@ -18864,6 +18936,8 @@ export const CorrectOnboardingWorkforceContextBody = zod.object({
   "reason": zod.string().min(correctOnboardingWorkforceContextBodyReasonMin).max(correctOnboardingWorkforceContextBodyReasonMax)
 })
 
+export const correctOnboardingWorkforceContextResponseCurrentActionAdditionalCountMin = 0;
+
 export const correctOnboardingWorkforceContextResponseReadinessItemOrderMin = 0;
 
 
@@ -18933,6 +19007,13 @@ export const correctOnboardingWorkforceContextResponseWorkforceContextLanguagePr
 
 
 export const CorrectOnboardingWorkforceContextResponse = zod.object({
+  "currentAction": zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['pending', 'in-progress', 'blocked']),
+  "source": zod.enum(['action-center', 'workstream']),
+  "additionalCount": zod.number().min(correctOnboardingWorkforceContextResponseCurrentActionAdditionalCountMin)
+}).nullish().describe('Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.'),
   "currentActionOwner": zod.string().nullish().describe('Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions.'),
   "intakeSource": zod.string().nullish(),
   "intakeSourceUrl": zod.string().nullish(),

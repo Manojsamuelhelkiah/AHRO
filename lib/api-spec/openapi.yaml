@@ -13569,6 +13569,18 @@ components:
       type: object
       # Visibility is an authorized list projection, never an operational case flag.
       properties:
+        currentAction:
+          type: object
+          nullable: true
+          readOnly: true
+          description: Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.
+          required: [key, label, status, source, additionalCount]
+          properties:
+            key: { type: string }
+            label: { type: string }
+            status: { type: string, enum: [pending, in-progress, blocked] }
+            source: { type: string, enum: [action-center, workstream] }
+            additionalCount: { type: integer, minimum: 0 }
         currentActionOwner:
           type: string
           nullable: true

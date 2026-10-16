@@ -7153,6 +7153,35 @@ export interface OnbSyntheticJourney {
   nextActions: string[];
 }
 
+export type OnbCaseCurrentActionStatus = typeof OnbCaseCurrentActionStatus[keyof typeof OnbCaseCurrentActionStatus];
+
+
+export const OnbCaseCurrentActionStatus = {
+  pending: 'pending',
+  'in-progress': 'in-progress',
+  blocked: 'blocked',
+} as const;
+
+export type OnbCaseCurrentActionSource = typeof OnbCaseCurrentActionSource[keyof typeof OnbCaseCurrentActionSource];
+
+
+export const OnbCaseCurrentActionSource = {
+  'action-center': 'action-center',
+  workstream: 'workstream',
+} as const;
+
+/**
+ * Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases.
+ */
+export type OnbCaseCurrentAction = {
+  readonly key: string;
+  readonly label: string;
+  readonly status: OnbCaseCurrentActionStatus;
+  readonly source: OnbCaseCurrentActionSource;
+  /** @minimum 0 */
+  readonly additionalCount: number;
+} | null;
+
 /**
  * HR-selected contact channel(s) for this new hire
  */
@@ -7194,6 +7223,8 @@ export type OnbCaseGateways = {
 };
 
 export interface OnbCase {
+  /** Permission-filtered current workload from open assignments or recorded workstreams. Not execution evidence. Null for unknown, terminal or offline illustrative cases. */
+  readonly currentAction?: OnbCaseCurrentAction;
   /** Currently assigned human or responsible team from an open Action Center assignment, subject to current read permissions. */
   currentActionOwner?: string | null;
   /** @nullable */

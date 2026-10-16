@@ -337,7 +337,8 @@ import { isFictionalOfflineExampleCase, isReportableFictionalOfflineExampleCase 
 import { CURATED_OFFLINE_EXAMPLES } from "../lib/onboarding/offline-example-extension";
 import { originalIntentLabel, onboardingOriginalIntent } from "../lib/onboarding/original-intent";
 import { fixedFictionalPresentation, readableFictionalItems } from "../lib/onboarding/fictional-case-presentation";
-import { currentActionOwners } from "../lib/onboarding/current-action-owner";
+import { currentActionAssignments } from "../lib/onboarding/current-action-owner";
+import { currentActionForCase, readableCurrentAction, type CurrentAction } from "../lib/onboarding/current-action";
 import { fixedSyntheticJourney } from "../lib/onboarding/synthetic-case-journey";
 
 const router: IRouter = Router();
@@ -713,6 +714,7 @@ const iso = (d: Date | null) => (d ? d.toISOString() : null);
 type CasePresentationReads = {
   actualRunOwned: boolean;
   currentActionOwner?: string | null;
+  currentAction?: CurrentAction | null;
   offerDelivery?: typeof onbCommunications.$inferSelect;
   bgvChecks: (typeof onbSystemChecks.$inferSelect)[];
   vaultBgvClear: boolean;
@@ -746,7 +748,7 @@ async function casePresentationReads(
       tx, organizationId, rows.filter(row => documentationGateConfigured(row)).map(row => row.id),
     )),
     authoritativelyUatRunOwnedCaseIds(organizationId, rows),
-    currentActionOwners(organizationId, ids),
+    currentActionAssignments(organizationId, ids),
     actualRunOwnedCaseIds(db, organizationId, ids),
   ]);
   const result = new Map(ids.map(id => [id, {
@@ -764,9 +766,12 @@ async function casePresentationReads(
     if (entry && approval.idempotencyKey === `gateway-c:${approval.caseId}:human-queue` &&
       !entry.finalApproval) entry.finalApproval = approval;
   }
-  for (const [caseId, owner] of actionOwners) {
+  for (const [caseId, assignments] of actionOwners) {
     const entry = result.get(caseId);
-    if (entry) entry.currentActionOwner = owner;
+    if (entry) {
+      entry.currentActionOwner = assignments[0]?.owner ?? null;
+      entry.currentAction = currentActionForCase(rows.find(row => row.id === caseId)!, assignments);
+    }
   }
   return result;
 }
@@ -888,16 +893,22 @@ async function serializeCase(
     (sensitiveAccess.identity || fictionalOfflineIdentity);
   const profileSensitiveAccess = canReadProfile ? sensitiveAccess : NO_SENSITIVE_ACCESS;
   const ownerReadable = canReadProfile && canReadNotes && hasOpaqueNarrativeAccess(sensitiveAccess);
-  const pendingOwners = ownerReadable && !presentation ? await currentActionOwners(row.organizationId, [row.id]) : null;
+  const assignments = ownerReadable && !presentation
+    ? (await currentActionAssignments(row.organizationId, [row.id])).get(row.id) ?? [] : [];
   const syntheticJourney = canReadProfile && canReadNotes && canReadReadiness && offlineExample
     ? fixedSyntheticJourney(row, presentation
       ? presentation.actualRunOwned || presentation.uatOwned
       : await actualRunOwnsCase(db, row) || await isAuthoritativelyUatRunOwnedCase(row))
     : null;
+  const recordedAction = presentation ? presentation.currentAction ?? null : currentActionForCase(row, assignments);
   return {
     syntheticJourney,
+    currentAction: readableCurrentAction(recordedAction, {
+      opaqueRead: ownerReadable, readinessRead: canReadReadiness,
+      illustrative: Boolean(offlineExample) || isHistoricalTestRecord(row),
+    }),
     currentActionOwner: ownerReadable
-      ? presentation?.currentActionOwner ?? pendingOwners?.get(row.id) ?? null
+      ? presentation?.currentActionOwner ?? assignments[0]?.owner ?? null
       : null,
     id: row.id,
     controllerRetired: (!activationRecord(row, false) && isHistoricalTestRecord(row)) ||

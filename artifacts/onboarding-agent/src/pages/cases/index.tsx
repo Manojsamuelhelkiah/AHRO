@@ -20,6 +20,7 @@ import { listJobProfiles, parseWorkforceTriState } from '@/lib/workforce-policy-
 import { listWorkforceTransferPrograms } from '@/lib/workforce-transfers-api';
 import { PROGRAM_FILTER, matchesTransferProgram, TransferProgramRow, TransferProgramCard } from './transfer-presentation';
 import { caseListPath, caseTypeFromSearch, type WorkItemFilter } from './list-navigation';
+import { CurrentAction } from './current-action';
 import { useWorkingList, workingListCases } from './working-list';
 import {
   CASE_TYPES,
@@ -572,15 +573,15 @@ export function CasesPage() {
         <div className="overflow-x-auto hidden lg:block">
           <table className="w-full min-w-[960px] table-fixed text-left" style={{ borderCollapse: 'collapse' }}>
             <colgroup>
-              {[26, 13, 12, 10, 9, 11, 11, 8].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}
+              {[22, 12, 11, 9, 17, 10, 11, 8].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}
             </colgroup>
             <thead>
               <tr style={{ backgroundColor: 'var(--surface-alt)', borderBottom: '2px solid var(--border)' }}>
-                {['Case / Original intent', 'Worker / Population', 'Family', 'Effective Date', 'Business Stages', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
+                {['Case / Original intent', 'Worker / Population', 'Family', 'Effective Date', 'Stages / Current action', 'Status', 'Owner / Agent', 'Action'].map((h, i) => (
                   <th
                     key={h}
-                    className={cn((h === 'Effective Date' || h === 'Owner / Agent' || h === 'Business Stages') && 'hidden lg:table-cell')}
-                    title={h === 'Business Stages' ? 'Offer intake · Background checks · Day-1 readiness' : h}
+                    className={cn((h === 'Effective Date' || h === 'Owner / Agent' || h === 'Stages / Current action') && 'hidden lg:table-cell')}
+                    title={h === 'Stages / Current action' ? 'Offer intake · Background checks · Day-1 readiness. Current action: open human assignment first; otherwise blocked, in-progress, then pending recorded workstream. Not proof of execution.' : h}
                     style={{ padding: '6px 8px', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, textAlign: i === 7 ? 'right' : 'left' }}
                   >
                     {h}
@@ -673,7 +674,7 @@ export function CasesPage() {
                       <td className="hidden lg:table-cell" style={{ padding: '6px 8px' }}>
                         {c.syntheticJourney ? <span className="block truncate text-xs text-[var(--text-muted)]" title={`${c.syntheticJourney.qualifier} — ${c.syntheticJourney.rationale}`}>
                           {c.syntheticJourney.stages[c.syntheticJourney.stages.length - 1]?.title}</span>
-                          : c.gateways ? <CompactGates gateways={c.gateways} inline /> : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>N/A</span>}
+                          : <div className="flex min-w-0 items-center gap-2">{c.gateways ? <CompactGates gateways={c.gateways} inline /> : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>N/A</span>}<CurrentAction c={c} terminal={status === 'Completed' || status === 'Rejected'} /></div>}
                       </td>
                       <td style={{ padding: '6px 8px' }}>
                         <div className="truncate" title={c.syntheticJourney ? c.syntheticJourney.qualifier : status}><HroStatusBadge status={status} /></div>
@@ -732,6 +733,7 @@ export function CasesPage() {
                     <HroStatusBadge status={status} />
                   </div>
                   <p className="mt-1 line-clamp-2 break-words text-sm text-[var(--text-secondary)]"><span className="font-semibold">Original intent:</span> {originalIntentOf(c)}</p>
+                  <p className="mt-1 break-words text-xs"><CurrentAction c={c} label terminal={status === 'Completed' || status === 'Rejected'} /></p>
                   {isFictionalOfflineExample(c) && c.planSummary && <p title={caseSummary(c)} className="mt-1 line-clamp-1 text-xs text-[var(--text-muted)]">{caseSummary(c)}</p>}
                   <div className="flex items-center justify-between gap-2 mt-1">
                     <span className="min-w-0 break-words" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{caseWorkerName(c)}</span>

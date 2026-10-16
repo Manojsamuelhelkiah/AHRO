@@ -14,3 +14,9 @@ Fixed fictional source definitions are fingerprinted by retained preparation and
 **Why:** Changing the shape of a fixed definition, even to add an accurate label, changes its fingerprint and invalidates previously recorded activation bindings.
 
 **How to apply:** Keep fixed source payloads unchanged when adding metadata; store annotations on the case or project them independently. Any intentional source-definition change needs explicit compatibility handling for retained records.
+
+Keep “Current action” separate from the original intent. It describes recorded pending, in-progress or blocked work, not a renamed originating request or a claim of execution. Unknown work must not be guessed from a title.
+
+**Why:** The product owner requested a compact current-action indicator and its use in Analytics while preserving the original request and single-line pipeline.
+
+**How to apply:** Prefer current open human assignments, then blocked, in-progress and pending recorded workstreams. Treat the workload as a one-case-once snapshot; exclude illustrative cases from measurements. Duration and transition-rate claims require actual transition history, not case age.

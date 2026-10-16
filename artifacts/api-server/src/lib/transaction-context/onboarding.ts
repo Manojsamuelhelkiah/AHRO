@@ -8,6 +8,9 @@ import {
 import { resolveEffectiveAccessInTransaction } from "../access-governance";
 import { isSharedDemoPrincipalInTransaction } from "../human-permissions";
 import { resolveOriginalIntent } from "../onboarding/original-intent";
+import { currentActionForCase } from "../onboarding/current-action";
+import { currentActionAssignments } from "../onboarding/current-action-owner";
+import { isFictionalOfflineExampleCase } from "../onboarding/offline-example-display";
 import { isHistoricalTestRecord } from "../onboarding/historical-test-record";
 import { evidenceBelongsToOperationalGeneration } from "../onboarding/operational-eligibility";
 import { sensitiveClassForDocument, ALL_SENSITIVE_RECORD_CLASSES } from "../onboarding/sensitive-access";
@@ -105,6 +108,17 @@ export async function projectOnboardingContext(tx: ContextTx, input: ContextRead
       [row.offerAcceptanceComplete, row.offerAcceptanceCompletedAt], "overview", row.offerAcceptanceCompletedAt);
   }
   const revisions: unknown[] = [row, access.keys, access.demo];
+  if (access.opaque && access.has("data.case.readiness.read") && !scenario && !isFictionalOfflineExampleCase(row)) {
+    // Read on the same transaction/tenant snapshot as the rest of the context.
+    const assignments = (await currentActionAssignments(input.organizationId, [row.id], tx)).get(row.id) ?? [];
+    const action = currentActionForCase(row, assignments);
+    revisions.push(action);
+    add(`case:${row.id}:current-action`, "facts", "Current action",
+      action
+        ? `${action.label}. Recorded status: ${action.status}. Source: ${action.source}. Other open items in this source: ${action.additionalCount}. This is recorded workload, not proof of execution.`
+        : "No current action recorded.",
+      action);
+  }
   if (access.opaque && row.planSummary)
     add(`case:${row.id}:plan`, "pending", "Recorded plan narrative (unverified)", row.planSummary, row.planSummary);
   if (access.opaque && row.notes)
