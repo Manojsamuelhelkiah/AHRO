@@ -9,6 +9,17 @@ capabilities. Shared Demo accounts are limited to authorized non-operational his
 Commercial what-if modeling, developer-only regression fixtures, genuine callbacks
 and separately authorized operational channel checks are not retired.
 
+The requested Learning Guide “Flow Simulator” is a distinct learning-only game,
+not permission to restore operational case simulations. The first selected intent
+is Certification / course assignment.
+
+**Why:** The product owner explicitly requested a graphical, multiple-choice
+workflow learning experience and selected one intent as its starting scope.
+
+**How to apply:** Keep learning scenarios, choices and scores separate from real
+cases, domain execution, provider delivery, authority receipts and operational
+analytics. Training outcomes must remain visibly illustrative.
+
 **Why:** The product owner requested feature retirement, not terminology changes,
 data cleanup, live-delivery substitution or new authority for demo identities.
 
