@@ -22,5 +22,5 @@ await build({
   ],
 });
 
-const child = spawn("node", ["--enable-source-maps", "dist-test/seed-script.mjs"], { stdio: "inherit" });
+const child = spawn("node", ["--enable-source-maps", "dist-test/seed-script.mjs", ...process.argv.slice(2)], { stdio: "inherit" });
 child.on("exit", (code) => process.exit(code ?? 1));
