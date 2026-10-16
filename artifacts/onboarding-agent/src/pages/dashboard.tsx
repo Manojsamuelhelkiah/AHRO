@@ -6,13 +6,13 @@ import {
   useListOnboardingApprovals,
 } from '@workspace/api-client-react';
 import type { OnbCase, OnbApproval, OnbEvent } from '@workspace/api-client-react';
-import { Card, PageHeader, Button, cn } from '@/components/ui-shared';
+import { Card, PageHeader, Button } from '@/components/ui-shared';
 import { Link } from 'wouter';
 import { Activity, Bot, CheckCircle2, ShieldAlert, UserCheck, Layers, AlertOctagon, Timer } from 'lucide-react';
 import { EngineBadge } from '@/components/engine-badge';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { WorkforceReviewPanel } from '@/components/workforce-insights/workforce-review-panel';
-import { statusOf, caseTypeOf, caseTitleOf } from './cases/index';
+import { statusOf, caseTypeOf } from './cases/index';
 import { operationalReportingPopulation } from '../lib/operational-reporting';
 
 /* ----------------------------- derived metrics ---------------------------- */
@@ -175,32 +175,6 @@ export function DashboardPage() {
       )}
 
       <WorkforceReviewPanel />
-
-      {/* Agent Operations */}
-      <section aria-labelledby="agent-ops-heading">
-        <SectionHeading id="agent-ops-heading" title="Agent Operations" subtitle="Operational status and workload across the autonomous HR workforce." />
-        {casesQ.isError ? (
-          <div className="mt-3"><SectionError label="Agent status unavailable" onRetry={() => casesQ.refetch()} /></div>
-        ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
-          {casesQ.isLoading ? (
-            Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} height={88} />)
-          ) : (
-            <>
-              <AgentCard
-                name="Onboarding Agent"
-                state={metrics.blocked.length > 0 ? 'Needs Attention' : 'Operational'}
-                stateDescription={metrics.blocked.length > 0 ? 'Some cases are blocked and need review' : undefined}
-                workload={agentWorkload(metrics.active.filter((c) => caseTypeOf(c) === 'Onboarding').length, metrics.humanReview.length)}
-              />
-              <AgentCard name="Payroll Agent" state="Operational" workload="No active work" />
-              <AgentCard name="Compliance Agent" state="Operational" workload="No active work" />
-              <AgentCard name="Helpdesk Agent" state="Operational" workload="No active work" />
-            </>
-          )}
-        </div>
-        )}
-      </section>
 
       {/* Activity + Human Attention */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -423,50 +397,6 @@ function KpiCard({ title, value, context, icon: Icon, tone, loading }: { title: 
   );
 }
 
-type AgentState = 'Operational' | 'Waiting' | 'Human Review' | 'Needs Attention' | 'Blocked' | 'Offline';
-const AGENT_STATE_STYLE: Record<AgentState, { bg: string; fg: string }> = {
-  'Operational': { bg: 'var(--surface-soft)', fg: 'var(--status-green)' },
-  'Waiting': { bg: 'var(--surface-alt)', fg: 'var(--text-secondary)' },
-  'Human Review': { bg: 'var(--surface-soft)', fg: 'var(--status-amber)' },
-  'Needs Attention': { bg: 'var(--surface-soft)', fg: 'var(--status-amber)' },
-  'Blocked': { bg: 'var(--surface-soft)', fg: 'var(--status-red)' },
-  'Offline': { bg: 'var(--surface-alt)', fg: 'var(--text-muted)' },
-};
-
-export function AgentStateBadge({ state }: { state: AgentState }) {
-  const s = AGENT_STATE_STYLE[state];
-  return (
-    <span style={{ backgroundColor: s.bg, color: s.fg, fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-      {state}
-    </span>
-  );
-}
-
-function agentWorkload(activeCount: number, reviewCount: number): string {
-  if (activeCount === 0) return 'No active work';
-  const parts = [`${activeCount} active case${activeCount === 1 ? '' : 's'}`];
-  if (reviewCount > 0) parts.push(`${reviewCount} awaiting human review`);
-  return parts.join(' · ');
-}
-
-function AgentCard({ name, state, stateDescription, workload }: { name: string; state: AgentState; stateDescription?: string; workload: string }) {
-  return (
-    <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="shadow-sm flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2 min-w-0">
-          <span className="flex items-center justify-center shrink-0 rounded-md" style={{ width: '26px', height: '26px', backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>
-            <Bot className="h-4 w-4" aria-hidden />
-          </span>
-          <span className="truncate" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{name}</span>
-        </span>
-        <AgentStateBadge state={state} />
-      </div>
-      {stateDescription && <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{stateDescription}</div>}
-      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{workload}</div>
-    </Card>
-  );
-}
-
 function StageSummaryCard({ title, metrics, loading }: { title: string; metrics: { pending: number; 'human-review': number; blocked: number; }; loading?: boolean }) {
   return (
     <Card style={{ padding: 'var(--space-md) var(--space-lg)' }} className="min-w-0 shadow-sm hover:border-[var(--border-strong)] transition-colors flex flex-col gap-3">
@@ -558,19 +488,6 @@ function ExecRow({ label, count, total, color }: { label: string; count: number;
       <span style={{ width: '64px', textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)' }}>{count} · {pct}%</span>
     </div>
   );
-}
-
-function SectionHeading({ id, title, subtitle }: { id: string; title: string; subtitle: string }) {
-  return (
-    <div>
-      <h2 id={id} style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
-      <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>{subtitle}</p>
-    </div>
-  );
-}
-
-function SkeletonCard({ height }: { height: number }) {
-  return <Card className="animate-pulse" style={{ height: `${height}px`, backgroundColor: 'var(--surface-alt)' }} />;
 }
 
 function SkeletonRows({ rows }: { rows: number }) {
