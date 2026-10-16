@@ -6,6 +6,7 @@ import { accessDenied } from '@/lib/session-access';
 import { SessionAccessNotice } from '@/components/session-access-notice';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui-shared';
+import { emailIntakeErrorMessage } from './error-message';
 
 export function useEmailScope() {
   const { user } = useUser();
@@ -25,15 +26,7 @@ export function useEmailReadiness() {
 }
 
 export function safeError(e: unknown): string {
-  const x = e as { status?: number; response?: { status?: number }; data?: { message?: string }; response2?: unknown };
-  const status = x?.status ?? x?.response?.status;
-  if (status === 403) return 'You do not have permission for this action in this workspace.';
-  if (status === 401) return 'Your session has expired. Sign in again.';
-  if (status === 404) return 'This item was not found or is not visible to you.';
-  if (status === 409) return 'This record changed since you loaded it. Reload to see the latest version and retry.';
-  if (status === 429) return 'Too many requests. Wait a moment and retry.';
-  const m = x?.data?.message;
-  return typeof m === 'string' && m.length < 200 ? m : 'The request could not be completed. Retry, or contact an administrator if it persists.';
+  return emailIntakeErrorMessage(e);
 }
 
 export function ErrorNote({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
