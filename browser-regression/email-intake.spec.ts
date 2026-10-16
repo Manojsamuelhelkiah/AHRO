@@ -53,6 +53,16 @@ test("reviewed email intake: real isolated router, held conversion and responsiv
     await page.getByTestId(`${label === "phone" ? "link-request-mobile" : "link-request"}-${request.id}`).click();
     await expect(page.getByRole("heading", { name: "Review email request", exact: true })).toBeVisible();
     await expect(page.getByTestId("button-convert")).toBeDisabled();
+    await page.getByTestId("button-preview-extraction").click();
+    await expect(page.getByTestId("extraction-preview")).toBeVisible();
+    const after = await (await page.request.get(endpoint, { headers })).json();
+    expect(after.templateId).toBeNull();
+    expect(after.fields).toEqual({});
+    await page.getByTestId("button-adopt-extraction").click();
+    await expect(page.locator("#f-work_country")).toHaveValue("US");
+    await expect(page.locator("#f-worker_category")).toHaveValue("");
+    await page.locator("#f-worker_category").selectOption("employee");
+    await page.locator("#f-site_exposure").selectOption("no");
     await page.getByTestId("button-save-review").click();
     const duplicates = page.getByTestId("checkbox-ack-duplicate");
     if (await duplicates.isVisible()) await duplicates.check();
@@ -63,7 +73,7 @@ test("reviewed email intake: real isolated router, held conversion and responsiv
     expect(result.ok()).toBeTruthy();
     const converted = await result.json();
     expect(converted.status).toBe("converted");
-    expect(converted.caseKind).toBe("service-request");
+    expect(converted.caseKind).toBe("onboarding");
     const source = await page.request.get(`/api/onboarding/email-intake/requests/${request.id}/source`, { headers: { "x-organization-id": fixture.organizationId } });
     expect(await source.json()).toMatchObject({ state: "unavailable", subject: null, body: null });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
@@ -72,15 +82,10 @@ test("reviewed email intake: real isolated router, held conversion and responsiv
     // mobile cards retain the shorter label. Check this request's visible link.
     const sourceHistory = page.getByRole("link", { name: /^Email source history(?: for .+)?$/ })
       .and(page.locator(`a[href="/email-intake/${encodeURIComponent(request.id)}"]`));
+    await expect(sourceHistory).toBeVisible();
+    const stale = await page.request.post(`${endpoint}/extraction`, { headers, data: { expectedVersion: 1, action: "preview" } });
     expect(stale.status()).toBe(409);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
   }
 });
 
-    const after = await (await page.request.get(endpoint, { headers })).json();
-
-    const stale = await page.request.post(`${endpoint}/extraction`, { headers, data: { expectedVersion: 1, action: "preview" } });
-
-  const readiness = await page.request.get("/api/onboarding/email-intake", { headers });
-
-    const configured = await page.request.post("/api/onboarding/email-intake", { headers, data: { reference: "controlled-table-route-review", backfillHours: 1 } });

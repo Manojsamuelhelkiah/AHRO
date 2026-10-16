@@ -26,3 +26,9 @@ Email-template normalization must not infer workforce semantics from descriptive
 **Why:** The reported email used “External FTE” as a worker category and “Low” for site exposure, but the product's choices are different concepts. Plausible-looking conversions would invent facts the source did not supply.
 
 **How to apply:** Normalize only unambiguous representation differences. New semantic aliases require an explicit supported rule, not a model guess, hire-template assumption or sender-derived default. Show source problems separately from absent facts, and preserve human edits when retrying extraction.
+
+Complete fictional email examples must leave optional tenant-specific operational identifiers blank rather than invent an enabled binding.
+
+**Why:** A plausible fictional job-profile identifier is syntactically valid but can make held intake conversion fail because no such enabled client profile exists.
+
+**How to apply:** Include the field in the copyable example, but require the requester to supply a genuinely enabled tenant reference if applicable. Do not query or infer private tenant configuration to populate public example values.

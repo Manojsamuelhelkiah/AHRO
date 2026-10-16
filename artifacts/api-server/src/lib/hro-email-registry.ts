@@ -28,8 +28,8 @@ export const HRO_EMAIL_TEMPLATES = HRO_BATCH_TEMPLATES;
 const restricted = /\b(?:iban|swift|bank\s*account|account\s*number|passport\s*(?:number|no)|national\s*id|social\s*security|diagnos(?:is|ed)|medical\s*(?:condition|finding)|routing\s*number)\b|\b\d{12,19}\b/i;
 export function unsafeIntakeValue(value: string): boolean { return restricted.test(value); }
 export function emailExample(t: IntakeTemplate): string {
-  return t.columns.filter(c => c.required).map(c => `${c.key}: ${c.key === "template_id" ? t.id : c.key === "template_version" ? t.version :
-    c.key === "request_id" ? "your-source-reference" : c.key === "time_zone" ? "America/New_York" :
+  return t.columns.map(c => `${c.key}: ${c.key === "template_id" ? t.id : c.key === "template_version" ? t.version :
+    c.key === "request_id" ? "your-source-reference" : c.key === "job_profile_id" ? "" : c.key === "time_zone" ? "America/New_York" :
     c.values ? c.values[0] : c.kind === "date" ? "2030-01-15" : c.kind === "country" ? "US" : c.kind === "email" ? "worker@example.invalid" :
     c.key.endsWith("_reference") ? "reviewed-source-reference" : `Example ${c.label}`}`).join("\n");
 }

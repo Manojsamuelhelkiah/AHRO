@@ -24,7 +24,7 @@ remains unavailable pending section 4.6.
    in the route selector. Copy the address and the complete random subject
    marker. No alias is provisioned or claimed to work.
 4. Send requests to that address with exactly one client route marker in the
-   subject. The template catalog shows required fields, allowed choices and
+   subject. The template catalog shows required and optional fields, exact allowed choices and
    examples for every supported template across all twelve families. Free-form
    messages can receive uncertain suggestions; they do not default to onboarding.
 5. Wait for a successful scan. Readiness requires current approval, the same
@@ -84,6 +84,24 @@ retaining minimal provider deduplication tombstones. The application never delet
 or mutates real Gmail messages.
 
 ## Table suggestions and explicit retry
+
+Expand a registered template in Email Intake and choose **Plain text** or
+**Header/value table**, then use its copy button. Both formats include every
+registered column, including optional fields, with clearly fictional samples.
+Replace the samples with supplied, reviewed facts; leave unknown optional fields
+blank. Keep the template ID and version unchanged and supply your own unique
+request ID. Sample choices are illustrations, never recommended or inferred
+employee facts. Use only the exact listed choice values, real calendar dates in
+`YYYY-MM-DD`, and uppercase two-letter country codes such as `US`, `IN` or `GB`.
+
+Table copying writes escaped, inert key/value HTML plus a colon-separated plain
+text alternative to the clipboard. It contains no links, scripts or remote
+resources. Rich clipboard support and an HTML-capable mail composer are needed
+to paste the table; a plain-text destination receives the colon-separated
+alternative. If rich copying fails, use **Plain text** instead. Copying makes no
+server request, sends no mail, creates no intake request, and changes no routing,
+extraction rules, review authority or read/confidential-data permissions.
+Bank, medical and identity values still belong only in approved secure collection.
 
 Email bodies may use either colon-separated template keys, an explicit two-column
 key/value HTML table, or one header row followed by exactly one employee value row.

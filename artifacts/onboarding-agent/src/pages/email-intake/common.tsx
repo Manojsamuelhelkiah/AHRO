@@ -71,13 +71,20 @@ export function Pill({ tone = 'muted', children }: { tone?: Tone; children: Reac
 }
 export const statusTone = (s: string): Tone => s === 'converted' ? 'green' : s === 'blocked' || s === 'rejected' ? 'red' : s === 'needs-review' ? 'amber' : s === 'received' ? 'blue' : 'muted';
 
-export function CopyButton({ value, label, testId }: { value: string; label: string; testId?: string }) {
+export function CopyButton({ value, html, label, testId }: { value: string; html?: string; label: string; testId?: string }) {
   const [done, setDone] = useState(false);
   const [failed, setFailed] = useState(false);
   return (
     <Button type="button" size="sm" variant="outline" className="gap-1.5" data-testid={testId} aria-label={`Copy ${label}`}
-      onClick={async () => { try { await navigator.clipboard.writeText(value); setDone(true); setFailed(false); setTimeout(() => setDone(false), 1800); } catch { setFailed(true); } }}>
-      {done ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}{failed ? 'Copy failed' : done ? 'Copied' : 'Copy'}
+      onClick={async () => { try {
+        if (html) await navigator.clipboard.write([new ClipboardItem({
+          'text/plain': new Blob([value], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' }),
+        })]);
+        else await navigator.clipboard.writeText(value);
+        setDone(true); setFailed(false); setTimeout(() => setDone(false), 1800);
+      } catch { setDone(false); setFailed(true); } }}>
+      {done ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}{failed ? html ? 'Copy failed — use plain text' : 'Copy failed' : done ? 'Copied' : `Copy ${label}`}
     </Button>
   );
 }

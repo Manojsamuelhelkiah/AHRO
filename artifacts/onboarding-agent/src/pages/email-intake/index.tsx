@@ -12,6 +12,7 @@ import { Mail, ShieldAlert, Lock } from 'lucide-react';
 import { CopyButton, ErrorNote, Pill, Skeleton, fmtDate, inputCls, statusTone, useEmailScope, useEmailReadiness, emailAccessRefresh, useClearDeniedEmailData } from './common';
 import { PendingEmailSummary } from './turnaround';
 import { MarkerRotation } from './rotation';
+import { TemplateExample } from './template-example';
 
 function Templates({ data }: { data: HroEmailReadiness }) {
   const [open, setOpen] = useState<string | null>(null);
@@ -36,16 +37,13 @@ function Templates({ data }: { data: HroEmailReadiness }) {
                       <thead><tr className="text-left text-[var(--text-muted)]"><th className="py-1 pr-2">Field</th><th className="pr-2">Key</th><th className="pr-2">Type</th><th>Required</th></tr></thead>
                       <tbody>{t.columns.map((c) => (
                         <tr key={c.key} className="border-t border-[var(--border)] align-top">
-                          <td className="py-1 pr-2 font-medium">{c.label}<div className="font-normal text-[var(--text-muted)]">{c.description}{c.values?.length ? ` Allowed: ${c.values.join(', ')}.` : ''}</div></td>
+                          <td className="py-1 pr-2 font-medium">{c.label}<div className="font-normal text-[var(--text-muted)]">{c.description}{c.values?.length ? ` Exact allowed choices: ${c.values.join(', ')}.` : ''}{c.kind === 'date' ? ' Use a real calendar date in YYYY-MM-DD format (e.g. 2030-01-15).' : c.kind === 'country' ? ' Use an uppercase two-letter country code (e.g. US, IN, GB), not a country name.' : ''}</div></td>
                           <td className="pr-2 font-mono">{c.key}</td><td className="pr-2">{c.kind}</td><td>{c.required ? 'Required' : 'Optional'}</td>
                         </tr>))}</tbody>
                     </table>
                   </div>
                 </div>
-                <div>
-                  <div className="mb-1 flex items-center justify-between"><span className="text-xs font-semibold">Example body</span><CopyButton value={example} label={`${t.name} example`} /></div>
-                  <pre tabIndex={0} className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-[var(--surface-alt)] p-3 font-mono text-xs">{example}</pre>
-                </div>
+                <TemplateExample entry={{ template: t, example }} />
               </div>
             )}
           </li>
