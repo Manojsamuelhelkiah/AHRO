@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
+test.skip(process.env.ADMIN_EDIT_E2E_TEST !== "true", "Requires the disposable admin-edit harness; run playwright.workforce-insights.config.ts.");
+
 test("administrator completes one protected workforce human-review lifecycle", async ({ page }) => {
   mkdirSync("generated-artifacts", { recursive: true });
 

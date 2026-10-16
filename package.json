@@ -7,7 +7,7 @@
     "build": "pnpm run test:build-config && pnpm run test:policy-quality && pnpm run typecheck && pnpm -r --if-present run build",
     "test:policy-quality": "pnpm --filter @workspace/api-server run test:policy-quality",
     "test:build-config": "node scripts/check-vite-build-config.mjs",
-    "test:browser-regression": "playwright test --config=playwright.config.ts && playwright test --config=playwright.uat.config.ts",
+    "test:browser-regression": "playwright test --config=playwright.config.ts && playwright test --config=playwright.uat.config.ts && playwright test --config=playwright.workforce-insights.config.ts",
     "test:browser-admin-edits": "playwright test --config=playwright.admin-edit.config.ts",
     "test:browser-transaction-context": "playwright test --config=playwright.transaction-context.config.ts",
     "validate:release": "pnpm run test:build-config && pnpm run test:policy-quality && pnpm run typecheck && pnpm run test:browser-regression && pnpm --filter @workspace/onboarding-agent test",

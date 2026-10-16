@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@clerk/react';
 import { getAgentCatalogue, getPinnedOrganizationIdForPage, type AgentCatalogue } from '@workspace/api-client-react';
-import { ShieldCheck, Lock, RotateCcw, Layers, CheckCircle2, Ban } from 'lucide-react';
+import { ShieldCheck, Lock, RotateCcw, Layers } from 'lucide-react';
 import { Button } from '@/components/ui-shared';
 import { RegistrationForm, type Pending } from './registration-form';
 
@@ -73,21 +73,6 @@ function ScopedCatalogueSection({ queryKey, searchTerm }: {
 
       {cat && (
         <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-[var(--radius-lg)] border border-[var(--status-green)] bg-[var(--status-green-bg)] p-4" data-testid="panel-runtime-implemented">
-              <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--status-green-fg)]"><CheckCircle2 className="h-4 w-4" />Runtime metadata read - implemented</h3>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {cat.runtimeCapabilities.length ? cat.runtimeCapabilities.map(c => <code key={c} className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px]">{c}</code>) : <span className="text-xs">None reported</span>}
-              </div>
-              <p className="mt-2 text-xs text-[var(--text-secondary)]">{cat.runtimeNotice}</p>
-              <p className="mt-2 text-xs text-[var(--text-secondary)]">Effective access is not evaluated on this page. Check current grants in Access Governance with an explicit initiator and scope; implemented does not mean authorized.</p>
-            </div>
-            <div className="rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--surface-alt)] p-4" data-testid="panel-operational-unavailable">
-              <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]"><Ban className="h-4 w-4" />Domain operational capabilities - unavailable</h3>
-              <p className="mt-2 text-xs text-[var(--text-secondary)]">Roles below describe intended responsibility. None can be run from here, and registering one does not make it operational.</p>
-              <p className="mt-2 text-[11px] text-[var(--text-muted)]">{cat.clientName} - catalogue version {cat.version}</p>
-            </div>
-          </div>
           <p className="text-xs text-[var(--text-secondary)]">
             The twelve product families are browsing labels, not a replacement for the broader intent taxonomy.
             Reviewed mappings associate coordination responsibilities only; they do not approve execution or raise coverage maturity.

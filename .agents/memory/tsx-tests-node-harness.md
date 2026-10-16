@@ -3,6 +3,12 @@ name: Rendering React components in the node test harness
 description: Rendering and mounting React UI tests through esbuild and node:test
 ---
 
+Assert DOM presence as a boolean or count rather than comparing a live mounted DOM node directly against null.
+
+**Why:** A failed Node assertion can spend so long inspecting the happy-dom node and its React-owned graph that it looks like an unresolved async test instead of reporting the selector mismatch.
+
+**How to apply:** Use `assert.equal(!!element, false)` or an element count for absence checks; scope layout selectors to the intended container rather than matching responsive classes anywhere in its subtree.
+
 The cost-explorer test harness (esbuild bundle → `node --test`) can render real React components with `react-dom/server`'s `renderToStaticMarkup`, but three things must hold:
 
 - The harness glob must include `*.test.tsx` and the build must set `jsx: "automatic"` (the app tsconfig uses `jsx: "preserve"`, which esbuild would otherwise pass through and node cannot parse).

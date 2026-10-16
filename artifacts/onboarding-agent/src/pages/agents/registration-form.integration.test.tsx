@@ -35,7 +35,7 @@ const snapshot = (): AgentCatalogue => ({
 const settle = () => new Promise(resolve => setTimeout(resolve, 20));
 type Driver = {
   render: (cat: AgentCatalogue, selection?: { key: string; revision: number }, scope?: string) => Promise<void>;
-  renderCatalogue: () => Promise<void>;
+  renderCatalogue: (searchTerm?: string) => Promise<void>;
   refreshCatalogue: () => Promise<void>;
   choose: (id: string, value: string) => Promise<void>;
   click: (id: string) => Promise<void>;
@@ -75,12 +75,12 @@ async function fixture(run: (d: Driver) => Promise<void>, handler: typeof fetch 
         await settle();
       });
     },
-    renderCatalogue: async () => {
+    renderCatalogue: async (searchTerm = '') => {
       const { CatalogueSection } = await import('./catalogue-section');
       const Auth = ClerkProvider as unknown as React.ComponentType<{ children: React.ReactNode; user: { id: string } }>;
       dom.HTMLElement.prototype.scrollIntoView = () => {};
       await act(async () => {
-        root.render(<QueryClientProvider client={client}><Auth user={{ id: 'fixture-admin' }}><CatalogueSection searchTerm="" /></Auth></QueryClientProvider>);
+        root.render(<QueryClientProvider client={client}><Auth user={{ id: 'fixture-admin' }}><CatalogueSection searchTerm={searchTerm} /></Auth></QueryClientProvider>);
         await settle();
       });
       await act(settle);
@@ -113,6 +113,60 @@ async function fixture(run: (d: Driver) => Promise<void>, handler: typeof fetch 
       else delete (globalThis as Record<string, unknown>)[name];
     }
   }
+}
+
+for (const canManage of [true, false]) {
+  test(`catalogue omits status panels while preserving content and controls (canManage=${canManage})`, async () => {
+    const cat = snapshot();
+    cat.canManage = canManage;
+    cat.runtimeCapabilities = ['fixture.metadata.read'];
+    cat.runtimeNotice = 'Fixture runtime notice that must not render';
+    if (!canManage) {
+      cat.registrations = []; cat.principals = []; cat.owners = [];
+    }
+    await fixture(async d => {
+      await d.renderCatalogue();
+      const section = d.dom.document.querySelector('[data-testid="section-catalogue"]')!;
+      const text = section.textContent!;
+      assert.equal(section.querySelector('#catalogue-h')?.textContent, 'Catalogue roles and registrations');
+      assert.match(text, /Versioned agent roles and who is registered to each\. Registration is setup metadata only\./);
+      assert.match(text, /The twelve product families are browsing labels/);
+      assert.match(text, /Reviewed mappings associate coordination responsibilities only/);
+      assert.doesNotMatch(text, /Runtime metadata read - implemented|Domain operational capabilities - unavailable|fixture\.metadata\.read|Fixture runtime notice|None reported|Effective access is not evaluated|Roles below describe intended responsibility|Fixture client - catalogue version/);
+      assert.equal(section.querySelector('[data-testid="panel-runtime-implemented"]'), null);
+      assert.equal(section.querySelector('[data-testid="panel-operational-unavailable"]'), null);
+      // The retained explanation immediately follows the heading, not an empty panel grid.
+      assert.equal(section.children[1].firstElementChild?.tagName, 'P');
+      assert.equal(d.text('catalogue-search-results'), '3 of 3 catalogue roles');
+      assert.equal(section.querySelectorAll('[data-testid^="card-role-"]').length, 3);
+      assert.equal(section.querySelectorAll('details summary').length, 3);
+      assert.equal((text.match(/Operational capability \(unavailable\):/g) ?? []).length, 3);
+      assert.equal(!!section.querySelector('[data-testid="form-register-agent"]'), canManage);
+      assert.equal(!!section.querySelector('[data-testid="select-catalogue-role"]'), canManage);
+      assert.equal(!!section.querySelector('[data-testid="button-submit-registration"]'), canManage);
+      assert.equal(!!section.querySelector('[data-testid="notice-no-manage"]'), !canManage);
+      assert.equal(section.querySelectorAll('[data-testid^="button-select-"]').length, canManage ? 3 : 0);
+      if (canManage) {
+        assert.equal(d.text('button-select-onboarding'), 'Replace');
+        assert.equal(d.text('button-select-leave'), 'Register');
+      } else {
+        assert.equal((text.match(/Registration status private/g) ?? []).length, 3);
+      }
+    }, async () => new Response(JSON.stringify(cat), { headers: { 'Content-Type': 'application/json' } }));
+  });
+  test(`catalogue search preserves matching role cards without status panels (canManage=${canManage})`, async () => {
+    const cat = { ...snapshot(), canManage };
+    if (!canManage) {
+      cat.registrations = []; cat.principals = []; cat.owners = [];
+    }
+    await fixture(async d => {
+      await d.renderCatalogue('payroll');
+      const section = d.dom.document.querySelector('[data-testid="section-catalogue"]')!;
+      assert.equal(d.text('catalogue-search-results'), '1 of 3 catalogue roles match “payroll”');
+      assert.equal(section.querySelectorAll('[data-testid^="card-role-"]').length, 1);
+      assert.ok(section.querySelector('[data-testid="card-role-payroll"]'));
+    }, async () => new Response(JSON.stringify(cat), { headers: { 'Content-Type': 'application/json' } }));
+  });
 }
 
 test('bind initializes the current role and separates saved details from new-mode drafts', async () => {
