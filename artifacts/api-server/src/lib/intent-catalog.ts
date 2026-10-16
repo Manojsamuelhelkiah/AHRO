@@ -9,6 +9,7 @@ import { HRO_BATCH_TEMPLATES } from "./onboarding/hro-batch-templates";
 import { CURATED_OFFLINE_EXAMPLES } from "./onboarding/offline-example-extension";
 import { SCENARIOS } from "./onboarding/scenarios";
 import { FUTURE_INSTANCE_CONTRACT } from "./intent-instance-contract";
+import { isWorkerMasterKey, WORKER_MASTER_CONTRACT_VERSION, WORKER_MASTER_APPROVAL_REFERENCE, WORKER_MASTER_REQUIRED_CONTEXT } from "./worker-master-contracts";
 
 export const CATALOG_VERSION = "hro-operational-v1";
 const RECONCILIATION_VERSION = "hro-reconciliation-v1";
@@ -61,7 +62,8 @@ export function buildIntentCatalog(customRows: CustomIntentRow[] = [], organizat
   const mappings: CatalogMapping[] = [];
   for (const row of master.subIntents) {
     const key = canonicalKey(row.key);
-    mappings.push(mapping("master", master.taxonomyVersion, row.key, row.name, [key], "exact",
+    const workerMaster = isWorkerMasterKey(key);
+    mappings.push(mapping("master", workerMaster ? `${master.taxonomyVersion}:${WORKER_MASTER_CONTRACT_VERSION}` : master.taxonomyVersion, row.key, row.name, [key], "exact",
       row.key === key ? "Preserved master outcome identity; completion and inputs still require review." : "Same learning-assignment completion record; mandatory status is input context, not a child-only outcome."));
     const existing = definitions.find(item => item.key === key);
     if (existing) {
@@ -72,16 +74,20 @@ export function buildIntentCatalog(customRows: CustomIntentRow[] = [], organizat
       continue;
     }
     definitions.push({
-      key, version: `${CATALOG_VERSION}:1`, name: key === "provision-role-access" ? "Grant IT application access" : key === "assign-learning" ? "Assign learning" : row.name,
+      key, version: `${CATALOG_VERSION}:${workerMaster ? 2 : 1}`, name: key === "provision-role-access" ? "Grant IT application access" : key === "assign-learning" ? "Assign learning" : row.name,
       definitionClass: "atomic", outcome: key === "provision-role-access"
         ? "Approved application role access is granted for the subject, with scope and expiry recorded by the authoritative identity system."
         : key === "assign-learning" ? "A learning requirement is assigned to the subject, with course version, due date and mandatory status recorded."
         : row.description,
       evidence: row.completionEvidence, journeyKeys: [row.journeyKey], serviceKeys: [row.serviceIntentKey],
-      aliases: [...new Set([row.name, ...(key !== row.key ? [row.key] : []), ...row.exactAliases])], provenance: [`${master.taxonomyVersion}:${row.key}`, ...row.sourceFamilies],
+      aliases: [...new Set([row.name, ...(key !== row.key ? [row.key] : []), ...row.exactAliases])], provenance: [`${master.taxonomyVersion}:${row.key}`, ...row.sourceFamilies,
+        ...(workerMaster ? [WORKER_MASTER_CONTRACT_VERSION, WORKER_MASTER_APPROVAL_REFERENCE] : [])],
       coverage: "catalogued", coverageEvidence: ["Source taxonomy only; no current outcome-specific integrated or verified execution receipt reviewed."],
-      reviewStatus: "proposed", initiation: { ...initiation }, requiredContext: [...context],
-      invocationConstraints: [constraint, ...(row.jurisdictionOverlay ? ["Jurisdiction-specific policy and authorized human review are required; research is not a legal determination."] : [])],
+      reviewStatus: workerMaster ? "reviewed" : "proposed", initiation: { ...initiation }, requiredContext: [...new Set([...context,
+        ...(workerMaster ? ["organizationId", "requestReference", "contractVersion", "source", "policyRevision", ...WORKER_MASTER_REQUIRED_CONTEXT[key]] : [])])],
+      invocationConstraints: [constraint,
+        ...(workerMaster ? ["Reviewed completion definition only: no worker-master executor, provider verifier or durable immutable receipt store is registered. Passing read-only evidence checks does not complete a case or authorize execution."] : []),
+        ...(row.jurisdictionOverlay ? ["Jurisdiction-specific policy and authorized human review are required; research is not a legal determination."] : [])],
       status: "active",
     });
   }
@@ -188,7 +194,7 @@ export function buildIntentCatalog(customRows: CustomIntentRow[] = [], organizat
     })),
   ];
   const catalog: OperationalIntentCatalog = {
-    version: CATALOG_VERSION, sourceVersions: [master.taxonomyVersion, legacy.taxonomyVersion, RECONCILIATION_VERSION, retainedScenarioVersion, "offline-additional-v1", "offline-complementary-v1", ...HRO_BATCH_TEMPLATES.map(row => `${row.id}:${row.version}`)],
+    version: CATALOG_VERSION, sourceVersions: [master.taxonomyVersion, WORKER_MASTER_CONTRACT_VERSION, legacy.taxonomyVersion, RECONCILIATION_VERSION, retainedScenarioVersion, "offline-additional-v1", "offline-complementary-v1", ...HRO_BATCH_TEMPLATES.map(row => `${row.id}:${row.version}`)],
     scope: master.scope,
     notices: ["Catalog membership and proposed human/AI initiation metadata never authorize execution.", "Journeys and services are browsing metadata, not owners or fixed parents. A sub-intent is an instance of the same reusable definition in a caller context.",
       "Sample variations do not inflate definition counts or establish support. Commercial costs, custom routing, approvals and providers are unchanged.",

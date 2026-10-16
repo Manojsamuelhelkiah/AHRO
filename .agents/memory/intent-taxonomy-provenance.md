@@ -46,3 +46,16 @@ coverage conceals ownership gaps.
 **How to apply:** Preserve both the actual definition associations and the
 explicit service basis in reports. Assign proposed atomic accountability
 independently of composite orchestration; neither grants execution authority.
+
+Worker-master completion definitions are vendor-neutral. Definition approval does
+not approve a client's source binding, identity merge, effective-date change or
+individual transaction, and must never be reused as live execution authority.
+
+**Why:** HR data-owner acceptance was explicitly obtained for the four business
+completion rules, within a contract-and-evidence-check scope that excluded
+provider connections, writes and permission changes.
+
+**How to apply:** Preserve that separation when adding worker integrations.
+Establish client-specific source mappings and fresh ordinary permission-based
+human decisions separately. Read-only contract acceptance and a frozen receipt
+candidate are not a completed transaction or durable immutable evidence storage.

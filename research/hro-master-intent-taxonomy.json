@@ -2254,7 +2254,9 @@
       "name": "Collect Worker Profile",
       "journeyKey": "onboarding",
       "serviceIntentKey": "worker-master-setup",
-      "description": "Collect Worker Profile is completed with a recorded, observable result.",
+      "description": "The approved collection system confirms that the exact worker profile version satisfies the approved required-field schema and validations; this is not worker-record creation or document authenticity.",
+      "completionContractVersion": "worker-master-evidence-v1",
+      "completionContractApprovalReference": "worker-master-definition-approval-2026-10-16",
       "requesters": [
         "employee",
         "HR"
@@ -2265,9 +2267,8 @@
         "Benefits Operations Specialist"
       ],
       "systems": [
-        "HR workflow",
-        "system of record",
-        "document repository"
+        "Client-bound approved worker-profile collection system (worker-profile ID/version)",
+        "Approved required-field schema and validation policy revision"
       ],
       "flowClass": "fc1-deterministic",
       "riskClass": "low",
@@ -2277,10 +2278,10 @@
       "writeActions": [
         "record collect worker profile outcome"
       ],
-      "humanApproval": "none beyond authorization",
+      "humanApproval": "HR data-owner approval of the required-field schema and validation rules; uncertain identity or disputed data requires explicit review.",
       "completionEvidence": [
-        "dated system record",
-        "immutable audit event"
+        "Independently verified source profile ID/version, approved required-field schema version and complete validation result, bound to tenant, request, subject and source environment.",
+        "Immutable completion receipt referencing verified source evidence and exact contract/input versions; a local case or audit entry alone is insufficient."
       ],
       "exactAliases": [],
       "jurisdictionOverlay": false,
@@ -2300,7 +2301,9 @@
       "name": "Create Worker Record",
       "journeyKey": "onboarding",
       "serviceIntentKey": "worker-master-setup",
-      "description": "Create Worker Record is completed with a recorded, observable result.",
+      "description": "The authoritative HR system confirms the intended worker record, resolved person and employment linkage, approved values and effective date with a resulting source object ID/version; an accepted write request alone is insufficient.",
+      "completionContractVersion": "worker-master-evidence-v1",
+      "completionContractApprovalReference": "worker-master-definition-approval-2026-10-16",
       "requesters": [
         "employee",
         "HR"
@@ -2311,9 +2314,8 @@
         "Benefits Operations Specialist"
       ],
       "systems": [
-        "HR workflow",
-        "system of record",
-        "document repository"
+        "Client-bound authoritative HR person/worker/employment source and environment",
+        "Reviewed worker-profile collection reference and version"
       ],
       "flowClass": "fc1-deterministic",
       "riskClass": "low",
@@ -2323,10 +2325,10 @@
       "writeActions": [
         "record create worker record outcome"
       ],
-      "humanApproval": "none beyond authorization",
+      "humanApproval": "Explicit version-bound HR decision on identity, person/employment linkage, approved creation inputs and effective date; unresolved duplicates require review.",
       "completionEvidence": [
-        "dated system record",
-        "immutable audit event"
+        "Independently verified worker object ID/version, person/employment linkage, approved profile/input version and effective date in the exact client source environment.",
+        "Version-bound HR decision, resolved identity and duplicate review, and immutable source-backed completion receipt; a queued request or local case ID is insufficient."
       ],
       "exactAliases": [],
       "jurisdictionOverlay": false,
@@ -2346,7 +2348,9 @@
       "name": "Resolve Duplicate Worker",
       "journeyKey": "onboarding",
       "serviceIntentKey": "worker-master-setup",
-      "description": "Resolve Duplicate Worker is completed with a recorded, observable result.",
+      "description": "Source read-back confirms the HR data steward's exact version-bound merge or keep-separate decision: the surviving and superseded records for a merge, or preserved distinct active records when kept separate.",
+      "completionContractVersion": "worker-master-evidence-v1",
+      "completionContractApprovalReference": "worker-master-definition-approval-2026-10-16",
       "requesters": [
         "employee",
         "HR"
@@ -2357,9 +2361,8 @@
         "Benefits Operations Specialist"
       ],
       "systems": [
-        "HR workflow",
-        "system of record",
-        "document repository"
+        "Client-bound authoritative worker identity/duplicate-resolution source",
+        "Version-bound HR data-steward decision and comparison evidence"
       ],
       "flowClass": "fc1-deterministic",
       "riskClass": "low",
@@ -2369,10 +2372,10 @@
       "writeActions": [
         "record resolve duplicate worker outcome"
       ],
-      "humanApproval": "none beyond authorization",
+      "humanApproval": "HR data steward explicitly approves merge or keep-separate for the exact candidate IDs/versions; no inferred survivor or automatic merge.",
       "completionEvidence": [
-        "dated system record",
-        "immutable audit event"
+        "Exact candidate IDs/versions and comparison evidence, explicit HR data-steward disposition and independently verified resulting identity states.",
+        "Immutable source-backed receipt bound to candidate/input and decision versions; detection, an inferred survivor or a local audit entry alone is insufficient."
       ],
       "exactAliases": [],
       "jurisdictionOverlay": false,
@@ -2392,7 +2395,9 @@
       "name": "Amend Prestart Employment Details",
       "journeyKey": "onboarding",
       "serviceIntentKey": "worker-master-setup",
-      "description": "Amend Prestart Employment Details is completed with a recorded, observable result.",
+      "description": "Authoritative employment read-back confirms the approved changed values, effective date, preserved person/employment linkage and new source version while the worker remains pre-start; concurrent source changes require fresh review.",
+      "completionContractVersion": "worker-master-evidence-v1",
+      "completionContractApprovalReference": "worker-master-definition-approval-2026-10-16",
       "requesters": [
         "employee",
         "HR"
@@ -2403,9 +2408,8 @@
         "Benefits Operations Specialist"
       ],
       "systems": [
-        "HR workflow",
-        "system of record",
-        "document repository"
+        "Client-bound authoritative employment and actual-start source",
+        "Version-bound HR change approval and applicable payroll decision"
       ],
       "flowClass": "fc1-deterministic",
       "riskClass": "low",
@@ -2415,10 +2419,10 @@
       "writeActions": [
         "record amend prestart employment details outcome"
       ],
-      "humanApproval": "none beyond authorization",
+      "humanApproval": "Explicit HR approval of the exact changed values and effective date; payroll-impacting changes require applicable payroll approval; concurrent source or actual-start changes require fresh review.",
       "completionEvidence": [
-        "dated system record",
-        "immutable audit event"
+        "Exact employment ID, expected previous and resulting source versions, approved changed-value digest, effective date and independently verified current pre-start state.",
+        "Version-bound HR decision and applicable payroll decision with an immutable source-backed receipt; a local profile edit or stale approval is insufficient."
       ],
       "exactAliases": [],
       "jurisdictionOverlay": false,

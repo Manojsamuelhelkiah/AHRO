@@ -2,6 +2,13 @@
 
 **Assessment date: 16 October 2026.** Decision package for the existing Onboarding Agent Control Tower. This is an offline assessment, not a rollout or permission change.
 
+**Subsequent definition change:** The four worker-master completion definitions
+were subsequently approved and revised. See the
+[approved worker-master contract record](../worker-master-contract-proposal.md).
+This assessment's matrix, source fingerprints and generic-contract counts retain
+their earlier assessment baseline; they are not a reassessment of that revision.
+Definition approval does not establish an executable worker-master integration.
+
 ## Executive answer
 
 **More intent labels are not the main need.** The reviewed operational catalogue already has **319 canonical atomic definitions and one composite**, reconciled from **320 source atomic outcomes**, across **17 journeys and 88 services**. The one consolidation is mandatory/nonmandatory learning assignment. The fixed **60 commercial/reference concepts** remain a different counting basis.
