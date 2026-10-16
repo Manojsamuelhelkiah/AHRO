@@ -368,3 +368,18 @@ mtime_ms = 1792001858260
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:e3d3609d-9a70-4b2c-8757-ac5b072d1c94/35599f11-e3e0-42fd-8a90-ef98adea265b/53e2ef4a-3d6d-4e0b-a559-87240008a60d"
 storage_version_token = "1792001859056573"
 content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+[[outputs]]
+id = "zC7vmLkD8gQjmnxSPZZxI"
+uri = "file://generated-artifacts/hro-intent-agent-review/hro-intent-agent-assessment.html"
+type = "html"
+title = "HRO intent and agent assessment — 16 October 2026"
+description = "Complete decision report, all 320 canonical definitions, service and role reviews, and embedded JSON/CSV downloads."
+content_type = "text/html"
+
+[[outputs]]
+id = "w-St30XOzksUlfGDn99YH"
+uri = "file://research/current-intent-agent-review/intent-agent-matrix.csv"
+type = "table"
+title = "Complete intent–agent matrix"
+description = "Downloadable CSV covering 319 canonical atomic intents and one composite, with current associations, proposed coordinators, human boundaries, required systems and evidence gaps."

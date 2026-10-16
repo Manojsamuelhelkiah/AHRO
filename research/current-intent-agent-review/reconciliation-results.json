@@ -1,0 +1,310 @@
+{
+  "reviewVersion": "hro-coverage-review-2026-10-16",
+  "assessedOn": "2026-10-16",
+  "counts": {
+    "journeys": 17,
+    "services": 88,
+    "sourceAtomicOutcomes": 320,
+    "canonicalAtomicDefinitions": 319,
+    "compositeDefinitions": 1,
+    "commercialConcepts": 60,
+    "catalogueAliasEdges": 325,
+    "distinctCatalogueAliasLabels": 325,
+    "ambiguousAliasLabels": 0,
+    "historicalAndFictionalExampleDefinitions": 136,
+    "retainedHistoricalScenarioDefinitions": 16,
+    "curatedOfflineRequestDefinitions": 120,
+    "tenantCustomDefinitions": null,
+    "historicalObservedCustomRows": 2,
+    "legacyCandidateRows": 6,
+    "reviewedCandidates": 22,
+    "proposedNewAtomicOutcomes": 1,
+    "unresolvedCandidates": 6,
+    "existingDomainRoles": 12,
+    "existingSupportingRoles": 3,
+    "explicitlyAssociatedServices": 56,
+    "explicitlyUnassociatedServices": 32,
+    "proposedAdditionalRoles": 5,
+    "genericOutcomeDefinitions": 301,
+    "genericEvidenceDefinitions": 290,
+    "genericSystemsDefinitions": 304
+  },
+  "checks": [
+    "canonical/source/composite full coverage",
+    "explicit 56/32 service split",
+    "all 15 role decisions",
+    "source CSV/JSON identity",
+    "catalogue/definition revisions",
+    "source and commercial target integrity",
+    "alias metadata provenance and ambiguity",
+    "exact duplicate source outcome scan",
+    "candidate and role target integrity",
+    "unknown tenant inventory retained",
+    "deterministic committed package comparison"
+  ],
+  "exactDuplicateSourceOutcomes": [],
+  "ambiguousAliases": [],
+  "semanticDuplicateReview": "Only assign-mandatory-learning/assign-learning merge is approved. New-hire benefit determination vs inquiry, learning assignment vs enrollment, scheduling vs work-authorization verification, and country policy context remain distinct. String scan cannot prove semantic uniqueness.",
+  "sourceFingerprints": [
+    {
+      "file": "artifacts/api-server/src/lib/intent-catalog.ts",
+      "sha256": "5b8ae506b3845f60dba42e9890acd5e25a49c12184c4835094081051ef5f0382"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/intent-catalog-types.ts",
+      "sha256": "97bb88d778158235e74d6e82ec941f7e360f137f32ea04e6137d164652b65825"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/intent-catalog.test.ts",
+      "sha256": "473546438a11fbf22e39e34c71541f136e1fd3a116a618ff5067c1e795599d0f"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/agent-catalogue.ts",
+      "sha256": "977a244f90073cd98de6f61afdd477fe8358d96dab2a31956ec2e0a4e2212466"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/agent-invocation.ts",
+      "sha256": "5d7a6767a20deb8d642844e5f31060cbd062520301b6f5a65c2deb1605963ff1"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/intent-registry.ts",
+      "sha256": "2043272fe5dcbd6f4099016556ff475e0e41f9af6662e3b6cb675424c1456080"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/onboarding/operational-agents.ts",
+      "sha256": "13423ce2799b8ad99bf5601356bf001e935fa9154211f7a462ca541627d77be4"
+    },
+    {
+      "file": "artifacts/api-server/src/routes/intent-catalog.ts",
+      "sha256": "ef575f145634bd2d71c68e0f923528dc319e3e2317a3d561055f906de7cdaa2c"
+    },
+    {
+      "file": "artifacts/onboarding-agent/src/pages/intent-catalog.tsx",
+      "sha256": "239f40a2958b9f47a97c09576d60ae648300685bb2d960102d59053ff2610d58"
+    },
+    {
+      "file": "artifacts/onboarding-agent/src/pages/agents/index.tsx",
+      "sha256": "ab831a995621254430d2ce59458237902d9d24b83591d7e217840993677ba3a0"
+    },
+    {
+      "file": "research/hro-master-intent-taxonomy.json",
+      "sha256": "6b802ee961582855a309569e12a2ad5f01a8c825005049173f6cc3b872f49e8a"
+    },
+    {
+      "file": "research/hro-master-intent-taxonomy.csv",
+      "sha256": "7bb654bd5b1cc45ed4fcc0aca36262ca8f4a9720b8dc07481965acc5df6e6dc3"
+    },
+    {
+      "file": "research/hro-master-taxonomy-sources.json",
+      "sha256": "48ace2d0b9f23bb0ebd4bfe60c386fd96f39036a5657470405e3e83f81fe1255"
+    },
+    {
+      "file": "research/hro-master-taxonomy-notes.md",
+      "sha256": "8d045436b907a08aaed56de95f15f05c6cc75b6b18a9aa2b98f0efd03a5a298b"
+    },
+    {
+      "file": "research/hro-operational-catalog-contract.md",
+      "sha256": "51cd8f8b6e1b0151ff2caeae766d1301ba53c8664d2e41d281d5d87126028c2d"
+    },
+    {
+      "file": "research/agent-catalogue-registration-boundaries.md",
+      "sha256": "86a9fb0ae8c9fbecd3f18c0fc009e9841fb5f5177f29bee71e80c2f48dcbad2b"
+    },
+    {
+      "file": "research/hro-intent-agent-architecture.md",
+      "sha256": "b7155f1196792628a9126288abea6d88a3e3415b95e6edfd8e1fc978fc39abd2"
+    },
+    {
+      "file": "research/intent-agent-coverage.json",
+      "sha256": "8329a88eaeed86a1086136627bc495eb28159233abb8e318f46535474c20d311"
+    },
+    {
+      "file": "research/drafts/hro-master-gap-review.md",
+      "sha256": "cbd64edc7e5f99220f0a960dbbd9ea64d5593f39899a0def3e26182f57caa5bb"
+    },
+    {
+      "file": "research/drafts/hro-master-source-review.md",
+      "sha256": "2f09a53b0f8d1c81dc9c70797f8b1e210f0ed015ad570ea53354ac9f44e8935e"
+    },
+    {
+      "file": "research/current-intent-agent-review/review-decisions.ts",
+      "sha256": "b41e1f0a2b7a028c0acac0d8a71cbd9c14ef140572530aa48bbd56b464c0734c"
+    },
+    {
+      "file": "research/current-intent-agent-review/capability-ledger.md",
+      "sha256": "e7818ff8afce532897b13d151f51a2f390b29ff53600c0ff62a33be5f7491666"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/onboarding/action-conversation-contract.ts",
+      "sha256": "f373f77d267a5254e0fb7a7357d95db8014f6f05cd6f80171e5f35881c696bf2"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/onboarding/action-conversation-agents.ts",
+      "sha256": "7d879a5027ba11d4054d17983d3e9c32f85b670d8d13538cc7d7e65e05043dac"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/onboarding/connectors.ts",
+      "sha256": "4c92a83f5a700c56ed388742cce1ac9e91c097f6e062bddc451798d70dfd3d62"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/onboarding/standard-provider-adapters.ts",
+      "sha256": "752d784afb0e5426a5b160798b77ef4ed2bc3b0aa97b224ca4ba9497b2467d99"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/onboarding/standard-provider-source-read.ts",
+      "sha256": "436d296d8e3cfeeb5254b33aec88f7a0b1c652052edcfdea9139e45a8bd852bd"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/onboarding/early-tenure.ts",
+      "sha256": "8c845274762db5f9aaa5774364e3371f1d32475ff35a71444dc311607ccc1d70"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/onboarding/frontline-operations.ts",
+      "sha256": "6f4b05785fb3980d2b96ed42ba9027e1f415c05b9a4060bb9b9fa1477342f34d"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/onboarding/workforce-transfer.ts",
+      "sha256": "c7707b2665fb1d369902147aec1d044bd7e3bc72cb7f2c21f1233ba979aba28d"
+    },
+    {
+      "file": "artifacts/api-server/src/lib/offboarding/exchange-service.ts",
+      "sha256": "88cf891721d3d6ac42407a2dc5eccb375f9e2cd0966dcda6eb11838bd7fbd5ce"
+    },
+    {
+      "file": "research/sources/master-hire-01.md",
+      "sha256": "9f8b819a8bde507db53f861ec5b1a6a58c6f560167bf46fecb86970f1a4dd160"
+    },
+    {
+      "file": "research/sources/master-hire-02.md",
+      "sha256": "8022f006292954510bd7265b4f38af329c0ef93d5961c0dea401467384c31eec"
+    },
+    {
+      "file": "research/sources/master-hire-03.md",
+      "sha256": "e4735d6fb742c0be1de1d8fe883b16e2ae08aff3e0b1662e34300df9d6aad420"
+    },
+    {
+      "file": "research/sources/master-core-01.md",
+      "sha256": "fd331086ab48e6428c05641391a0c4434cc0667f01e5bac4d1b4382632bb4fb1"
+    },
+    {
+      "file": "research/sources/master-core-02.md",
+      "sha256": "8d7e62c6933191fa6c564280d0cbf6dfec4ecac1c32a0d2d7b30542c10d2b347"
+    },
+    {
+      "file": "research/sources/master-core-03.md",
+      "sha256": "c53798f8c94726a16bbeb80399fd19dd079a7df831f26da90bcab2da99b93920"
+    },
+    {
+      "file": "research/sources/master-pay-01.md",
+      "sha256": "ce15de2fb2dbf57eead26870d13328a8335bdb4632f340e3b96d4eedd4a922f2"
+    },
+    {
+      "file": "research/sources/master-pay-02.md",
+      "sha256": "a8a9bd237c80c91645c56e76106f27d224a67ee9ae6c0d39243ea641db896708"
+    },
+    {
+      "file": "research/sources/master-pay-03.md",
+      "sha256": "63285910f4f1eb1734cdf7845f7d047089d1cc4296badd18db26aa3d7cb94725"
+    },
+    {
+      "file": "research/sources/master-talent-01.md",
+      "sha256": "ed1777f56d0b3f80735f9aae136e05ae1db9275eef8e559edcdcd23084e68a7a"
+    },
+    {
+      "file": "research/sources/master-talent-02.md",
+      "sha256": "a08d65e1f7099ea5a2c96eea664a8071863647615951c7c64071504e3a7b33f4"
+    },
+    {
+      "file": "research/sources/master-talent-03.md",
+      "sha256": "3cec72f8de382372b020e5ed816f2a7205a0bd01f16c8aef29d972e9e53866e7"
+    },
+    {
+      "file": "research/sources/master-risk-01.md",
+      "sha256": "e036a86230a7729e3ad9ac9be54802d5077c1c263098b715d8052b11f09e282d"
+    },
+    {
+      "file": "research/sources/master-risk-02.md",
+      "sha256": "3e4731069e949fd5d95e165a8b4155a0e2d42952fd053fc75754bc039be6e9e2"
+    },
+    {
+      "file": "research/sources/master-risk-03.md",
+      "sha256": "fca1c897ddb3542c7748b4a064ce25cca3c4a2a1c136ad4cf0c4645eb044d429"
+    },
+    {
+      "file": "research/sources/sap-core-01-employee-data.md",
+      "sha256": "6eda75edc61d573dcb9cd7e4718024870e8bb9ec12893f2d41a084e495bd2a34"
+    },
+    {
+      "file": "research/sources/sap-core-02-pay-statement.md",
+      "sha256": "597625732fd32185ff5c299c17c1d0df7414949872910127f61a9d75056656d7"
+    },
+    {
+      "file": "research/sources/sap-core-03-time-management.md",
+      "sha256": "50291a428506791b904a89d554dd31946f0a057705cb317b68fb76aa23534564"
+    },
+    {
+      "file": "research/sources/sap-core-04-benefits-claims.md",
+      "sha256": "e27880fa2097501bc54b29a1c4f8f4a0d24d3e63419dcfb3f662802067c6e81c"
+    },
+    {
+      "file": "research/sources/sap-core-snippets.md",
+      "sha256": "14961246e066fbf9e5b48b7d71ee2b68f381cb9508327b81153532c0e74d2134"
+    },
+    {
+      "file": "research/sources/sap-lifecycle-snippets.md",
+      "sha256": "a5d305d7a469360d84bb8dc2e6ff196f1130e389f5bea27fb9c36b147a568b3d"
+    },
+    {
+      "file": "research/sources/sap-lifecycle-03-enterprise-service-management.md",
+      "sha256": "20242bdd3449093591b41fd899b82c846ab6a07bc4873444c4aede0b9d8c45c8"
+    },
+    {
+      "file": "research/sources/sap-lifecycle-04-data-retention-privacy.md",
+      "sha256": "6bb0e945866c062289321c3cd96a9609427973e313cf34bc010da02be4ef12e4"
+    },
+    {
+      "file": "research/sources/oss-github-01-avature-intent-classification.md",
+      "sha256": "bfc27cbf700116ec16ae5e7b59a38e145c5b76e7ced20758ef242a21e75e52a3"
+    },
+    {
+      "file": "research/sources/oss-datasets-01-hr-multiwoz.md",
+      "sha256": "a18228df67fb092d908f5431f5dad82b53d9fef62befb9a1aeaabda01c2ec7fc"
+    },
+    {
+      "file": "research/sources/oss-datasets-02-hr-practitioner.md",
+      "sha256": "b4c16f89bbf8ba94f8c67be20610fcffd8ea85a338ba1be51d552cdf4831c1eb"
+    },
+    {
+      "file": "research/sources/oss-github-03-syncora-hr-policies-qa.md",
+      "sha256": "67bcfdac390cf720b8f37f941f563a76fd2a5550157caa5c5d3ceb4bc1519c69"
+    },
+    {
+      "file": "research/sources/oss-datasets-04-kaggle-chatbot-intents.md",
+      "sha256": "1c0596bf175542dca3df8d2d49532d3e9183a5cf4eae2d55d00180c07428b8d0"
+    },
+    {
+      "file": "research/sources/oss-datasets-snippets.md",
+      "sha256": "c77457be4a8f4d64900b34007eed872ea8f031d62915d396b83bdc6c138131f9"
+    },
+    {
+      "file": "research/sources/agent-architecture-01-openai-orchestration.md",
+      "sha256": "72941042fc5f8c3d86391fed2995ee0a764bede409a7e1db9b85596e2f0250c8"
+    },
+    {
+      "file": "research/sources/agent-architecture-02-azure-agent-design-patterns.md",
+      "sha256": "f48e58b704a5fad98c655740790cb67a8435705e11d76534085842de36912158"
+    },
+    {
+      "file": "research/sources/agent-architecture-03-temporal-error-handling.md",
+      "sha256": "e04dad785cc1ba8a5ac662de62a765e95ff019956be0b69acba26f862955af10"
+    },
+    {
+      "file": "research/sources/agent-architecture-04-microsoft-tool-approval.md",
+      "sha256": "7215e7c57b58b2d13ab5605fbf05c3cef20ee7896500426c32ac291c95463979"
+    },
+    {
+      "file": "research/sources/agent-architecture-snippets.md",
+      "sha256": "aad5be3a3944579ceb2575d8fbd8306f84c26120ede88553317cecae09a653e7"
+    }
+  ]
+}

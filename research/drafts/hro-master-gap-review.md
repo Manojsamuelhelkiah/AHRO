@@ -1,3 +1,8 @@
+> Historical draft review, superseded for current gap decisions by the
+> [2026-10-16 assessment](../current-intent-agent-review/README.md). The counts and
+> many missing-leaf recommendations below describe an earlier source draft;
+> they are not instructions to add duplicate outcomes or change the composite.
+
 Findings (read-only review of all requested artifacts):
 
 P0 — legacy mapping is not honestly “every key mapped to a leaf.” `validation.legacyKeysAccountedForExactlyOnce=true` is technically true only because four reference keys are attached to composite service intents: `new-hire-setup`→`worker-master-setup`, `salary-certificate`→`employment-documents`, `pay-frequency-question`→`pay-access`, `final-pay-question`→`pay-release`. Exact recommended edits: create atomic leaves `new-hire-setup`, `salary-certificate`, `pay-frequency-question`, `final-pay-question`, remove those four `legacyReferenceKey(s)` from parent services, and point each reference row to the new leaf. Mark parent-level mapping only if product explicitly supports composite intents; otherwise the current mapping overstates runtime/leaf coverage. The other 56 reference keys map to leaves.

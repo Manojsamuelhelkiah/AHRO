@@ -1,5 +1,11 @@
 # HRO Intent Coverage and Specialist-Agent Architecture
 
+> **Historical assessment — current guidance superseded on 2026-10-16.**
+> Use [the current intent/agent decision package](current-intent-agent-review/README.md)
+> for operational scope, role coverage and capability conclusions. This report's
+> 60-reference baseline, simulated routes and observed custom rows are retained
+> for historical/commercial provenance, not current operational coverage.
+
 **Research date:** 2026-09-08  
 **Decision status:** Architecture recommendation; no runtime agents or integrations were implemented  
 **Companion data:** `intent-agent-coverage.json`, `intent-agent-coverage.csv`, `onboarding-compound-action-plan.json`, `sources.json`

@@ -1,5 +1,9 @@
 # Research Notes: Comprehensive HRO Intent Taxonomy
 
+> For current canonical reconciliation, contract-quality findings and agent
+> recommendations, use the [2026-10-16 assessment](current-intent-agent-review/README.md).
+> These source-generation notes remain provenance, not proof of execution.
+
 **Status:** complete
 **Depth:** Deep
 

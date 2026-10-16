@@ -35,3 +35,14 @@ dependencies separate from browsing groups. Put actual parent/root linkage on
 future instances. Merge only outcomes with the same completion semantics; retain
 uncertain distinctions as visible review gaps. Retired simulations and fictional
 requests never establish current operational maturity.
+
+In coverage assessments, count explicit service-to-role associations separately
+from associations inferred through composite definition memberships.
+
+**Why:** Composite browsing memberships can make a reverse join appear to cover
+a service that has no reviewed atomic coordinating owner. Treating that as
+coverage conceals ownership gaps.
+
+**How to apply:** Preserve both the actual definition associations and the
+explicit service basis in reports. Assign proposed atomic accountability
+independently of composite orchestration; neither grants execution authority.

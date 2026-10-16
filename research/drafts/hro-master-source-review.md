@@ -1,3 +1,7 @@
+> Historical source audit. The [2026-10-16 assessment](../current-intent-agent-review/README.md)
+> preserves these evidence-strength distinctions and supersedes current
+> completeness/coverage guidance, without refetching or upgrading these sources.
+
 Audit result: the 15 `master-*.md` files are fetched evidence for 15 primary URLs; the five drafts add 10 deduplicated secondary/snippet URLs. `research/sources.json` (lines 3-232) does not register any master-* evidence and is a separate older registry (SAP/OSS/agent architecture); it should not be treated as the HRO master registry. All master evidence files carry fetched timestamps around 2026-09-08.
 
 DEDUPLICATED REGISTRY (URL | title | date | tier | saved evidence | focus | fetched/snippet)

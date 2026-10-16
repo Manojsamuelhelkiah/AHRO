@@ -1,5 +1,9 @@
 # Research Notes: HRO Intent Coverage and Agent Responsibilities
 
+> Historical research notes. Current operational scope, capability and role
+> recommendations are superseded by the
+> [2026-10-16 assessment](current-intent-agent-review/README.md).
+
 **Status:** complete; independent architecture review passed
 **Depth:** Standard
 
