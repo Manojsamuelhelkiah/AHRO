@@ -30,7 +30,9 @@ test('Action Center refreshes reviews without duplicate work and fails closed ac
     const path = String(input); requests.push(path);
     if (!path.includes('workforce-insights')) {
       return new Response(JSON.stringify(path.includes('action-center') ? {
-        notifications: [], documentFollowups: [], workItems: [], opportunities: [], domainRecords: [], caseSummaries: [],
+        approvals: [], completed: [], notifications: [], documentFollowups: [], workItems: [], opportunities: [], domainRecords: [], caseSummaries: [],
+        offboardingSource: 'available',
+        counts: { pendingApprovals: 0, notifications: 0, missingDocuments: 0, openWorkItems: 0, opportunities: 0, completed: 0 },
       } : []), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (init?.method === 'PATCH') reviewStatus = 'resolved';

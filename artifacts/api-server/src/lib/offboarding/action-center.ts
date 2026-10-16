@@ -20,8 +20,9 @@ async function separationActionCenterSnapshot(org: string, actor: string, filter
     caseId: number; caseType: string; label: string; status: string; caseHref: string;
   }> = [];
   const domainRecords: Array<{
-    id: string; caseId: number; category: "attention" | "communication" | "completed";
+    id: string; caseId: number; category: "attention" | "communication" | "completed" | "activity";
     title: string; detail: string; status: string; caseHref: string;
+    createdAt?: string | null; actor?: string | null; owner?: string | null; dueAt?: string | null;
   }> = [];
   if (filters.caseType && filters.caseType !== "Offboarding") return { caseSummaries, domainRecords, offboardingSource: "available" as const };
   const snapshot = await separationListSnapshot(org, actor);
@@ -42,8 +43,16 @@ async function separationActionCenterSnapshot(org: string, actor: string, filter
       if (!completed && ["cancelled", "transfer-review"].includes(s.status)) continue;
       domainRecords.push({ id: `separation-task:${s.id}:${task.id}`, caseId: s.id,
         category: completed ? "completed" : "attention",
-        title: "Offboarding task", detail: `Recorded task state: ${task.status}.`,
-        status: task.status, caseHref });
+        title: detail.privateVisible ? task.label : "Offboarding task", detail: `Recorded task state: ${task.status}.`,
+        status: task.status, caseHref, owner: detail.privateVisible ? task.owner : null, dueAt: task.dueAt,
+        createdAt: task.evidence?.recordedAt ?? null, actor: null });
+    }
+    for (const checkpoint of detail.history.slice(0, 20)) {
+      domainRecords.push({ id: `separation-history:${s.id}:${checkpoint.version}`, caseId: s.id,
+        category: "activity", title: "Offboarding action recorded",
+        detail: `Recorded action: ${checkpoint.action}. State: ${checkpoint.status}.`,
+        status: "recorded", caseHref, createdAt: checkpoint.recordedAt.toISOString(),
+        actor: checkpoint.actor });
     }
     // Exchange metadata is a separate domain source, not onboarding delivery
     // history. Do not read its payload without its existing disclosure gate.
@@ -51,7 +60,7 @@ async function separationActionCenterSnapshot(org: string, actor: string, filter
       try { await confidentialRead(tx, org, actor, undefined, s.id); }
       catch (e) { if (e instanceof SeparationError && e.status === 403) return []; throw e; }
       return tx.select({ id: offbExchanges.id, kind: offbExchanges.kind, status: offbExchanges.status,
-        direction: offbExchanges.direction }).from(offbExchanges).where(and(
+        direction: offbExchanges.direction, createdAt: offbExchanges.createdAt }).from(offbExchanges).where(and(
         eq(offbExchanges.organizationId, org), eq(offbExchanges.caseId, s.id),
       )).orderBy(desc(offbExchanges.createdAt));
     });
@@ -60,7 +69,7 @@ async function separationActionCenterSnapshot(org: string, actor: string, filter
       domainRecords.push({ id: `separation-exchange:${message.id}`, caseId: s.id,
         category: "communication", title: "Offboarding communication",
         detail: `Recorded ${message.direction} ${message.kind} state: ${message.status}.`,
-        status: message.status, caseHref });
+        status: message.status, caseHref, createdAt: message.createdAt.toISOString(), actor: null });
     }
   }
   return { caseSummaries, domainRecords: domainRecords.filter(r =>

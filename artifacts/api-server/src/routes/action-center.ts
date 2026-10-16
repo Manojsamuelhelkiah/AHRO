@@ -228,16 +228,18 @@ async function sensitiveActionCenterProjection(
       case: await safeCase(item.case, item.caseId),
     };
   }));
-  const approvals = await Promise.all(visibleApprovals.map(async (item) => ({
-    ...item,
+  const approvals = await Promise.all(visibleApprovals.map(async (item) => {
+    const [sensitive, fields] = await Promise.all([accessFor(item.caseId), caseAccessFor(item.caseId)]);
+    const narrative = fields.notesRead && fields.profileRead && hasOpaqueNarrativeAccess(sensitive);
+    return { ...item,
     // Approval recommendation/rationale are opaque free text. Do not pass
     // them through a list/dashboard merely because their wording had no
     // classifier hit.
-    ruleRef: "restricted-sensitive-approval",
-    recommendation: "Restricted specialist approval pending or recorded.",
-    rationale: "Details are restricted to the assigned specialist.",
+    ruleRef: narrative ? item.ruleRef : "restricted-sensitive-approval",
+    recommendation: narrative ? item.recommendation : "Restricted approval pending or recorded.",
+    rationale: narrative ? item.rationale : "Approval details are restricted.",
     case: await safeCase(item.case, item.caseId),
-  })));
+  }; }));
   const notifications = await Promise.all(visibleNotifications.map(async item => {
     const [sensitive, fields] = await Promise.all([accessFor(item.caseId), caseAccessFor(item.caseId)]);
     const narrative = fields.notesRead && fields.profileRead && hasOpaqueNarrativeAccess(sensitive);
@@ -251,17 +253,17 @@ async function sensitiveActionCenterProjection(
       initiator: narrative && fields.notesRead ? item.initiator : "Restricted",
     };
   }));
-  const workItems = visibleWorkItems.map((item) => ({
-    ...item,
-    owner: null,
-    assignee: null,
-    reason: null,
-    actor: "Restricted",
+  const workItems = await Promise.all(visibleWorkItems.map(async item => {
+    const [sensitive, fields] = await Promise.all([accessFor(item.caseId), caseAccessFor(item.caseId)]);
+    const narrative = fields.notesRead && fields.profileRead && hasOpaqueNarrativeAccess(sensitive);
+    return { ...item, owner: narrative ? item.owner : null, assignee: narrative ? item.assignee : null,
+      reason: narrative ? item.reason : null, actor: narrative ? item.actor : "Restricted" };
   }));
-  const completed = visibleCompleted.map((item) => ({
-    ...item,
-    summary: "Restricted onboarding action recorded.",
-    actor: "Restricted",
+  const completed = await Promise.all(visibleCompleted.map(async item => {
+    const [sensitive, fields] = await Promise.all([accessFor(item.caseId), caseAccessFor(item.caseId)]);
+    const narrative = fields.notesRead && fields.profileRead && hasOpaqueNarrativeAccess(sensitive);
+    return { ...item, summary: narrative ? item.summary : "Restricted action recorded.",
+      actor: narrative ? item.actor : "Restricted" };
   }));
   const opportunities = visibleOpportunities.map((item) => ({
     id: item.id,
@@ -373,7 +375,15 @@ router.get("/onboarding/action-center", async (req, res, next) => {
       access,
       req.authUserId,
     );
-    const domain = await separationActionCenter(organizationId, req.authUserId!, parsed.data);
+    // A separate-store outage must not suppress authorized onboarding work.
+    // Denied/restricted coverage is explicitly distinct from a zero queue.
+    const domain = await separationActionCenter(organizationId, req.authUserId!, parsed.data).catch(error => {
+      req.log?.warn({ source: "offboarding", denied: error instanceof SeparationError && error.status === 403 },
+        "Action Center source unavailable");
+      return { caseSummaries: [], domainRecords: [],
+        offboardingSource: error instanceof SeparationError && error.status === 403
+          ? "denied" as const : "unavailable" as const };
+    });
     const unified = { ...result, domainRecords: domain.domainRecords,
       offboardingSource: domain.offboardingSource,
       caseSummaries: [...result.caseSummaries, ...domain.caseSummaries] };

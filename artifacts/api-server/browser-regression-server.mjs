@@ -317,6 +317,8 @@ async function cleanupFixture() {
 
 try {
   await ensureFixture();
+  const { seedControlTowerBrowserFixture } = await import("./control-tower-browser-fixture.mjs");
+  await seedControlTowerBrowserFixture(dbPackage, isolatedSchema, reviewer);
 } catch (error) {
   await abandonStartup();
   throw error;

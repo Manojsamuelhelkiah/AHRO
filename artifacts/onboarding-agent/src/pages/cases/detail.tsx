@@ -48,6 +48,7 @@ import { AskCaseSection } from './detail/ask-case-section';
 import { Disclosure } from './detail/disclosure';
 import { CaseActionBlock } from './detail/case-action-block';
 import { CaseFlowPanel } from '../../components/case-flow-panel';
+import { CaseExampleSection } from '../../components/control-tower/examples-section';
 import { CaseAccessProvider, RestrictedActionNotice, type CaseAccessPermissions } from './detail/case-access';
 
 export function CaseDetailPage() {
@@ -264,9 +265,10 @@ export function CaseDetailPage() {
         <div><p className="text-sm font-semibold">{sampleCaseReference(c) ?? `Case #${caseId}`}</p>
           <h1 className="break-words text-2xl font-semibold text-[var(--text-primary)]">{permissions.access.profileRead ? caseTitleOf(c) : 'Case details restricted'}</h1>
           <p className="mt-1 text-sm text-[var(--text-muted)]">{permissions.access.profileRead ? caseTypeOf(c) : 'Case details restricted'} · Held for specialist review · No external action authorized</p>
-          {isFictionalOfflineExample(c) && <p className="mt-2 text-xs">Read-only · External action not authorized.</p>}</div>
+</div>
         <CaseActionBlock c={c} caseId={caseId} pendingApprovals={permissions.access.notesRead ? pendingApprovals : []} setTab={setActiveTab} offlineSample={offlineSample} />
         {askNode}
+        <CaseExampleSection caseId={caseId} />
         <Disclosure title="Original intake request" summary="Submitted fields and request details">
           <OriginalIntent c={c} />
           {c.batchIntake ? <HroIntakeRequestPanel request={c.batchIntake} sampleContext={c} /> :
@@ -384,6 +386,7 @@ export function CaseDetailPage() {
           availableTabs={['Overview', 'Progress', 'Documents', ...(permissions.access.notesRead ? ['Communications', 'Audit'] : [])]} />}
       </div>
       </Disclosure>
+      <CaseExampleSection caseId={caseId} />
       <Disclosure title="Flow" summary="Read-only stages, tasks, blockers and recorded history" testId="disclosure-flow">
         <CaseFlowPanel caseId={caseId} />
       </Disclosure>

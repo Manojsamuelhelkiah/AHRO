@@ -69,6 +69,7 @@ import type {
   ClientOperationsUpdate,
   ConfigureHrPolicyDrift200,
   ConfirmSensitiveRetentionShorteningBody,
+  ControlTowerExamples,
   CorpusSummary,
   CustomIntent,
   CustomIntentInput,
@@ -17063,6 +17064,83 @@ export function useGetOnboardingDashboard<TData = Awaited<ReturnType<typeof getO
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetOnboardingDashboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetControlTowerExamplesUrl = () => {
+
+
+
+
+  return `/api/onboarding/control-tower/examples`
+}
+
+/**
+ * @summary Authorized fixed authored reliability and quality examples, never live telemetry
+ */
+export const getControlTowerExamples = async ( options?: RequestInit): Promise<ControlTowerExamples> => {
+
+  return customFetch<ControlTowerExamples>(getGetControlTowerExamplesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetControlTowerExamplesQueryKey = () => {
+    return [
+    `/api/onboarding/control-tower/examples`
+    ] as const;
+    }
+
+
+export const getGetControlTowerExamplesQueryOptions = <TData = Awaited<ReturnType<typeof getControlTowerExamples>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getControlTowerExamples>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetControlTowerExamplesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getControlTowerExamples>>> = ({ signal }) => getControlTowerExamples({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getControlTowerExamples>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetControlTowerExamplesQueryResult = NonNullable<Awaited<ReturnType<typeof getControlTowerExamples>>>
+export type GetControlTowerExamplesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Authorized fixed authored reliability and quality examples, never live telemetry
+ */
+
+export function useGetControlTowerExamples<TData = Awaited<ReturnType<typeof getControlTowerExamples>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getControlTowerExamples>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetControlTowerExamplesQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

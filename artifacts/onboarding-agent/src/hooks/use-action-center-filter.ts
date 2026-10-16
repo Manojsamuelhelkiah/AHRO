@@ -14,10 +14,10 @@ export function useActionCenterScope() {
 export function useActionCenter(params: GetOnboardingActionCenterParams) {
   const caseType = useActionCenterCaseType();
   const scope = useActionCenterScope();
-  const input = { ...params, caseType };
+  const input = { limit: 200, ...params, caseType };
   const query = useGetOnboardingActionCenter(input, { query: {
     queryKey: [...getGetOnboardingActionCenterQueryKey(input), ...scope],
-    staleTime: 0, refetchInterval: 30_000, retry: false,
+    staleTime: 0, refetchInterval: 30_000, refetchOnWindowFocus: true, refetchOnMount: 'always', retry: false,
   } });
   // Never retain previously disclosed records following a denied refresh.
   return { ...query, data: query.isError ? undefined : query.data };

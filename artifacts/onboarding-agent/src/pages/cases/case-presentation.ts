@@ -19,6 +19,27 @@ export const CASE_TYPES = [
 export type CaseTypeFilter = (typeof CASE_TYPES)[number];
 export type CaseFamily = Exclude<CaseTypeFilter, 'All Cases'>;
 
+/** Shared pipeline/reporting status; display completion does not prove execution. */
+export function statusOf(c: { lifecycleStage?: string; orchestrationStatus?: string;
+  syntheticJourney?: { outcome: string } | null }) {
+  if (c.syntheticJourney) return c.syntheticJourney.outcome === 'completed' ? 'Completed'
+    : c.syntheticJourney.outcome === 'rejected' ? 'Rejected' : 'Blocked';
+  const stage = (c.lifecycleStage || '').toLowerCase();
+  const orch = (c.orchestrationStatus || '').toLowerCase();
+  if (['completed', 'complete', 'closed'].includes(stage) || ['completed', 'done'].includes(orch)) return 'Completed';
+  if (['rejected', 'declined', 'cancelled', 'canceled', 'transfer-review'].includes(stage) ||
+    ['rejected', 'declined', 'cancelled', 'canceled'].includes(orch)) return 'Rejected';
+  if (orch === 'blocked' || orch === 'checklist-blocked' || orch === 'failed' || stage === 'exception') return 'Blocked';
+  if (orch === 'waiting-approval') return 'Human Review';
+  if (stage === 'trigger-received') return 'New';
+  if (orch === 'running') return 'In Progress';
+  return 'Waiting';
+}
+
+export function caseIsActive(c: Parameters<typeof statusOf>[0]) {
+  return !['Completed', 'Rejected'].includes(statusOf(c));
+}
+
 /** Consume only the authorized server projection; never infer missing history. */
 export function originalIntentOf(c: { originalIntent?: string | null }): string {
   return c.originalIntent === null ? 'Restricted' : c.originalIntent || 'Not recorded';

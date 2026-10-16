@@ -22,3 +22,10 @@ export function caseListPath(search: string, type: WorkItemFilter, hash = ''): s
 export function legacySeparationsDestination(search: string, hash = ''): string {
   return caseListPath(search, 'Offboarding', hash);
 }
+
+export function activeOnlyFromSearch(search: string): boolean {
+  return new URLSearchParams(search).get('activeOnly') === '1';
+}
+export function activeFamilyHref(family: string): string {
+  return `/cases?caseType=${encodeURIComponent(family)}&activeOnly=1`;
+}

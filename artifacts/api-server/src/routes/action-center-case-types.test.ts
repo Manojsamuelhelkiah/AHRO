@@ -196,13 +196,16 @@ test("cross-client records and denied separation sources never disclose envelope
   const foreign = await read("caseType=Offboarding", reader, otherOrg);
   assert.equal(foreign.status, 403);
 });
-test("offboarding source failure is explicit, not an empty success or raw database error", async () => {
+test("offboarding failure is an explicit partial source, not an empty success or raw database error", async () => {
   // Disposable schema only. Restore even when the assertion fails.
   await db.execute(sql`ALTER TABLE offb_cases RENAME TO action_family_unavailable`);
   try {
     const result = await read("caseType=Offboarding");
-    assert.equal(result.status, 503);
-    assert.equal(result.body.message, "Offboarding records could not be loaded.");
+    assert.equal(result.status, 200);
+    assert.equal(result.body.offboardingSource, "unavailable");
+    assert.deepEqual(result.body.caseSummaries, []);
+    assert.deepEqual(result.body.domainRecords, []);
+    assert.doesNotMatch(JSON.stringify(result.body), /relation .* does not exist|Failed query/);
   } finally { await db.execute(sql`ALTER TABLE action_family_unavailable RENAME TO offb_cases`); }
 });
 test("revoked case access disappears on refresh and cannot contribute to filtered counts", async () => {

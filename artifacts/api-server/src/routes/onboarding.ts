@@ -1154,6 +1154,7 @@ async function insertCaseAndStart(
 
 router.get("/onboarding/dashboard", async (req, res, next) => {
   try {
+    res.setHeader("Cache-Control", "no-store");
     const organizationId = getOrganizationId(req);
     const ownedCases = await demoPrincipalVisibleCases(req, await excludeUatAggregateCases(await db
       .select()
@@ -1182,14 +1183,13 @@ router.get("/onboarding/dashboard", async (req, res, next) => {
           evidenceBelongsToOperationalGeneration(candidate, approval.createdAt, approval.id, "approvals")) &&
         aggregateCaseIds.has(approval.caseId) &&
         (!isDay1ReadinessApproval(approval) || readinessCaseIds.has(approval.caseId)));
-    const recent = (await db
+    const recent = aggregateCaseIds.size ? (await db
       .select()
       .from(onbEvents)
-      .where(organizationWhere(onbEvents, organizationId))
+      .where(and(organizationWhere(onbEvents, organizationId),
+        inArray(onbEvents.caseId, [...aggregateCaseIds])))
       .orderBy(desc(onbEvents.createdAt), desc(onbEvents.id))
-      .limit(60))
-      .filter((event) => event.caseId === null || aggregateCaseIds.has(event.caseId))
-      .slice(0, 12);
+      .limit(12)) : [];
 
     const byStageMap = new Map<string, number>();
     for (const c of cases) {

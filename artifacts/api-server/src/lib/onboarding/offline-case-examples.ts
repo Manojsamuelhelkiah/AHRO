@@ -25,7 +25,7 @@ export async function acquireOfflineExampleInventoryLock(tx: Transaction) {
  * Prior denied/revoked grants are never overwritten or revived. No sensitive
  * identity permission, edit permission, tool, or specialist authority is issued.
  */
-export async function provisionOfflineExampleReadAccess(tx: Transaction, organizationId: string, confirmation: string) {
+export async function provisionOfflineExampleReadAccess(tx: Transaction, organizationId: string, confirmation: string, caseIds?: readonly number[]) {
   assertOfflineExampleProvisioning(organizationId, confirmation);
   await acquireOfflineExampleInventoryLock(tx);
   const [tenant] = await tx.select({ slug: organizationsTable.slug, name: organizationsTable.name })
@@ -42,7 +42,7 @@ export async function provisionOfflineExampleReadAccess(tx: Transaction, organiz
   const principals = members.filter(member => registry.some(setting =>
     setting.key === demoPrincipalSettingKey(member.userId) && parseRegisteredDemoProfile(setting.value) !== null));
   const cases = (await tx.select().from(onbCases).where(eq(onbCases.organizationId, organizationId)))
-    .filter(isFictionalOfflineExampleCase);
+    .filter(row => isFictionalOfflineExampleCase(row) && (!caseIds || caseIds.includes(row.id)));
   const readKeys = ["flow.case.read", "data.case.profile.read", "data.case.notes.read", "data.case.readiness.read"];
   const existing = await tx.select().from(accessNamedGrants).where(eq(accessNamedGrants.organizationId, organizationId));
   const seen = new Set(existing.filter(grant => grant.principalType === "human" && grant.scope === "case")

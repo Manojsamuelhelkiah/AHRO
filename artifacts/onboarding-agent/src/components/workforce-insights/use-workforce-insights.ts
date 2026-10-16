@@ -48,8 +48,12 @@ export function useWorkforceScope(filters?: GetWorkforceInsightsParams) {
 
   const query = useGetWorkforceInsights(filters, {
     request: { headers },
-    query: { queryKey: key as unknown as readonly unknown[] as never, enabled: Boolean(organizationId), retry: false, refetchInterval: 30_000, staleTime: 0, refetchOnMount: 'always' },
+    query: { queryKey: key as unknown as readonly unknown[] as never, enabled: Boolean(organizationId && userId && sessionId), retry: false, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 0, refetchOnMount: 'always' },
   });
+  useEffect(() => {
+    const cached = query.isError ? queryClient.getQueryCache().find({ queryKey: key, exact: true }) : undefined;
+    if (cached?.state.data !== undefined) cached.setState({ data: undefined });
+  }, [query.isError, identity, JSON.stringify(filters), queryClient]);
 
   const invalidateAll = () => {
     void queryClient.invalidateQueries({ queryKey: getGetWorkforceInsightsQueryKey() });

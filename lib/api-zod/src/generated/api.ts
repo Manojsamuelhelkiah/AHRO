@@ -13536,6 +13536,41 @@ export const GetOnboardingDashboardResponse = zod.object({
 
 
 /**
+ * @summary Authorized fixed authored reliability and quality examples, never live telemetry
+ */
+export const GetControlTowerExamplesResponse = zod.object({
+  "organizationId": zod.string(),
+  "generatedAt": zod.string(),
+  "source": zod.enum(['authored-examples']),
+  "inventorySize": zod.number(),
+  "available": zod.number(),
+  "answerSamples": zod.number(),
+  "answerMatches": zod.number(),
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.number(),
+  "reference": zod.string(),
+  "family": zod.enum(['Onboarding', 'Employee Changes', 'Payroll', 'Benefits', 'Leave', 'Compliance', 'Offboarding', 'HR Helpdesk', 'IT Access', 'Learning', 'Mobility', 'Documents']),
+  "caseHref": zod.string(),
+  "title": zod.string(),
+  "category": zod.enum(['integration-failure', 'ambiguous-timeout', 'stale-update', 'stuck-task', 'answer-match', 'human-correction', 'fairness-review']),
+  "agent": zod.string(),
+  "source": zod.string(),
+  "task": zod.string(),
+  "status": zod.string(),
+  "impact": zod.string(),
+  "owner": zod.string().nullable(),
+  "nextStep": zod.string(),
+  "expected": zod.string().nullable(),
+  "observed": zod.string().nullable(),
+  "corrected": zod.string().nullable(),
+  "matched": zod.boolean().nullable(),
+  "limitations": zod.string()
+}))
+})
+
+
+/**
  * Retired. Authenticated requests return 410.
  * @deprecated
  * @summary Retired fictional-case catalog endpoint
@@ -16696,7 +16731,7 @@ export const getOnboardingActionCenterResponseOpportunitiesItemActionVersionMin 
 
 
 export const GetOnboardingActionCenterResponse = zod.object({
-  "offboardingSource": zod.enum(['available', 'partial', 'denied']).optional(),
+  "offboardingSource": zod.enum(['available', 'partial', 'denied', 'unavailable']).optional(),
   "caseSummaries": zod.array(zod.object({
   "caseId": zod.number(),
   "caseType": zod.enum(['Onboarding', 'Employee Changes', 'Payroll', 'Benefits', 'Leave', 'Compliance', 'Offboarding', 'HR Helpdesk', 'IT Access', 'Learning', 'Mobility', 'Documents']),
@@ -16707,10 +16742,14 @@ export const GetOnboardingActionCenterResponse = zod.object({
   "domainRecords": zod.array(zod.object({
   "id": zod.string(),
   "caseId": zod.number(),
-  "category": zod.enum(['attention', 'communication', 'completed']),
+  "category": zod.enum(['attention', 'communication', 'completed', 'activity']),
   "title": zod.string(),
   "detail": zod.string(),
   "status": zod.string(),
+  "createdAt": zod.string().nullish(),
+  "actor": zod.string().nullish(),
+  "owner": zod.string().nullish(),
+  "dueAt": zod.string().nullish(),
   "caseHref": zod.string()
 })).optional(),
   "version": zod.number(),

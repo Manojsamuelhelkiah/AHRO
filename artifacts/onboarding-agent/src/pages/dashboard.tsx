@@ -1,29 +1,24 @@
 import React, { useMemo } from 'react';
 import { lifecycleStageText } from '../lib/lifecycle-stage-presentation';
-import {
-  useGetOnboardingDashboard,
-  useListOnboardingCases,
-  useListOnboardingApprovals,
-} from '@workspace/api-client-react';
-import type { OnbCase, OnbApproval, OnbEvent } from '@workspace/api-client-react';
+import type { OnbCase } from '@workspace/api-client-react';
 import { Card, PageHeader, Button } from '@/components/ui-shared';
 import { Link } from 'wouter';
-import { Activity, Bot, CheckCircle2, ShieldAlert, UserCheck, Layers, AlertOctagon, Timer } from 'lucide-react';
+import { Activity, Bot, ShieldAlert, UserCheck, Layers, AlertOctagon, Timer } from 'lucide-react';
 import { EngineBadge } from '@/components/engine-badge';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { WorkforceReviewPanel } from '@/components/workforce-insights/workforce-review-panel';
-import { statusOf, caseTypeOf } from './cases/index';
+import { statusOf, caseIsActive } from './cases/case-presentation';
 import { operationalReportingPopulation } from '../lib/operational-reporting';
-
-/* ----------------------------- derived metrics ---------------------------- */
+import { useControlTower } from '../hooks/use-control-tower';
+import { projectAttention, familyWorkload, executionEvidence, composeActivity, liveReliability, sourceDisclosures, type AttentionItem } from '../lib/control-tower';
+import { ActivityPanel, ReliabilityPanel } from '../components/control-tower/panels';
+import { ExamplesSection } from '../components/control-tower/examples-section';
 
 function isActive(c: OnbCase) {
-  return statusOf(c) !== 'Completed';
+  return caseIsActive(c);
 }
 
-/** Mirrors the backend's day-1-risk derivation: the effective date is inside the
- *  next 7 days while the case is blocked, awaiting approval, or has open
- *  workstream blockers. Past effective dates are excluded, matching the backend. */
+/** Mirrors the backend's day-1-risk derivation. */
 function slaAtRisk(c: OnbCase): boolean {
   if (!isActive(c)) return false;
   const days = (new Date(c.joiningDate).getTime() - Date.now()) / 86400000;
@@ -39,78 +34,50 @@ function ago(iso: string): string {
   try { return formatDistanceToNowStrict(new Date(iso), { addSuffix: false }); } catch { return ''; }
 }
 
-/* --------------------------------- page ---------------------------------- */
-
+const stamp = (d: Date | null) => (d ? `Last successful update ${d.toLocaleTimeString()}` : 'Not yet loaded');
 export function DashboardPage() {
-  const dash = useGetOnboardingDashboard();
-  const casesQ = useListOnboardingCases();
-  const approvalsQ = useListOnboardingApprovals({ status: 'all' });
-
-  const { cases, approvals } = operationalReportingPopulation(casesQ.data ?? [], approvalsQ.data ?? []);
-  const pendingApprovals = useMemo(() => approvals.filter((a) => a.status === 'pending'), [approvals]);
+  const ct = useControlTower();
+  const { dash, cases: casesQ, actions: actionsQ, examples: examplesQ, reviews } = ct;
+  const cases = useMemo(() => (casesQ.isError || !casesQ.data ? [] : operationalReportingPopulation(casesQ.data, []).cases), [casesQ.data, casesQ.isError]);
+  const actionData = ct.actionsData.data;
+  const projection = useMemo(() => projectAttention(actionData, reviews.data), [actionData, reviews.data]);
 
   const metrics = useMemo(() => {
     const active = cases.filter(isActive);
-    const completed = cases.filter((c) => statusOf(c) === 'Completed');
-    const blocked = cases.filter((c) => statusOf(c) === 'Blocked');
-    const humanReview = cases.filter((c) => statusOf(c) === 'Human Review');
-    const atRisk = cases.filter(slaAtRisk);
-
-    // Autonomously resolved: completed cases that never raised a human approval.
-    // Only computable when approvals history (status=all) has loaded.
-    let autonomousPct: number | null = null;
-    let autonomousSplit: { autonomous: number; assisted: number } | null = null;
-    // Fictional completed stages are still counted as statuses, never as a
-    // verified autonomous resolution or measured business success.
-    const measurable = completed.filter(c => !c.offlineSample);
-    if (measurable.length > 0 && approvalsQ.isSuccess) {
-      const caseIdsWithApproval = new Set(approvals.map((a) => a.caseId));
-      const autonomous = measurable.filter((c) => !caseIdsWithApproval.has(c.id)).length;
-      autonomousPct = Math.round((autonomous / measurable.length) * 100);
-      autonomousSplit = { autonomous, assisted: measurable.length - autonomous };
-    }
-
-    return { active, completed, blocked, humanReview, atRisk, autonomousPct, autonomousSplit };
-  }, [cases, approvals, approvalsQ.isSuccess]);
+    return {
+      active,
+      completed: cases.filter((c) => statusOf(c) === 'Completed'),
+      blocked: cases.filter((c) => statusOf(c) === 'Blocked'),
+      atRisk: cases.filter(slaAtRisk),
+    };
+  }, [cases]);
+  const families = useMemo(() => familyWorkload(cases, actionData?.caseSummaries), [cases, actionData]);
+  const familyTotal = families.reduce((n, f) => n + f.total, 0);
+  const familyActive = families.reduce((n, f) => n + f.active, 0);
+  const evidence = executionEvidence(families.reduce((sum, family) => sum + family.completed, 0));
 
   const stageMetrics = useMemo(() => {
-    const active = cases.filter(isActive);
-    const agg = {
-      a: { pending: 0, 'human-review': 0, blocked: 0 },
-      b: { pending: 0, 'human-review': 0, blocked: 0 },
-      c: { pending: 0, 'human-review': 0, blocked: 0 },
-    };
-    active.forEach(c => {
+    const agg = { a: { pending: 0, 'human-review': 0, blocked: 0 }, b: { pending: 0, 'human-review': 0, blocked: 0 }, c: { pending: 0, 'human-review': 0, blocked: 0 } };
+    metrics.active.forEach((c) => {
       if (!c.gateways) return;
-      ['a', 'b', 'c'].forEach(k => {
-        const key = k as 'a'|'b'|'c';
-        const st = c.gateways[key]?.status;
-        if (st === 'pending' || st === 'human-review' || st === 'blocked') {
-          agg[key][st]++;
-        }
+      (['a', 'b', 'c'] as const).forEach((key) => {
+        const st = c.gateways![key]?.status;
+        if (st === 'pending' || st === 'human-review' || st === 'blocked') agg[key][st]++;
       });
     });
     return agg;
-  }, [cases]);
-
-  // Unique cases needing human judgment: union of cases with pending approvals
-  // and cases currently in Human Review.
-  const interventionCount = useMemo(() => {
-    const ids = new Set<number>(pendingApprovals.map((a) => a.caseId));
-    for (const c of metrics.humanReview) ids.add(c.id);
-    return ids.size;
-  }, [pendingApprovals, metrics.humanReview]);
-
-  const domains = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const c of metrics.active) {
-      const d = caseTypeOf(c) === 'Employee Changes' ? 'Employee Changes' : 'Onboarding';
-      map.set(d, (map.get(d) ?? 0) + 1);
-    }
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [metrics.active]);
 
-  const kpisLoading = casesQ.isLoading || approvalsQ.isLoading;
+  const casesFailed = casesQ.isError;
+  const casesLoading = casesQ.isLoading;
+  const attentionLoading = actionsQ.isLoading;
+  const attentionFailed = actionsQ.isError;
+  const events = ct.dashData.data?.recentEvents ?? [];
+  const offSrc = actionData?.offboardingSource;
+  const familyPartial = !actionData || offSrc !== 'available';
+  const activity = useMemo(() => composeActivity(ct.dashData.data?.recentEvents, actionData, cases), [ct.dashData.data, actionData, cases]);
+  const reliability = useMemo(() => liveReliability(actionData, casesQ.isError || !casesQ.data ? undefined : cases), [actionData, cases, casesQ.isError, casesQ.data]);
+  const disclosures = useMemo(() => sourceDisclosures(actionData), [actionData]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -119,200 +86,123 @@ export function DashboardPage() {
         subtitle="Track authorized cases, outstanding requirements and recorded outcomes. Verified business results are reported separately."
       />
 
-      {/* Operations briefing */}
-      <OpsBriefing
-        loading={kpisLoading}
-        unavailable={casesQ.isError || approvalsQ.isError}
-        active={metrics.active.length}
-        blocked={metrics.blocked.length}
-        atRisk={metrics.atRisk.length}
-        interventions={interventionCount}
-        autonomousPct={metrics.autonomousPct}
-      />
+      <OpsBriefing loading={casesLoading} unavailable={casesFailed} active={familyActive} blocked={metrics.blocked.length}
+        atRisk={metrics.atRisk.length} interventions={attentionFailed ? null : projection.total} autonomousPct={null} />
 
-      {/* KPIs */}
-      {casesQ.isError ? (
-        <SectionError label="Operational metrics unavailable" onRetry={() => casesQ.refetch()} />
-      ) : (
-        <div aria-label="Dashboard summary" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          <KpiCard loading={kpisLoading} title="Active Cases" value={metrics.active.length} context="Across all HRO domains" icon={Layers} tone="indigo" />
-          <KpiCard
-            loading={kpisLoading}
-            title="Autonomously Resolved"
-            value={metrics.autonomousPct === null ? '—' : `${metrics.autonomousPct}%`}
-            context={metrics.autonomousPct === null ? 'Insufficient data' : 'Eligible cases completed autonomously'}
-            icon={Bot}
-            tone="indigo"
-          />
-          <KpiCard
-            loading={kpisLoading}
-            title="Human Interventions"
-            value={interventionCount}
-            context="Requires attention"
-            icon={UserCheck}
-            tone={interventionCount > 0 ? 'amber' : 'neutral'}
-          />
-          <KpiCard
-            loading={kpisLoading}
-            title="SLA At Risk"
-            value={metrics.atRisk.length}
-            context="Effective date within 7 days while held up"
-            icon={Timer}
-            tone={metrics.atRisk.length > 0 ? 'amber' : 'neutral'}
-          />
-          <KpiCard
-            loading={kpisLoading}
-            title="Blocked Cases"
-            value={metrics.blocked.length}
-            context={metrics.blocked.length > 0 ? 'Unable to proceed' : 'None blocked'}
-            icon={AlertOctagon}
-            tone={metrics.blocked.length > 0 ? 'red' : 'green'}
-          />
-          <StageSummaryCard loading={casesQ.isLoading} title="Offer-Acceptance Package" metrics={stageMetrics.a} />
-          <StageSummaryCard loading={casesQ.isLoading} title="Background Checks" metrics={stageMetrics.b} />
-          <StageSummaryCard loading={casesQ.isLoading} title="Day-1 Readiness" metrics={stageMetrics.c} />
-        </div>
-      )}
+      {casesFailed && <SectionError label="Case workload unavailable" onRetry={() => casesQ.refetch()} />}
+      <div aria-label="Dashboard summary" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        {!casesFailed && <KpiCard loading={casesLoading} title="Active Cases" value={familyPartial ? `${familyActive} known` : familyActive} context={`${familyPartial ? 'Partial coverage — separate offboarding not fully available' : 'Authorized cases incl. separate offboarding'} · ${stamp(ct.casesData.updatedAt)}`} icon={Layers} tone="indigo" />}
+        <KpiCard loading={casesLoading} title="Autonomously Resolved" value="Not assessed"
+          context={casesFailed ? 'Completed-case count unavailable (cases source failed). 0 verified autonomous · 0 verified human-assisted.' : `${evidence.verifiedAutonomous} verified autonomous · ${evidence.verifiedHumanAssisted} verified human-assisted · ${evidence.unknown} of ${evidence.denominator} completed unknown (no measured evidence mapped)`} icon={Bot} tone="neutral" />
+        <KpiCard loading={attentionLoading} title="Human Attention Required" value={attentionFailed ? 'Unavailable' : projection.total}
+          context={attentionFailed ? 'Action Center source failed — total unknown' : `${projection.incomplete ? 'Known work items only — total incomplete' : 'Same count as Action Center'} · ${stamp(ct.actionsData.updatedAt)}`} icon={UserCheck} tone={projection.total > 0 ? 'amber' : 'neutral'} />
+        {!casesFailed && <>
+          <KpiCard loading={casesLoading} title="SLA At Risk" value={metrics.atRisk.length} context="Effective date within 7 days while held up" icon={Timer} tone={metrics.atRisk.length > 0 ? 'amber' : 'neutral'} />
+          <KpiCard loading={casesLoading} title="Blocked Cases" value={metrics.blocked.length} context={metrics.blocked.length > 0 ? 'Unable to proceed' : 'None recorded as blocked'} icon={AlertOctagon} tone={metrics.blocked.length > 0 ? 'red' : 'neutral'} />
+          <StageSummaryCard loading={casesLoading} title="Offer-Acceptance Package" metrics={stageMetrics.a} />
+          <StageSummaryCard loading={casesLoading} title="Background Checks" metrics={stageMetrics.b} />
+          <StageSummaryCard loading={casesLoading} title="Day-1 Readiness" metrics={stageMetrics.c} />
+        </>}
+      </div>
 
       <WorkforceReviewPanel />
 
-      {/* Activity + Human Attention */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 overflow-hidden p-0 shadow-sm order-2 lg:order-1">
-          <div className="ct-section-band" style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
-            <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }} className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-[var(--primary)]" /> Agent Activity
-            </h2>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Recent autonomous actions, policy decisions, and human handoffs.
-            </p>
-          </div>
-          {dash.isLoading ? (
-            <SkeletonRows rows={6} />
-          ) : dash.isError ? (
-            <div style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>
-              <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Agent activity unavailable</p>
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>Activity couldn't be loaded. Try again.</p>
-              <Button size="sm" variant="outline" className="mt-3" onClick={() => dash.refetch()}>Retry</Button>
-            </div>
-          ) : !dash.data?.recentEvents?.length ? (
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', padding: 'var(--space-xl)', textAlign: 'center' }}>No recent agent activity</p>
-          ) : (
-            <ul className="list-none m-0 p-0">
-              {dash.data.recentEvents.slice(0, 8).map((event, i, arr) => (
-                <ActivityRow key={event.id} event={event} last={i === arr.length - 1} />
-              ))}
-            </ul>
-          )}
-        </Card>
+        <div className="lg:col-span-2 order-2 lg:order-1 min-w-0">
+          <ActivityPanel title="Agent Activity" items={activity} loading={!activity.length && (dash.isLoading || actionsQ.isLoading)} failed={dash.isError && actionsQ.isError}
+            partialFailure={dash.isError || actionsQ.isError}
+            retry={() => { dash.refetch(); actionsQ.refetch(); }} updatedAt={ct.dashData.updatedAt ?? ct.actionsData.updatedAt}
+            coverage={`Sources: dashboard events ${dash.isError ? '(unavailable)' : 'available'}; Action Center notifications, completed actions and domain records ${attentionFailed ? '(unavailable)' : 'available'}. Bounded lists — not complete history.`} />
+        </div>
 
         <Card className="overflow-hidden p-0 shadow-sm order-1 lg:order-2">
-          <div className="ct-section-band" style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
-            <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }} className="flex items-center gap-2">
-              <UserCheck className="w-4 h-4" style={{ color: 'var(--status-amber)' }} /> Human Attention Required
-            </h2>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Cases requiring judgment, approval, or exception handling.
-            </p>
-          </div>
-          {approvalsQ.isLoading ? (
-            <SkeletonRows rows={3} />
-          ) : approvalsQ.isError ? (
-            <div style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>
-              <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Interventions unavailable</p>
-              <Button size="sm" variant="outline" className="mt-3" onClick={() => approvalsQ.refetch()}>Retry</Button>
+          <PanelHead icon={<UserCheck className="w-4 h-4" style={{ color: 'var(--status-amber)' }} />} title="Human Attention Required"
+            sub={`Count unit: outstanding work items. ${stamp(ct.actionsData.updatedAt)}.`} />
+          {attentionLoading ? <SkeletonRows rows={3} /> : attentionFailed ? (
+            <div role="alert" style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>
+              <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Outstanding work unavailable</p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => actionsQ.refetch()}>Retry</Button>
             </div>
-          ) : pendingApprovals.length === 0 ? (
+          ) : projection.total === 0 ? (
             <div style={{ padding: 'var(--space-xl)', textAlign: 'center' }}>
-              <CheckCircle2 className="w-5 h-5 mx-auto" style={{ color: 'var(--status-green)' }} aria-hidden />
-              <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)', marginTop: '8px' }}>No interventions required</p>
+              <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>No outstanding items recorded</p>
               <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Autonomous operations are proceeding within configured guardrails.
+                An empty queue is not evidence of health or autonomy{reviews.data ? '' : '; early-warning reviews were not available'}.
               </p>
             </div>
           ) : (
             <ul className="list-none m-0 p-0">
-              {pendingApprovals.slice(0, 5).map((a, i, arr) => (
-                <AttentionRow key={a.id} approval={a} last={i === arr.length - 1} />
-              ))}
+              {projection.items.slice(0, 5).map((a, i, arr) => <AttentionRow key={a.key} item={a} last={i === arr.length - 1} />)}
             </ul>
           )}
           <div style={{ borderTop: '1px solid var(--border)', padding: '10px var(--space-lg)' }}>
-            <Link href="/approvals" className="hover:underline" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--primary)' }}>
-              View all interventions →
-            </Link>
+            <p className="text-[11px] text-[var(--text-muted)]" data-testid="dash-attention-total">
+              {attentionFailed ? 'Total unavailable — no queue conclusion.' : <>{projection.total} total{projection.incomplete ? ' in available sources — incomplete' : ''}; {projection.historicalNotifications} historical notifications not counted.</>}
+              {actionData && actionData.approvals.length + actionData.workItems.length >= 200 ? ' Lists may be capped at 200.' : ''}
+              {disclosures.filter((d) => d.capped).length > 0 && <span className="block" data-testid="attention-truncation">Not complete: {disclosures.filter((d) => d.capped).map((d) => `${d.label} ${d.shown} of ${d.available}`).join('; ')}.</span>}
+            </p>
+            <Link href="/approvals" className="hover:underline" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--primary)' }}>View Action Center →</Link>
           </div>
         </Card>
       </div>
 
-      {/* Cases by domain + execution model */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 p-0 overflow-hidden shadow-sm">
-          <div className="ct-section-band" style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
-            <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Cases by HRO Domain</h2>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>Active workload across the HR lifecycle.</p>
-          </div>
+          <PanelHead title="Cases by HRO Domain" sub={`${casesFailed ? 'Case cohort unavailable' : `${familyActive} ${familyPartial ? 'known ' : ''}active of ${familyTotal} authorized records${familyPartial ? ' — coverage partial' : ''}`}. ${stamp(ct.casesData.updatedAt)}.`} />
           <div style={{ padding: 'var(--space-lg)' }}>
-            {casesQ.isLoading ? (
-              <SkeletonRows rows={2} />
-            ) : casesQ.isError ? (
-              <div style={{ textAlign: 'center', padding: 'var(--space-md)' }}>
-                <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Domain workload unavailable</p>
+            {casesLoading ? <SkeletonRows rows={3} /> : casesFailed ? (
+              <div role="alert" style={{ textAlign: 'center' }}>
+                <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Family workload unavailable</p>
                 <Button size="sm" variant="outline" className="mt-3" onClick={() => casesQ.refetch()}>Retry</Button>
               </div>
-            ) : domains.length === 0 ? (
-              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-md)' }}>No active cases</p>
             ) : (
-              <div className="space-y-3" role="img" aria-label={`Active cases by domain: ${domains.map(([d, n]) => `${d} ${n}`).join(', ')}`}>
-                {domains.map(([domain, count]) => {
-                  const max = domains[0][1];
-                  return (
-                    <div key={domain} className="flex items-center gap-3">
-                      <span style={{ width: '150px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 500 }} className="shrink-0">{domain}</span>
-                      <div className="flex-1 rounded-full overflow-hidden" style={{ height: '8px', backgroundColor: 'var(--surface-alt)' }}>
-                        <div style={{ width: `${(count / max) * 100}%`, height: '100%', backgroundColor: 'var(--primary)', opacity: 0.85, borderRadius: '999px' }} />
-                      </div>
-                      <span style={{ width: '32px', textAlign: 'right', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text-primary)' }}>{count}</span>
+              <ul className="m-0 grid list-none grid-cols-1 gap-1 p-0 sm:grid-cols-2" data-testid="family-list">
+                {families.map((f) => (
+                  <li key={f.family}>
+                    <div className="flex min-h-10 items-center justify-between gap-2 rounded px-2">
+                      <Link href={f.href} className="min-w-0 break-words text-sm text-[var(--text-secondary)] hover:underline" data-testid={`family-${f.family}`}>{f.family}</Link>
+                      <span className="text-right text-sm font-bold"><Link href={f.activeHref} className="hover:underline" data-testid={`family-active-${f.family}`}>{f.active} {f.family === 'Offboarding' && familyPartial ? 'known active' : 'active'}</Link> / {f.total}
+                        {f.family === 'Offboarding' && familyPartial && <small className="block text-[10px] font-normal text-[var(--text-muted)]">Additional workload unknown</small>}</span>
                     </div>
-                  );
-                })}
-              </div>
+                  </li>
+                ))}
+              </ul>
             )}
+            {attentionFailed && <p role="status" className="mt-2 text-xs text-[var(--status-amber-fg)]" data-testid="offboarding-source">Offboarding coverage unavailable (Action Center failed). Family counts may omit separate offboarding records.</p>}
+            {!attentionFailed && offSrc && offSrc !== 'available' && <p role="status" className="mt-2 text-xs text-[var(--status-amber-fg)]" data-testid="offboarding-source">Offboarding source: {offSrc}. Offboarding counts may be incomplete.</p>}
           </div>
         </Card>
 
         <Card className="p-0 overflow-hidden shadow-sm">
-          <div className="ct-section-band" style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-alt)' }}>
-            <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Execution Model</h2>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>How completed work was resolved.</p>
-          </div>
-          <div style={{ padding: 'var(--space-lg)' }}>
-            {casesQ.isLoading || approvalsQ.isLoading ? (
-              <SkeletonRows rows={2} />
-            ) : casesQ.isError || approvalsQ.isError ? (
-              <div style={{ textAlign: 'center', padding: 'var(--space-md)' }}>
-                <p style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>Execution data unavailable</p>
-                <Button size="sm" variant="outline" className="mt-3" onClick={() => { casesQ.refetch(); approvalsQ.refetch(); }}>Retry</Button>
-              </div>
-            ) : !metrics.autonomousSplit ? (
-              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', textAlign: 'center', padding: 'var(--space-md)' }}>
-                — <span style={{ display: 'block', fontSize: 'var(--text-xs)', marginTop: '4px' }}>Insufficient data</span>
-              </p>
-            ) : (
-              <div className="space-y-3">
-                <ExecRow label="Autonomous" count={metrics.autonomousSplit.autonomous} total={metrics.completed.length} color="var(--primary)" />
-                <ExecRow label="Human Assisted" count={metrics.autonomousSplit.assisted} total={metrics.completed.length} color="var(--status-amber)" />
-              </div>
-            )}
+          <PanelHead title="Execution Model" sub={`Whole-case verified outcomes. ${stamp(ct.casesData.updatedAt)}.`} />
+          <div style={{ padding: 'var(--space-lg)' }} className="space-y-1 text-sm" data-testid="execution-evidence">
+            {casesLoading ? <SkeletonRows rows={2} /> : casesFailed ? <div role="alert"><p>Execution data unavailable</p><Button size="sm" variant="outline" className="mt-2" onClick={() => casesQ.refetch()}>Retry</Button></div> : <>
+              <p>Verified autonomous: <strong>{evidence.verifiedAutonomous}</strong></p>
+              <p>Verified human-assisted: <strong>{evidence.verifiedHumanAssisted}</strong></p>
+              <p>Unknown: <strong>{evidence.unknown}</strong> of {evidence.denominator} completed (no measured historical evidence mapped)</p>
+              <p className="text-xs text-[var(--text-muted)]">{evidence.note}</p>
+            </>}
           </div>
         </Card>
       </div>
+
+      <section aria-labelledby="oraq-h" className="space-y-3" data-testid="reliability-quality">
+        <h2 id="oraq-h" className="text-base font-semibold text-[var(--text-primary)]">Operational Reliability &amp; AI Quality</h2>
+        <ReliabilityPanel data={reliability} loading={attentionLoading} failed={attentionFailed} retry={() => actionsQ.refetch()} disclosures={disclosures} updatedAt={ct.actionsData.updatedAt} offboardingSource={attentionFailed ? 'unavailable' : offSrc} />
+        <ExamplesSection data={ct.examplesData.data} loading={examplesQ.isLoading} failed={examplesQ.isError} retry={() => examplesQ.refetch()} updatedAt={ct.examplesData.updatedAt} />
+      </section>
     </div>
   );
 }
 
-/* ------------------------------- components ------------------------------- */
-
+function PanelHead({ icon, title, sub }: { icon?: React.ReactNode; title: string; sub: string }) {
+  return (
+    <div className="ct-section-band" style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--band-bg, var(--surface-alt))' }}>
+      <h2 style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }} className="flex items-center gap-2">{icon}{title}</h2>
+      <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>{sub}</p>
+    </div>
+  );
+}
 type Tone = 'indigo' | 'amber' | 'red' | 'green' | 'neutral';
 const TONE_COLOR: Record<Tone, string> = {
   indigo: 'var(--primary)',
@@ -322,58 +212,23 @@ const TONE_COLOR: Record<Tone, string> = {
   neutral: 'var(--text-muted)',
 };
 
-function OpsBriefing({ loading, unavailable, active, blocked, atRisk, interventions, autonomousPct }: {
-  loading?: boolean;
-  unavailable?: boolean;
-  active: number;
-  blocked: number;
-  atRisk: number;
-  interventions: number;
-  autonomousPct: number | null;
+function OpsBriefing({ loading, unavailable, active, blocked, atRisk, interventions }: {
+  loading?: boolean; unavailable?: boolean; active: number; blocked: number; atRisk: number;
+  interventions: number | null; autonomousPct: number | null;
 }) {
-  const healthy = !unavailable && blocked === 0 && atRisk === 0;
-  const headline = unavailable
-    ? 'Operations status unavailable'
-    : loading
-      ? 'Assessing operations…'
-      : healthy
-        ? 'Operations are healthy'
-        : blocked > 0
-          ? 'Operations require attention'
-          : 'Operations are progressing with items to watch';
-
-  let body: string;
-  if (unavailable) {
-    body = 'Live operational data could not be loaded. Metrics will resume once the connection is restored.';
-  } else if (loading) {
-    body = 'Gathering live case, agent, and intervention data…';
-  } else {
-    const parts: string[] = [];
-    parts.push(`${active} active ${active === 1 ? 'case is' : 'cases are'} being handled across the agent workforce.`);
-    if (autonomousPct !== null) parts.push(`${autonomousPct}% of eligible work has completed autonomously.`);
-    if (interventions > 0) parts.push(`${interventions} ${interventions === 1 ? 'case requires' : 'cases require'} human attention.`);
-    if (atRisk > 0) parts.push(`${atRisk} ${atRisk === 1 ? 'SLA is' : 'SLAs are'} at risk.`);
-    if (blocked > 0) parts.push(`${blocked} ${blocked === 1 ? 'case is' : 'cases are'} blocked.`);
-    if (interventions === 0 && atRisk === 0 && blocked === 0) parts.push('No human interventions are currently required.');
-    body = parts.join(' ');
-  }
-
-  const dotColor = unavailable || loading ? 'var(--status-gray)' : healthy ? 'var(--status-green)' : blocked > 0 ? 'var(--status-red)' : 'var(--status-amber)';
-
+  const headline = unavailable ? 'Operations status unavailable' : loading ? 'Assessing operations…'
+    : blocked > 0 ? 'Operations require attention' : atRisk > 0 ? 'Items to watch' : 'No blocked or at-risk cases recorded';
+  const body = unavailable ? 'Case data could not be loaded. Other panels load independently.'
+    : loading ? 'Gathering case data…'
+    : [`${active} active ${active === 1 ? 'case' : 'cases'}.`,
+       interventions === null ? 'Outstanding work unavailable.' : `${interventions} outstanding work ${interventions === 1 ? 'item' : 'items'}.`,
+       `${atRisk} at risk, ${blocked} blocked.`, 'Autonomy and business outcomes are not assessed.'].join(' ');
+  const dotColor = unavailable || loading ? 'var(--status-gray)' : blocked > 0 ? 'var(--status-red)' : atRisk > 0 ? 'var(--status-amber)' : 'var(--status-gray)';
   return (
-    <div
-      className="flex items-start gap-3"
-      style={{
-        backgroundColor: 'var(--surface)',
-        borderRadius: 'var(--radius-md)',
-        padding: 'var(--space-lg) var(--space-xl)',
-        boxShadow: 'var(--shadow-sm)',
-      }}
-      role="status"
-    >
+    <div className="flex items-start gap-3" style={{ backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-md)', padding: 'var(--space-lg) var(--space-xl)', boxShadow: 'var(--shadow-sm)' }} role="status">
       <span aria-hidden className="mt-1.5 h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
       <div className="min-w-0">
-        <p style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>{headline}</p>
+        <p style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>{headline}</p>
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: '2px' }}>{body}</p>
       </div>
     </div>
@@ -422,74 +277,20 @@ function StageSummaryCard({ title, metrics, loading }: { title: string; metrics:
     </Card>
   );
 }
-
-function ActivityRow({ event, last }: { event: OnbEvent; last: boolean }) {
-  const domain = 'Onboarding';
-  const inner = (
-    <div className="flex items-start gap-3" style={{ padding: '10px var(--space-lg)', borderBottom: last ? 'none' : '1px solid var(--border)' }}>
-      <div className="shrink-0 mt-0.5"><EngineBadge engine={event.engine} /></div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{lifecycleStageText(event.title)}</p>
-        <p className="line-clamp-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>{lifecycleStageText(event.detail)}</p>
-        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '3px' }}>
-          {domain} · {event.agent} · {ago(event.createdAt)} ago
-        </p>
-      </div>
-      {event.caseId != null && (
-        <span className="shrink-0 self-center" style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--primary)' }}>View details</span>
-      )}
-    </div>
-  );
+function AttentionRow({ item, last }: { item: AttentionItem; last: boolean }) {
   return (
     <li>
-      {event.caseId != null ? (
-        <Link href={`/cases/${event.caseId}`} className="block transition-colors hover:bg-[var(--surface-alt)]" aria-label={`Open case ${event.caseId}: ${lifecycleStageText(event.title)}`}>
-          {inner}
-        </Link>
-      ) : inner}
-    </li>
-  );
-}
-
-function AttentionRow({ approval, last }: { approval: OnbApproval; last: boolean }) {
-  const isSla = approval.ruleRef?.includes('sla') || approval.ruleRef?.includes('readiness') || approval.agent === 'readiness-watcher' || approval.agent === 'system-watcher';
-  const isBreached = approval.recommendation?.toLowerCase().includes('breach') || approval.rationale?.toLowerCase().includes('breach');
-  const priority = isBreached || approval.hitlPattern === 'hard-block' ? 'High priority' : 'Medium priority';
-  const pColor = isBreached || approval.hitlPattern === 'hard-block' ? 'var(--status-red)' : 'var(--status-amber)';
-
-  return (
-    <li>
-      <Link href={isSla ? `/cases/${approval.caseId}` : `/approvals`} className="block transition-colors hover:bg-[var(--surface-alt)]" aria-label={`Open intervention for ${approval.caseWorkerName}`}>
+      <Link href={item.href} className="block hover:bg-[var(--surface-alt)]" data-testid={`attention-${item.key}`}>
         <div style={{ padding: '10px var(--space-lg)', borderBottom: last ? 'none' : '1px solid var(--border)' }}>
-          <div className="flex items-center justify-between gap-2">
-            <p className="truncate" style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {isSla ? (isBreached ? 'SLA Breached' : 'SLA Action Due') : (approval.hitlPattern === 'hard-block' ? 'Decision required' : 'Approval required')} — {approval.caseWorkerName}
-            </p>
-            {isSla && <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-muted)] border border-[var(--border)] px-1.5 py-0.5 rounded bg-[var(--surface)] shrink-0">SLA Alert</span>}
-          </div>
-          <p className="line-clamp-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>{lifecycleStageText(approval.recommendation)}</p>
-          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '3px' }}>
-            Onboarding · <span style={{ color: pColor, fontWeight: 600 }}>{priority}</span> · {ago(approval.createdAt)}
+          <p className="line-clamp-2 break-words" style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>{lifecycleStageText(item.title)}</p>
+          <p className="break-words" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: '3px' }}>
+            {item.kind} · priority {item.priority ?? 'not recorded'} · owner {item.owner ?? 'not recorded'} · due {item.due ?? 'not recorded'}{item.createdAt ? ` · ${ago(item.createdAt)} ago` : ''}
           </p>
         </div>
       </Link>
     </li>
   );
 }
-
-function ExecRow({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
-  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <span style={{ width: '110px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 500 }} className="shrink-0">{label}</span>
-      <div className="flex-1 rounded-full overflow-hidden" style={{ height: '8px', backgroundColor: 'var(--surface-alt)' }}>
-        <div style={{ width: `${pct}%`, height: '100%', backgroundColor: color, opacity: 0.85, borderRadius: '999px' }} />
-      </div>
-      <span style={{ width: '64px', textAlign: 'right', fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)' }}>{count} · {pct}%</span>
-    </div>
-  );
-}
-
 function SkeletonRows({ rows }: { rows: number }) {
   return (
     <div style={{ padding: 'var(--space-lg)' }} className="space-y-3">

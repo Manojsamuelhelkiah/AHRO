@@ -14,6 +14,8 @@ const entryPoints = [
 ].filter((file) => !requestedTestFile || file === requestedTestFile)
   .map((f) => path.join(dir, f));
 const integratedEntryPoints = [
+  "src/pages/cases/index.test.tsx",
+  "src/hooks/use-control-tower.integration.test.tsx",
   "src/components/workforce-insights/action-reviews.integration.test.tsx",
   "src/lib/appearance.test.tsx",
   "src/components/client-workspace-navigation.integration.test.tsx",

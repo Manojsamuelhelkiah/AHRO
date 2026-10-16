@@ -10020,6 +10020,7 @@ export const ActionCenterDomainRecordCategory = {
   attention: 'attention',
   communication: 'communication',
   completed: 'completed',
+  activity: 'activity',
 } as const;
 
 export interface ActionCenterDomainRecord {
@@ -10029,6 +10030,14 @@ export interface ActionCenterDomainRecord {
   title: string;
   detail: string;
   status: string;
+  /** @nullable */
+  createdAt?: string | null;
+  /** @nullable */
+  actor?: string | null;
+  /** @nullable */
+  owner?: string | null;
+  /** @nullable */
+  dueAt?: string | null;
   caseHref: string;
 }
 
@@ -10039,6 +10048,7 @@ export const OnbActionCenterOffboardingSource = {
   available: 'available',
   partial: 'partial',
   denied: 'denied',
+  unavailable: 'unavailable',
 } as const;
 
 export type OnbActionCenterCapabilitiesReminderMode = typeof OnbActionCenterCapabilitiesReminderMode[keyof typeof OnbActionCenterCapabilitiesReminderMode];
@@ -10322,6 +10332,64 @@ export interface OnbActionCenter {
   workItems: OnbActionCenterWorkItem[];
   completed: OnbActionCenterCompleted[];
   opportunities: OnbActionCenterOpportunity[];
+}
+
+export type ControlTowerExampleCategory = typeof ControlTowerExampleCategory[keyof typeof ControlTowerExampleCategory];
+
+
+export const ControlTowerExampleCategory = {
+  'integration-failure': 'integration-failure',
+  'ambiguous-timeout': 'ambiguous-timeout',
+  'stale-update': 'stale-update',
+  'stuck-task': 'stuck-task',
+  'answer-match': 'answer-match',
+  'human-correction': 'human-correction',
+  'fairness-review': 'fairness-review',
+} as const;
+
+export interface ControlTowerExample {
+  id: string;
+  caseId: number;
+  reference: string;
+  family: ActionCenterCaseType;
+  caseHref: string;
+  title: string;
+  category: ControlTowerExampleCategory;
+  agent: string;
+  source: string;
+  task: string;
+  status: string;
+  impact: string;
+  /** @nullable */
+  owner: string | null;
+  nextStep: string;
+  /** @nullable */
+  expected: string | null;
+  /** @nullable */
+  observed: string | null;
+  /** @nullable */
+  corrected: string | null;
+  /** @nullable */
+  matched: boolean | null;
+  limitations: string;
+}
+
+export type ControlTowerExamplesSource = typeof ControlTowerExamplesSource[keyof typeof ControlTowerExamplesSource];
+
+
+export const ControlTowerExamplesSource = {
+  'authored-examples': 'authored-examples',
+} as const;
+
+export interface ControlTowerExamples {
+  organizationId: string;
+  generatedAt: string;
+  source: ControlTowerExamplesSource;
+  inventorySize: number;
+  available: number;
+  answerSamples: number;
+  answerMatches: number;
+  items: ControlTowerExample[];
 }
 
 export type OnbActionCenterIdentityValueMailboxType = typeof OnbActionCenterIdentityValueMailboxType[keyof typeof OnbActionCenterIdentityValueMailboxType];

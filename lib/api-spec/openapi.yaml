@@ -4283,6 +4283,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OnbDashboard"
+  /onboarding/control-tower/examples:
+    get:
+      operationId: getControlTowerExamples
+      tags: [onboarding]
+      summary: Authorized fixed authored reliability and quality examples, never live telemetry
+      responses:
+        "200":
+          description: Eligible persisted example cases only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlTowerExamples"
   /onboarding/scenarios:
     get:
       operationId: listOnboardingScenarios
@@ -16191,17 +16203,21 @@ components:
       properties:
         id: { type: string }
         caseId: { type: integer }
-        category: { type: string, enum: [attention, communication, completed] }
+        category: { type: string, enum: [attention, communication, completed, activity] }
         title: { type: string }
         detail: { type: string }
         status: { type: string }
+        createdAt: { type: ["string", "null"] }
+        actor: { type: ["string", "null"] }
+        owner: { type: ["string", "null"] }
+        dueAt: { type: ["string", "null"] }
         caseHref: { type: string }
       required: [id, caseId, category, title, detail, status, caseHref]
     OnbActionCenter:
       type: object
       additionalProperties: false
       properties:
-        offboardingSource: { type: string, enum: [available, partial, denied] }
+        offboardingSource: { type: string, enum: [available, partial, denied, unavailable] }
         caseSummaries:
           type: array
           items: { $ref: "#/components/schemas/ActionCenterCaseSummary" }
@@ -16234,6 +16250,43 @@ components:
           type: array
           items: { $ref: "#/components/schemas/OnbActionCenterOpportunity" }
       required: [version, generatedAt, pausedOffline, capabilities, counts, approvals, notifications, documentFollowups, workItems, completed, opportunities]
+    ControlTowerExample:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        caseId: { type: integer }
+        reference: { type: string }
+        family: { $ref: "#/components/schemas/ActionCenterCaseType" }
+        caseHref: { type: string }
+        title: { type: string }
+        category: { type: string, enum: [integration-failure, ambiguous-timeout, stale-update, stuck-task, answer-match, human-correction, fairness-review] }
+        agent: { type: string }
+        source: { type: string }
+        task: { type: string }
+        status: { type: string }
+        impact: { type: string }
+        owner: { type: ["string", "null"] }
+        nextStep: { type: string }
+        expected: { type: ["string", "null"] }
+        observed: { type: ["string", "null"] }
+        corrected: { type: ["string", "null"] }
+        matched: { type: ["boolean", "null"] }
+        limitations: { type: string }
+      required: [id, caseId, reference, family, caseHref, title, category, agent, source, task, status, impact, owner, nextStep, expected, observed, corrected, matched, limitations]
+    ControlTowerExamples:
+      type: object
+      additionalProperties: false
+      properties:
+        organizationId: { type: string }
+        generatedAt: { type: string }
+        source: { type: string, enum: [authored-examples] }
+        inventorySize: { type: integer }
+        available: { type: integer }
+        answerSamples: { type: integer }
+        answerMatches: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/ControlTowerExample" } }
+      required: [organizationId, generatedAt, source, inventorySize, available, answerSamples, answerMatches, items]
     OnbActionCenterIdentityValue:
       type: object
       additionalProperties: false

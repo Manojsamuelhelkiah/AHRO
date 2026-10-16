@@ -28,7 +28,7 @@ import { getEarlyTenureReminderInbox, postEarlyTenureInboxEvidence, type EarlyTe
 import { useActionCenter, useActionCenterCaseType, useActionCenterScope } from '../hooks/use-action-center-filter';
 import { ActionCaseSummaries, DomainRecords, ActionReference, useActionCase, ActionConversationLink } from './action-center-domain-records';
 import { useWorkforceScope } from '../components/workforce-insights/use-workforce-insights';
-import { pendingActionReviews } from '../components/workforce-insights/action-review-projection';
+import { projectAttention } from '../lib/control-tower';
 import { ActionReviewSection } from '../components/workforce-insights/action-review-section';
 
 function WorkforceContextTags({ c }: { c: OnbActionCenter['documentFollowups'][0]['case'] }) {
@@ -63,8 +63,8 @@ export function NeedsAttentionTab() {
     siteExposure: siteOnly || undefined,
   });
 
-  const totalActionable = (data ? data.notifications.length + data.documentFollowups.length + data.workItems.length + data.opportunities.length +
-    (data.domainRecords ?? []).filter(r => r.category === 'attention').length : 0) + pendingActionReviews(reviews.data).length;
+  const projection = projectAttention(data, reviews.data);
+  const totalActionable = projection.total;
 
   return (
     <div className="space-y-6 relative">
@@ -98,7 +98,7 @@ export function NeedsAttentionTab() {
       </div>
       <EarlyTenureReminderInbox workforce={workforce || undefined} safetyCritical={safetyOnly || undefined} siteExposure={siteOnly || undefined} />
       <ActionReviewSection data={reviews.data} failed={reviews.failed} denied={reviews.denied} refreshing={reviews.query.isFetching} retry={() => void reviews.query.refetch()} />
-      <p role="status" className="text-sm font-semibold" data-testid="attention-total">{totalActionable} matching attention {totalActionable === 1 ? 'item' : 'items'}{!data || !reviews.data ? ' in available sources — total incomplete' : ''}</p>
+      <p role="status" className="text-sm font-semibold" data-testid="attention-total">{totalActionable} matching attention {totalActionable === 1 ? 'item' : 'items'}{projection.incomplete ? ' in available sources — total incomplete (a source is unavailable, partial or capped)' : ''}<span className="block text-xs font-normal text-[var(--text-muted)]">Counts outstanding work items. {projection.historicalNotifications > 0 ? `${projection.historicalNotifications} recorded notification${projection.historicalNotifications === 1 ? '' : 's'} are history and not counted.` : 'Sent communications and history are not counted.'}</span></p>
       {isLoading ? <p role="status">Loading other actionable items…</p> : !data ? <p role="alert">Other actionable items are unavailable. Reload to retry their sources.</p> : <>
       <ActionCaseSummaries data={data} />
       <DomainRecords data={data} category="attention" />

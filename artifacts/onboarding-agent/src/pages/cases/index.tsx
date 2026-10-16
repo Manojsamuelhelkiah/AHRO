@@ -19,7 +19,7 @@ import { StandardIntakeForm } from './standard-intake';
 import { listJobProfiles, parseWorkforceTriState } from '@/lib/workforce-policy-api';
 import { listWorkforceTransferPrograms } from '@/lib/workforce-transfers-api';
 import { PROGRAM_FILTER, matchesTransferProgram, TransferProgramRow, TransferProgramCard } from './transfer-presentation';
-import { caseListPath, caseTypeFromSearch, type WorkItemFilter } from './list-navigation';
+import { activeOnlyFromSearch, caseListPath, caseTypeFromSearch, type WorkItemFilter } from './list-navigation';
 import { CurrentAction } from './current-action';
 import { useWorkingList, workingListCases } from './working-list';
 import {
@@ -34,6 +34,8 @@ import {
   originalIntentOf,
   caseOwnerOf,
   confirmedCaseDate,
+  statusOf,
+  caseIsActive,
   type CaseTypeFilter,
 } from './case-presentation';
 
@@ -54,19 +56,7 @@ export function caseTitleOf(c: OnbCase): string {
   return presentedCaseTitleOf(c);
 }
 
-export function statusOf(c: Pick<OnbCase, 'lifecycleStage' | 'orchestrationStatus' | 'syntheticJourney'>): HroStatus {
-  if (c.syntheticJourney) return c.syntheticJourney.outcome === 'completed' ? 'Completed'
-    : c.syntheticJourney.outcome === 'rejected' ? 'Rejected' : 'Blocked';
-  const stage = (c.lifecycleStage || '').toLowerCase();
-  const orch = (c.orchestrationStatus || '').toLowerCase();
-  if (stage === 'completed' || stage === 'complete') return 'Completed';
-  if (orch === 'blocked' || orch === 'checklist-blocked' || orch === 'failed' || stage === 'exception') return 'Blocked';
-  if (orch === 'waiting-approval') return 'Human Review';
-  if (stage === 'trigger-received') return 'New';
-  if (orch === 'running') return 'In Progress';
-  return 'Waiting';
-}
-
+export { statusOf } from './case-presentation';
 function ownerOf(c: OnbCase): { name: string; kind: 'AI Agent' | 'Human Reviewer' } {
   return caseOwnerOf(c);
 }
@@ -244,6 +234,7 @@ export function CasesPage() {
   const [showStandardIntake, setShowStandardIntake] = useState(false);
   const [, setLocation] = useLocation();
   const typeFilter = caseTypeFromSearch(search);
+  const activeOnly = activeOnlyFromSearch(search);
   const setTypeFilter = (type: WorkItemFilter) => setLocation(caseListPath(search, type, window.location.hash));
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>(EMPTY_FILTERS);
@@ -281,6 +272,7 @@ export function CasesPage() {
     if (typeFilter === PROGRAM_FILTER || filters.programStatus) return [];
     if (checklistProfileId) rows = rows.filter((c) => c.checklistProfileId === checklistProfileId);
     if (typeFilter !== 'All Cases') rows = rows.filter((c) => caseTypeOf(c) === typeFilter);
+    if (activeOnly) rows = rows.filter(caseIsActive);
     if (filters.status) rows = rows.filter((c) => statusOf(c) === filters.status);
     if (filters.agent) rows = rows.filter((c) => ownerOf(c).kind === filters.agent);
     if (filters.priority) rows = rows.filter((c) => (c.urgency || '').toLowerCase() === filters.priority);
@@ -298,7 +290,7 @@ export function CasesPage() {
       );
     }
     return [...rows].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '') || b.id - a.id);
-  }, [cases, checklistProfileId, typeFilter, filters, query]);
+  }, [cases, checklistProfileId, typeFilter, activeOnly, filters, query]);
   const filteredPrograms = useMemo(() => (workingList.view === 'hidden' ? [] : programs ?? []).filter((p) => matchesTransferProgram(p, {
     type: typeFilter, query, geography: filters.geography, programStatus: filters.programStatus,
     caseOnly: Boolean(checklistProfileId || filters.status || filters.agent || filters.priority ||
@@ -332,7 +324,7 @@ export function CasesPage() {
   }, [cases]);
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
-  const anyFilterActive = activeFilterCount > 0 || query.trim() !== '' || typeFilter !== 'All Cases' || Boolean(checklistProfileId);
+  const anyFilterActive = activeFilterCount > 0 || query.trim() !== '' || typeFilter !== 'All Cases' || activeOnly || Boolean(checklistProfileId);
   const context = typeFilter === PROGRAM_FILTER
     ? { title: PROGRAM_FILTER, subtitle: 'Authorized bulk programs, separate from individual case workflows and metrics.' }
     : PAGE_CONTEXT[typeFilter];
@@ -344,6 +336,7 @@ export function CasesPage() {
     setQuery('');
     const params = new URLSearchParams(search);
     params.delete('checklistProfileId');
+    params.delete('activeOnly');
     setLocation(caseListPath(params.toString(), 'All Cases', window.location.hash));
   };
 
@@ -495,6 +488,10 @@ export function CasesPage() {
             </select>
           </label>
         </div>
+        {activeOnly && <div role="status" data-testid="active-only-indicator" className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-selected)] px-3 py-2 text-xs">
+          <span className="min-w-0 break-words">Showing active cases only — completed cases are hidden ({filtered.length} shown).</span>
+          <button type="button" className="min-h-8 font-semibold text-[var(--primary)] underline" onClick={() => { const p = new URLSearchParams(search); p.delete('activeOnly'); setLocation(`/cases${p.size ? `?${p.toString()}` : ''}${window.location.hash}`); }}>Show all</button>
+        </div>}
         <div role="group" aria-label="Case families" style={{ padding: '6px 12px', borderBottom: '1px solid var(--border)' }} className="hidden lg:flex flex-wrap items-center gap-1">
           {workTypes.map((t) => {
             const active = typeFilter === t;
