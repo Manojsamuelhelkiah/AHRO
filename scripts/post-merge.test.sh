@@ -11,6 +11,11 @@ set -euo pipefail
 
 printf '%s\n' "$*" >>"$POST_MERGE_TEST_LOG"
 
+if [[ "$*" == *"exec node run-seed.mjs" && "${WORKFORCE_EXAMPLES_IF_READY:-}" != "true" ]]; then
+  echo "Post-merge example population must use optional source-readiness gating" >&2
+  exit 43
+fi
+
 if [[ "${POST_MERGE_FAIL_ROUTES:-0}" == "1" && "$*" == *"run validate:routes" ]]; then
   exit 42
 fi
@@ -42,6 +47,7 @@ expected_calls=$(cat <<'EOF'
 install --frozen-lockfile
 --filter @workspace/api-server run validate:routes
 --filter @workspace/api-server run db:reconcile
+--filter @workspace/api-server exec node run-seed.mjs
 EOF
 )
 actual_calls="$(cat "$success_log")"

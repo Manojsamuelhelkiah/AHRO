@@ -14,3 +14,16 @@ The user selected a model-ready foundation before model training or connecting a
 **Why:** No supplied trained model or usable training dataset was established when the first-release scope was chosen. Presenting hand-entered priorities or sample values as ML predictions would misrepresent the product.
 
 **How to apply:** Keep human reviews usable independently, but require real model integration and validation before claiming predictive attrition scores or resume-integrity results. Treat existing HRO case coverage as case coverage, not evidence that a complete employee history exists.
+
+The owner subsequently authorized a few authored Talent at Risk examples while
+waiting to attach a real model. The S-reference is the only required synthetic
+marker; do not add repeated example/disclaimer banners to their presentation.
+
+**Why:** The owner explicitly requested usable interim cases after confirming
+that no approved model source was available, and repeated the existing S-only
+presentation rule.
+
+**How to apply:** Keep these authored indicators separate from real assessments,
+training outcomes and validation evidence. Restrict them to exact permitted
+fictional Demo identities, preserve operational fences, and retain ordinary
+human review workflows without inferring employment authority.

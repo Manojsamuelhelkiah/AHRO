@@ -1,9 +1,45 @@
 # Workforce early-warning foundation
 
+## Talent at Risk examples
+
+The approved Demo workspace contains three retention examples (high, moderate
+and low risk) on exact existing Employee Changes source identities. Analytics
+shows their 90-day values, dated context and supportive follow-ups. Persisted
+review records appear in Analytics, Cases and the dashboard, and use the source
+S-reference without additional sample labels. The high-risk review is critical.
+The initial owner is the catalogue's HR team; a permitted administrator can take
+ownership through the ordinary review editor.
+
+These values live in a separate `riskExamples` response field and settings key,
+never in real model assessments or model validation records. They confer no
+permissions and trigger no outreach, workflow activation or employment effects.
+Only exact authorized Demo sources qualify; identity/contact changes, changed
+source revisions and expiry remove their indicators. Other subjects stay Not
+assessed. Resume integrity is unchanged.
+
+Population is an explicit development-only additive operation:
+
+```
+NODE_ENV=development SEED_SCRIPT=src/scripts/provision-workforce-risk-examples.ts pnpm --filter @workspace/api-server exec node run-seed.mjs
+```
+
+The development post-merge setup runs this idempotent command with
+`WORKFORCE_EXAMPLES_IF_READY=true` so examples reach the main workspace when the
+approved Demo source inventory exists. In this optional setup mode, missing Demo
+or source inventory produces an explicit skipped status without blocking normal
+reconciliation. The explicit command above still rejects missing sources.
+Neither mode creates source cases, overwrites prior work or reopens resolved
+reviews. It is not part of application startup or publishing.
+
+Indicator expiry removes the coloured value, not the review or its history.
+Review visibility continues to require current source permissions and the exact
+eligible Demo identity, independently of the indicator's expiry or source revision.
+
 ## Available now
 
 - **Analytics → Talent at Risk and Resume Integrity Review**: model connection
-  status, accessible red/amber/green legend, and grey **Not assessed** indicators.
+  status, accessible red/amber/green legend, and **Not assessed** indicators for
+  subjects without a current result or an approved example.
 - Source coverage is the current client's permitted existing HRO cases. It is not
   an employee master, a cross-client employee index or a longitudinal training set.
   Similar names or email addresses do not establish that two cases are one person.

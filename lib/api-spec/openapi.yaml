@@ -7565,7 +7565,7 @@ components:
         ownerUserId: { type: string }
         dueDate: { type: string, description: Calendar date in YYYY-MM-DD }
         status: { type: string, enum: [open, in-progress, resolved, dismissed] }
-        origin: { type: string, enum: [human, model] }
+        origin: { type: string, enum: [human, model, catalogue] }
         assessmentId: { type: ["string", "null"] }
         createdAt: { type: string, description: ISO 8601 UTC timestamp }
         updatedAt: { type: string, description: ISO 8601 UTC timestamp }
@@ -7600,6 +7600,10 @@ components:
           items: { $ref: "#/components/schemas/WorkforceSubject" }
         assessments:
           type: array
+          items: { $ref: "#/components/schemas/WorkforceAssessment" }
+        riskExamples:
+          type: array
+          description: Server-owned examples on exact permitted Demo source identities; never real model assessments.
           items: { $ref: "#/components/schemas/WorkforceAssessment" }
         reviews:
           type: array

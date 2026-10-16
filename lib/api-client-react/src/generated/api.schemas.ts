@@ -124,6 +124,7 @@ export type WorkforceReviewCaseOrigin = typeof WorkforceReviewCaseOrigin[keyof t
 export const WorkforceReviewCaseOrigin = {
   human: 'human',
   model: 'model',
+  catalogue: 'catalogue',
 } as const;
 
 export interface WorkforceReviewEvent {
@@ -176,6 +177,8 @@ export interface WorkforceInsights {
   canManage: boolean;
   subjects: WorkforceSubject[];
   assessments: WorkforceAssessment[];
+  /** Server-owned examples on exact permitted Demo source identities; never real model assessments. */
+  riskExamples?: WorkforceAssessment[];
   reviews: WorkforceReviewCase[];
   owners: WorkforceReviewOwner[];
   coverageNote: string;

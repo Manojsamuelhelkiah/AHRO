@@ -34,6 +34,21 @@ export const GetWorkforceInsightsResponse = zod.object({
   "factors": zod.array(zod.string()),
   "recommendedActions": zod.array(zod.string())
 })),
+  "riskExamples": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.number(),
+  "kind": zod.enum(['talent-risk', 'resume-integrity']),
+  "band": zod.enum(['green', 'amber', 'red', 'unknown']),
+  "modelId": zod.string(),
+  "modelVersion": zod.string(),
+  "assessedAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "validUntil": zod.string().describe('ISO 8601 UTC timestamp'),
+  "sourceRevision": zod.string(),
+  "probability": zod.number().nullable(),
+  "horizonDays": zod.number().nullable(),
+  "factors": zod.array(zod.string()),
+  "recommendedActions": zod.array(zod.string())
+})).optional().describe('Server-owned examples on exact permitted Demo source identities; never real model assessments.'),
   "reviews": zod.array(zod.object({
   "id": zod.string(),
   "reference": zod.string(),
@@ -45,7 +60,7 @@ export const GetWorkforceInsightsResponse = zod.object({
   "ownerUserId": zod.string(),
   "dueDate": zod.string().describe('Calendar date in YYYY-MM-DD'),
   "status": zod.enum(['open', 'in-progress', 'resolved', 'dismissed']),
-  "origin": zod.enum(['human', 'model']),
+  "origin": zod.enum(['human', 'model', 'catalogue']),
   "assessmentId": zod.string().nullable(),
   "createdAt": zod.string().describe('ISO 8601 UTC timestamp'),
   "updatedAt": zod.string().describe('ISO 8601 UTC timestamp'),
@@ -109,6 +124,21 @@ export const CreateWorkforceReviewCaseResponse = zod.object({
   "factors": zod.array(zod.string()),
   "recommendedActions": zod.array(zod.string())
 })),
+  "riskExamples": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.number(),
+  "kind": zod.enum(['talent-risk', 'resume-integrity']),
+  "band": zod.enum(['green', 'amber', 'red', 'unknown']),
+  "modelId": zod.string(),
+  "modelVersion": zod.string(),
+  "assessedAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "validUntil": zod.string().describe('ISO 8601 UTC timestamp'),
+  "sourceRevision": zod.string(),
+  "probability": zod.number().nullable(),
+  "horizonDays": zod.number().nullable(),
+  "factors": zod.array(zod.string()),
+  "recommendedActions": zod.array(zod.string())
+})).optional().describe('Server-owned examples on exact permitted Demo source identities; never real model assessments.'),
   "reviews": zod.array(zod.object({
   "id": zod.string(),
   "reference": zod.string(),
@@ -120,7 +150,7 @@ export const CreateWorkforceReviewCaseResponse = zod.object({
   "ownerUserId": zod.string(),
   "dueDate": zod.string().describe('Calendar date in YYYY-MM-DD'),
   "status": zod.enum(['open', 'in-progress', 'resolved', 'dismissed']),
-  "origin": zod.enum(['human', 'model']),
+  "origin": zod.enum(['human', 'model', 'catalogue']),
   "assessmentId": zod.string().nullable(),
   "createdAt": zod.string().describe('ISO 8601 UTC timestamp'),
   "updatedAt": zod.string().describe('ISO 8601 UTC timestamp'),
@@ -183,6 +213,21 @@ export const UpdateWorkforceReviewCaseResponse = zod.object({
   "factors": zod.array(zod.string()),
   "recommendedActions": zod.array(zod.string())
 })),
+  "riskExamples": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.number(),
+  "kind": zod.enum(['talent-risk', 'resume-integrity']),
+  "band": zod.enum(['green', 'amber', 'red', 'unknown']),
+  "modelId": zod.string(),
+  "modelVersion": zod.string(),
+  "assessedAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "validUntil": zod.string().describe('ISO 8601 UTC timestamp'),
+  "sourceRevision": zod.string(),
+  "probability": zod.number().nullable(),
+  "horizonDays": zod.number().nullable(),
+  "factors": zod.array(zod.string()),
+  "recommendedActions": zod.array(zod.string())
+})).optional().describe('Server-owned examples on exact permitted Demo source identities; never real model assessments.'),
   "reviews": zod.array(zod.object({
   "id": zod.string(),
   "reference": zod.string(),
@@ -194,7 +239,7 @@ export const UpdateWorkforceReviewCaseResponse = zod.object({
   "ownerUserId": zod.string(),
   "dueDate": zod.string().describe('Calendar date in YYYY-MM-DD'),
   "status": zod.enum(['open', 'in-progress', 'resolved', 'dismissed']),
-  "origin": zod.enum(['human', 'model']),
+  "origin": zod.enum(['human', 'model', 'catalogue']),
   "assessmentId": zod.string().nullable(),
   "createdAt": zod.string().describe('ISO 8601 UTC timestamp'),
   "updatedAt": zod.string().describe('ISO 8601 UTC timestamp'),

@@ -43,10 +43,11 @@ test("administrator completes one protected workforce human-review lifecycle", a
   const analytics = page.getByTestId("section-early-warning");
   await expect(row(page).getByTestId("indicator-not-assessed-talent-risk")).toBeVisible();
   await expect(row(page).getByTestId("indicator-not-assessed-resume-integrity")).toBeVisible();
-  await expect(analytics).toContainText("No prediction model is connected");
-  await expect(analytics).toContainText("No risk percentages or colours are shown");
-  await expect(analytics.getByTestId("text-coverage-note")).toContainText("existing source cases");
-  await expect(analytics.getByTestId("text-coverage-note")).toContainText("not a complete employee directory");
+  await expect(analytics).toContainText("Prediction model:");
+  await expect(analytics).toContainText("Not connected");
+  await expect(analytics.getByRole("columnheader", { name: "Talent at Risk", exact: true })).toBeVisible();
+  await expect(analytics.getByRole("columnheader", { name: "Talent at risk (model)", exact: true })).toHaveCount(0);
+  await expect(analytics.getByTestId("text-coverage-note")).toContainText("permitted source cases");
   expect(await analytics.innerText()).not.toMatch(/\b\d+(?:\.\d+)?%/);
   await page.screenshot({ path: "generated-artifacts/workforce-analytics-1280.png" });
 

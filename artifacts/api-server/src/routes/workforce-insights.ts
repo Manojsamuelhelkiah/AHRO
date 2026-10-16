@@ -13,6 +13,8 @@ import {
   WORKFORCE_INSIGHTS_KEY, WorkforceInsightsError, emptyWorkforceState, fail,
   createHumanWorkforceReview, updateWorkforceReview, type WorkforceState,
 } from "../lib/workforce-insights";
+import { eligibleRiskExampleSource, riskExampleStore, visibleRiskExamples, WORKFORCE_EXAMPLES_KEY } from "../lib/workforce-risk-examples";
+import { isFictionalOfflineExampleCase } from "../lib/onboarding/offline-example-display";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 async function administrator(tx: Tx, organizationId: string, userId: string): Promise<boolean> {
@@ -65,24 +67,34 @@ async function owners(tx: Tx, organizationId: string, actor: string) {
   return result.sort((left, right) => Number(right.userId === actor) - Number(left.userId === actor));
 }
 async function snapshot(tx: Tx, organizationId: string, actor: string, state: WorkforceState) {
-  const rows = await tx.select({ id: onbCases.id, workerName: onbCases.workerName, updatedAt: onbCases.updatedAt,
-    provenance: onbCases.syntheticProvenance }).from(onbCases)
+  const rows = await tx.select().from(onbCases)
     .where(eq(onbCases.organizationId, organizationId)).orderBy(desc(onbCases.id));
   const subjects = [];
   for (const row of rows) {
     if (!await casePermission(tx, organizationId, actor, row.id, false)) continue;
-    subjects.push({ caseId: row.id, reference: `${row.provenance ? "S" : "HRO"}${row.id}`,
-      displayName: row.workerName, sourceRevision: row.updatedAt.toISOString() });
+    subjects.push({ caseId: row.id, reference: `${row.syntheticProvenance ? "S" : "HRO"}${row.id}`,
+      displayName: isFictionalOfflineExampleCase(row) ? row.workerName.replace(/^(?:Example|Demo sample)\s*—\s*/, "") : row.workerName,
+      sourceRevision: row.updatedAt.toISOString() });
   }
   const allowed = new Set(subjects.map(row => row.caseId));
+  const [exampleRow] = organizationId === "demo" ? await tx.select().from(onbSettings).where(and(
+    eq(onbSettings.organizationId, organizationId), eq(onbSettings.key, WORKFORCE_EXAMPLES_KEY),
+  )) : [];
+  const riskExamples = visibleRiskExamples(organizationId,
+    exampleRow ? riskExampleStore.parse(JSON.parse(exampleRow.value)) : [],
+    rows.filter(row => allowed.has(row.id)));
+  // Indicator freshness is not a retention policy for a review's work/history.
+  const eligibleExampleCases = new Set(rows.filter(eligibleRiskExampleSource).map(row => row.id));
   return GetWorkforceInsightsResponse.parse({
     organizationId, version: state.version, modelStatus: "not-connected", canManage: true,
     subjects,
     // No approved model is connected. Historical/future payloads never imply live predictions.
     assessments: [],
-    reviews: state.reviews.filter(row => allowed.has(row.caseId)),
+    riskExamples,
+    reviews: state.reviews.filter(row => allowed.has(row.caseId) &&
+      (row.origin !== "catalogue" || eligibleExampleCases.has(row.caseId))),
     owners: await owners(tx, organizationId, actor),
-    coverageNote: "Coverage is permitted source cases, not a complete employee directory. No prediction model is connected. Human reviews do not establish attrition risk or resume fabrication.",
+    coverageNote: "Showing permitted source cases for this client.",
   });
 }
 

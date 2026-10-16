@@ -7,6 +7,8 @@ import { db, organizationsTable, organizationMembershipsTable, onbCases, onbSett
 import { createTenantContextMiddleware, lookupMembership } from "../middlewares/tenant-context";
 import { createWorkforceInsightsRouter } from "./workforce-insights";
 import { WORKFORCE_INSIGHTS_KEY } from "../lib/workforce-insights";
+import { emptyWorkforceState, updateWorkforceReview } from "../lib/workforce-insights";
+import { buildRiskExamples, RISK_EXAMPLE_SOURCES, WORKFORCE_EXAMPLES_KEY } from "../lib/workforce-risk-examples";
 
 test("client-scoped persisted review lifecycle, deduplication, conflicts and revoked administration", async () => {
   const orgA = `warning-a-${randomUUID()}`, orgB = `warning-b-${randomUUID()}`;
@@ -51,6 +53,7 @@ test("client-scoped persisted review lifecycle, deduplication, conflicts and rev
     assert.equal(initial.status, 200);
     assert.equal(initial.data.modelStatus, "not-connected");
     assert.deepEqual(initial.data.assessments, []);
+    assert.deepEqual(initial.data.riskExamples, []);
     assert.equal(initial.data.subjects.length, 1);
     assert.equal(initial.data.subjects[0].caseId, caseA.id);
     assert.equal(initial.cache, "no-store");
@@ -96,4 +99,52 @@ test("client-scoped persisted review lifecycle, deduplication, conflicts and rev
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     // The entire disposable test schema is dropped by the registered harness.
   }
+});
+
+test("the day after example expiry, permitted reviews and outcomes remain visible without risk indicators", async () => {
+  const actor = `expiry-reviewer-${randomUUID()}`;
+  await db.insert(organizationsTable).values({
+    id: "demo", slug: "demo", name: "Demo Organization", joinCodeHash: randomUUID(), createdByUserId: actor,
+  }).onConflictDoNothing();
+  await db.insert(organizationMembershipsTable).values({ organizationId: "demo", clerkUserId: actor, role: "admin" });
+  const sources = await db.insert(onbCases).values(RISK_EXAMPLE_SOURCES.map(row => ({
+    ...row.values, organizationId: "demo",
+  }))).returning();
+  const now = new Date();
+  const assessedAt = new Date(now.getTime() - 91 * 86_400_000);
+  const seeded = buildRiskExamples(emptyWorkforceState(), sources, assessedAt);
+  const low = seeded.state.reviews[2];
+  const state = updateWorkforceReview(seeded.state, low.id, {
+    version: seeded.state.version, status: "resolved", ownerUserId: actor, dueDate: low.dueDate,
+    outcome: "Role-title correction confirmed",
+  }, actor, now);
+  for (const [key, value] of [[WORKFORCE_INSIGHTS_KEY, state], [WORKFORCE_EXAMPLES_KEY, seeded.examples]] as const) {
+    await db.insert(onbSettings).values({ organizationId: "demo", key, value: JSON.stringify(value) });
+  }
+  const app = express();
+  app.use((req, _res, next) => { req.authUserId = actor; next(); });
+  app.use(createTenantContextMiddleware(lookupMembership));
+  app.use("/api", createWorkforceInsightsRouter());
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const url = `http://127.0.0.1:${address.port}/api/workforce-insights`;
+  try {
+    const response = await fetch(url, { headers: { "x-organization-id": "demo" } });
+    assert.equal(response.status, 200);
+    const result = await response.json() as any;
+    assert.deepEqual(result.riskExamples, []);
+    assert.deepEqual(result.assessments, []);
+    assert.equal(result.reviews.length, 3);
+    assert.equal(result.reviews.filter((row: any) => row.status === "open").length, 2);
+    const resolved = result.reviews.find((row: any) => row.id === low.id);
+    assert.equal(resolved.outcome, "Role-title correction confirmed");
+    assert.equal(resolved.history.length, 2);
+    assert.equal(result.reviews.find((row: any) => row.priority === "critical").reference, `S${sources[0].id}`);
+    // Authored history must not be projected onto a subsequently changed identity.
+    await db.update(onbCases).set({ workerEmail: "person@example.com" }).where(eq(onbCases.id, sources[0].id));
+    const changed = await (await fetch(url, { headers: { "x-organization-id": "demo" } })).json() as any;
+    assert.equal(changed.reviews.length, 2);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
