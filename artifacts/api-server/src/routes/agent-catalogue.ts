@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Router, type IRouter } from "express";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { accessAgents, accessGovernanceHistory, agentCatalogueBindings, agentCatalogueSetupReceipts, customIntentsTable, db, DEMO_ORGANIZATION_ID, onbSettings, organizationMembershipsTable, organizationsTable } from "@workspace/db";
 import { AGENT_CATALOGUE_VERSION, agentCatalogue } from "../lib/agent-catalogue";
 import { getOrganizationId } from "../lib/organization-scope";
@@ -10,6 +10,8 @@ import { enrichMemberIdentities, isInternalAccount } from "../lib/member-identit
 import { EXECUTABLE_AGENT_TOOL_KEYS } from "../lib/agent-invocation";
 import { INTAKE_CONVERSION_KEY, intakeOwnerEligible, intakeOwnerMembershipRevision, resolveIntakeConversion } from "../lib/intake-conversion-authorization";
 import { GetAgentCatalogueResponse, RegisterCatalogueAgentBody, RegisterCatalogueAgentResponse } from "@workspace/api-zod";
+import { agentInvocationAudit } from "@workspace/db";
+import { listOnboardingAgents } from "../lib/onboarding/operational-agents";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 class CatalogueSetupError extends Error {
@@ -71,7 +73,21 @@ router.get("/agent-catalogue", async (req, res, next) => {
                (binding.catalogueKey === INTAKE_CONVERSION_KEY && !await resolveIntakeConversion(tx, organizationId)) ? "review-required" : "registered",
         });
       }
+      // Bounded metadata only, exactly attributable to a tenant principal.
+      // No case identifiers, purpose, evidence, model output or private payload.
+      const activity = canManage && bindings.length ? await tx.select({
+        id: agentInvocationAudit.id, agentId: agentInvocationAudit.agentId,
+        agentVersion: agentInvocationAudit.agentVersion, createdAt: agentInvocationAudit.createdAt,
+        toolKey: agentInvocationAudit.toolKey, action: agentInvocationAudit.action,
+        outcome: agentInvocationAudit.outcome, runId: agentInvocationAudit.runId, correlationId: agentInvocationAudit.correlationId,
+      }).from(agentInvocationAudit).where(and(
+        eq(agentInvocationAudit.organizationId, organizationId),
+        inArray(agentInvocationAudit.agentId, bindings.map(b => b.agentId)),
+      )).orderBy(desc(agentInvocationAudit.id)).limit(100) : [];
       return {
+        legacyIdentities: listOnboardingAgents(),
+        activity: activity.filter(row => bindings.some(b => b.agentId === row.agentId && b.principalVersion === row.agentVersion))
+          .map(row => ({ ...row, createdAt: row.createdAt.toISOString() })),
         organizationId, clientName: client?.name ?? "Selected client", version: AGENT_CATALOGUE_VERSION,
         canManage, entries: agentCatalogue(), registrations, principals: principals.map(row => ({ id: row.id, name: row.name, ownerUserId: row.ownerUserId, status: row.revokedAt ? "revoked" : row.status, version: row.version })),
         owners: owners.map(row => ({ clerkUserId: row.clerkUserId, role: row.role })),

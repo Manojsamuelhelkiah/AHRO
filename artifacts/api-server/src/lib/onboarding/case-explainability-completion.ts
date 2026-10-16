@@ -5,9 +5,9 @@ import {
   type ProviderGovernanceCase,
 } from "./governance-provider-boundary";
 
-const MODEL = "gpt-5-nano";
-const REQUEST_TIMEOUT_MS = 30_000;
-export const MAX_COMPLETION_TOKENS = 6_000;
+import { EXPLANATION_MODEL_SETTINGS, EXPLANATION_TIMEOUT_MS } from "./inspectable-prompts";
+const REQUEST_TIMEOUT_MS = EXPLANATION_TIMEOUT_MS;
+export const MAX_COMPLETION_TOKENS = EXPLANATION_MODEL_SETTINGS.max_completion_tokens;
 
 export type ExplainabilityCompletionStage = "generation" | "verification";
 
@@ -144,9 +144,7 @@ export async function completeExplainabilityJson(
       dispatch: async () => {
         const { dispatchHroAi } = await import("../hro-context/manager");
         return dispatchHroAi({
-        model: MODEL,
-        reasoning_effort: "low" as const,
-        max_completion_tokens: MAX_COMPLETION_TOKENS,
+        ...EXPLANATION_MODEL_SETTINGS,
         response_format: {
           type: "json_schema" as const,
           json_schema: {

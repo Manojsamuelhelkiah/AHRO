@@ -895,7 +895,46 @@ export type AgentCatalogueEntryMappingsItem = {
   rationale: string;
 };
 
+export type AgentInspectionWorkflowsItem = {
+  name: string;
+  association: string;
+  source: string;
+  hash: string;
+  system: string;
+  template: string;
+  provider: string;
+  model: string;
+  settings: string;
+  status: string;
+};
+
+export type AgentInspectionToolsItem = {
+  name: string;
+  input: string;
+  output: string;
+  access: string;
+  association: string;
+};
+
+export type AgentInspectionProtocolsItem = {
+  name: string;
+  status: string;
+  description: string;
+};
+
+export interface AgentInspection {
+  execution: string;
+  instructions: string;
+  workflows: AgentInspectionWorkflowsItem[];
+  tools: AgentInspectionToolsItem[];
+  contextSources: string[];
+  protocols: AgentInspectionProtocolsItem[];
+  collaborations: string[];
+  unavailable: string[];
+}
+
 export interface AgentCatalogueEntry {
+  inspection?: AgentInspection;
   key: string;
   name: string;
   version: string;
@@ -906,6 +945,26 @@ export interface AgentCatalogueEntry {
   operationalCapability: string;
   mappings: AgentCatalogueEntryMappingsItem[];
 }
+
+export type AgentCatalogueLegacyIdentitiesItem = {
+  id: string;
+  name: string;
+  description: string;
+  owner: string;
+  capabilities: string[];
+};
+
+export type AgentCatalogueActivityItem = {
+  id: number;
+  agentId: string;
+  agentVersion: number | null;
+  createdAt: string;
+  toolKey: string;
+  action: string;
+  outcome: string;
+  runId: string;
+  correlationId: string;
+};
 
 export type AgentCataloguePrincipalsItem = {
   id: string;
@@ -959,6 +1018,8 @@ export interface AccessOrganizationMember {
 }
 
 export interface AgentCatalogue {
+  legacyIdentities?: AgentCatalogueLegacyIdentitiesItem[];
+  activity?: AgentCatalogueActivityItem[];
   organizationId: string;
   clientName: string;
   version: string;

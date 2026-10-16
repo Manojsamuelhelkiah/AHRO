@@ -1305,11 +1305,60 @@ export const SaveOfflineCasePreparationResponse = zod.object({
  * @summary Inspect versioned agent roles and permitted client setup metadata
  */
 export const GetAgentCatalogueResponse = zod.object({
+  "legacyIdentities": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "owner": zod.string(),
+  "capabilities": zod.array(zod.string())
+})).optional(),
+  "activity": zod.array(zod.object({
+  "id": zod.number(),
+  "agentId": zod.string(),
+  "agentVersion": zod.number().nullable(),
+  "createdAt": zod.string(),
+  "toolKey": zod.string(),
+  "action": zod.string(),
+  "outcome": zod.string(),
+  "runId": zod.string(),
+  "correlationId": zod.string()
+})).optional(),
   "organizationId": zod.string(),
   "clientName": zod.string(),
   "version": zod.string(),
   "canManage": zod.boolean(),
   "entries": zod.array(zod.object({
+  "inspection": zod.object({
+  "execution": zod.string(),
+  "instructions": zod.string(),
+  "workflows": zod.array(zod.object({
+  "name": zod.string(),
+  "association": zod.string(),
+  "source": zod.string(),
+  "hash": zod.string(),
+  "system": zod.string(),
+  "template": zod.string(),
+  "provider": zod.string(),
+  "model": zod.string(),
+  "settings": zod.string(),
+  "status": zod.string()
+})),
+  "tools": zod.array(zod.object({
+  "name": zod.string(),
+  "input": zod.string(),
+  "output": zod.string(),
+  "access": zod.string(),
+  "association": zod.string()
+})),
+  "contextSources": zod.array(zod.string()),
+  "protocols": zod.array(zod.object({
+  "name": zod.string(),
+  "status": zod.string(),
+  "description": zod.string()
+})),
+  "collaborations": zod.array(zod.string()),
+  "unavailable": zod.array(zod.string())
+}).optional(),
   "key": zod.string(),
   "name": zod.string(),
   "version": zod.string(),

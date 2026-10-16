@@ -1,4 +1,5 @@
 import { buildIntentCatalog } from "./intent-catalog";
+import { agentInspection } from "./agent-inspection";
 
 export const AGENT_CATALOGUE_VERSION = "hro-agents-v1";
 /** Reviewed coordination associations, not outcome support or routing authority. */
@@ -33,6 +34,7 @@ export function agentCatalogue() {
   const taxonomy = buildIntentCatalog();
   return roles.map(([key, name, family, responsibility, services], index) => ({
     key, name, version: AGENT_CATALOGUE_VERSION, kind: index < 12 ? "domain" : "supporting",
+    inspection: agentInspection(key),
     productFamilies: family ? [family] : key === "assets-workplace" ? ["Onboarding", "Offboarding", "Employee Changes"] : key === "document-verification" ? ["Onboarding", "Compliance", "Benefits", "Documents"] : roles.slice(0, 12).map(role => role[2]),
     responsibility,
      prerequisites: key === "intake-conversion"

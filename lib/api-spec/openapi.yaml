@@ -8059,6 +8059,8 @@ components:
       type: object
       required: [key, name, version, kind, productFamilies, responsibility, prerequisites, mappings, operationalCapability]
       properties:
+        inspection:
+          $ref: "#/components/schemas/AgentInspection"
         key: { type: string }
         name: { type: string }
         version: { type: string }
@@ -8086,10 +8088,89 @@ components:
                 items: { type: string }
               reviewStatus: { type: string }
               rationale: { type: string }
+    AgentInspection:
+      type: object
+      required: [execution, instructions, workflows, tools, contextSources, protocols, collaborations, unavailable]
+      properties:
+        execution: { type: string }
+        instructions: { type: string }
+        workflows:
+          type: array
+          items:
+            type: object
+            required: [name, association, source, hash, system, template, provider, model, settings, status]
+            properties:
+              name: { type: string }
+              association: { type: string }
+              source: { type: string }
+              hash: { type: string }
+              system: { type: string }
+              template: { type: string }
+              provider: { type: string }
+              model: { type: string }
+              settings: { type: string }
+              status: { type: string }
+        tools:
+          type: array
+          items:
+            type: object
+            required: [name, input, output, access, association]
+            properties:
+              name: { type: string }
+              input: { type: string }
+              output: { type: string }
+              access: { type: string }
+              association: { type: string }
+        contextSources:
+          type: array
+          items: { type: string }
+        protocols:
+          type: array
+          items:
+            type: object
+            required: [name, status, description]
+            properties:
+              name: { type: string }
+              status: { type: string }
+              description: { type: string }
+        collaborations:
+          type: array
+          items: { type: string }
+        unavailable:
+          type: array
+          items: { type: string }
     AgentCatalogue:
       type: object
       required: [organizationId, clientName, version, canManage, entries, registrations, principals, owners, customMappings, runtimeCapabilities, runtimeNotice]
       properties:
+        legacyIdentities:
+          type: array
+          items:
+            type: object
+            required: [id, name, description, owner, capabilities]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              description: { type: string }
+              owner: { type: string }
+              capabilities:
+                type: array
+                items: { type: string }
+        activity:
+          type: array
+          items:
+            type: object
+            required: [id, agentId, agentVersion, createdAt, toolKey, action, outcome, runId, correlationId]
+            properties:
+              id: { type: integer }
+              agentId: { type: string }
+              agentVersion: { type: integer, nullable: true }
+              createdAt: { type: string }
+              toolKey: { type: string }
+              action: { type: string }
+              outcome: { type: string }
+              runId: { type: string }
+              correlationId: { type: string }
         organizationId: { type: string }
         clientName: { type: string }
         version: { type: string }

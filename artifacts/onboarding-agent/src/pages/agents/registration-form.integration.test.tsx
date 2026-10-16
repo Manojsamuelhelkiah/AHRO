@@ -35,7 +35,7 @@ const snapshot = (): AgentCatalogue => ({
 const settle = () => new Promise(resolve => setTimeout(resolve, 20));
 type Driver = {
   render: (cat: AgentCatalogue, selection?: { key: string; revision: number }, scope?: string) => Promise<void>;
-  renderCatalogue: (searchTerm?: string) => Promise<void>;
+  renderCatalogue: (searchTerm?: string, scope?: { userId: string; sessionId: string; orgId: string }) => Promise<void>;
   refreshCatalogue: () => Promise<void>;
   choose: (id: string, value: string) => Promise<void>;
   click: (id: string) => Promise<void>;
@@ -75,12 +75,13 @@ async function fixture(run: (d: Driver) => Promise<void>, handler: typeof fetch 
         await settle();
       });
     },
-    renderCatalogue: async (searchTerm = '') => {
+    renderCatalogue: async (searchTerm = '', scope) => {
       const { CatalogueSection } = await import('./catalogue-section');
-      const Auth = ClerkProvider as unknown as React.ComponentType<{ children: React.ReactNode; user: { id: string } }>;
+      const Auth = ClerkProvider as unknown as React.ComponentType<{ children: React.ReactNode; user: { id: string }; sessionId?: string }>;
+      if (scope) pinOrganizationIdForPage(scope.orgId);
       dom.HTMLElement.prototype.scrollIntoView = () => {};
       await act(async () => {
-        root.render(<QueryClientProvider client={client}><Auth user={{ id: 'fixture-admin' }}><CatalogueSection searchTerm={searchTerm} /></Auth></QueryClientProvider>);
+        root.render(<QueryClientProvider client={client}><Auth user={{ id: scope?.userId ?? 'fixture-admin' }} sessionId={scope?.sessionId}><CatalogueSection searchTerm={searchTerm} /></Auth></QueryClientProvider>);
         await settle();
       });
       await act(settle);
@@ -128,19 +129,18 @@ for (const canManage of [true, false]) {
       await d.renderCatalogue();
       const section = d.dom.document.querySelector('[data-testid="section-catalogue"]')!;
       const text = section.textContent!;
-      assert.equal(section.querySelector('#catalogue-h')?.textContent, 'Catalogue roles and registrations');
-      assert.match(text, /Versioned agent roles and who is registered to each\. Registration is setup metadata only\./);
-      assert.match(text, /The twelve product families are browsing labels/);
+      assert.equal(section.querySelector('#catalogue-h')?.textContent, 'Agent catalogue');
+      assert.match(text, /Inspect reads saved definitions only; it never runs a model/);
+      assert.doesNotMatch(text, /Registration is setup metadata only/);
+      assert.match(text, /Product families are browsing labels/);
       assert.match(text, /Reviewed mappings associate coordination responsibilities only/);
       assert.doesNotMatch(text, /Runtime metadata read - implemented|Domain operational capabilities - unavailable|fixture\.metadata\.read|Fixture runtime notice|None reported|Effective access is not evaluated|Roles below describe intended responsibility|Fixture client - catalogue version/);
       assert.equal(section.querySelector('[data-testid="panel-runtime-implemented"]'), null);
       assert.equal(section.querySelector('[data-testid="panel-operational-unavailable"]'), null);
-      // The retained explanation immediately follows the heading, not an empty panel grid.
-      assert.equal(section.children[1].firstElementChild?.tagName, 'P');
       assert.equal(d.text('catalogue-search-results'), '3 of 3 catalogue roles');
       assert.equal(section.querySelectorAll('[data-testid^="card-role-"]').length, 3);
-      assert.equal(section.querySelectorAll('details summary').length, 3);
-      assert.equal((text.match(/Operational capability \(unavailable\):/g) ?? []).length, 3);
+      assert.equal(section.querySelectorAll('[data-testid^="button-inspect-"]').length, 3);
+      assert.equal((text.match(/No role model executor/g) ?? []).length, 3);
       assert.equal(!!section.querySelector('[data-testid="form-register-agent"]'), canManage);
       assert.equal(!!section.querySelector('[data-testid="select-catalogue-role"]'), canManage);
       assert.equal(!!section.querySelector('[data-testid="button-submit-registration"]'), canManage);
@@ -400,4 +400,154 @@ test('a successful non-manager snapshot clears the unresolved administrative req
     if (init?.method === 'POST') throw new Error('Lost outcome');
     return new Response(JSON.stringify(cat), { headers: { 'Content-Type': 'application/json' } });
   });
+});
+
+function inspectableSnapshot(): AgentCatalogue {
+  const cat = snapshot();
+  cat.entries[0].inspection = {
+    execution: 'No role executor; independent workflow only.',
+    instructions: 'Actual static operating contract.',
+    workflows: [{
+      name: 'Linked plan workflow', association: 'Independent component, not a role executor',
+      source: 'shared-server-definition.ts', hash: 'fixture-sha256', system: 'Static system instruction',
+      template: 'Context: {{authorized_evidence}}', provider: 'OpenAI', model: 'gpt-5-nano',
+      settings: 'max_completion_tokens=3200', status: 'Implemented gated path',
+    }],
+    tools: [{ name: 'tool.case.read', input: 'caseId', output: 'lifecycleStage', access: 'Current accountable owner', association: 'Shared principal tool' }],
+    contextSources: ['Authorized metadata'], protocols: [
+      { name: 'A2A', status: 'Not implemented', description: 'Agent-to-agent interoperability' },
+      { name: 'MCP', status: 'Not implemented', description: 'Model-to-tool/context interoperability' },
+    ], collaborations: ['Proposed design metadata only'], unavailable: ['Token spend', 'Deployment'],
+  };
+  cat.legacyIdentities = ['documentation', 'access', 'assets', 'payroll', 'learning'].map(id => ({
+    id, name: `Historical ${id}`, description: 'Legacy identity; not a registered role executor.',
+    owner: 'Historical team label', capabilities: ['Track handoffs'],
+  }));
+  cat.activity = [
+    { id: 1, agentId: 'principal-a', agentVersion: 3, toolKey: 'tool.case.read', action: 'case.metadata.read',
+      outcome: 'success', createdAt: '2026-10-01T10:00:00.000Z', runId: 'exact-run', correlationId: 'exact-correlation' },
+    { id: 2, agentId: 'principal-a', agentVersion: 2, toolKey: 'tool.context.read', action: 'case.context.read',
+      outcome: 'denied', createdAt: '2026-10-01T09:00:00.000Z', runId: 'old-version-run', correlationId: 'old-correlation' },
+    { id: 3, agentId: 'principal-b', agentVersion: 7, toolKey: 'tool.case.read', action: 'case.metadata.read',
+      outcome: 'success', createdAt: '2026-10-01T09:00:00.000Z', runId: 'other-agent-run', correlationId: 'other-correlation' },
+  ];
+  return cat;
+}
+
+test('inspector reads shared static definitions, copies templates, and only shows attributable tool activity', async () => {
+  let reads = 0, copied = '';
+  await fixture(async d => {
+    Object.defineProperty(d.dom.navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { copied = text; } } });
+    await d.renderCatalogue();
+    await d.click('button-inspect-onboarding');
+    const dialog = () => d.dom.document.querySelector('[role="dialog"]')!;
+    assert.match(dialog().textContent!, /Saved Alpha/);
+    assert.equal(d.dom.document.activeElement?.id, 'insp-title');
+    await d.click('tab-inspector-1');
+    assert.match(dialog().textContent!, /Static system instruction/);
+    assert.match(dialog().textContent!, /Context: \{\{authorized_evidence\}\}/);
+    assert.match(dialog().textContent!, /fixture-sha256/);
+    await d.click('button-copy-template-onboarding-0');
+    assert.equal(copied, 'Context: {{authorized_evidence}}');
+    assert.match(dialog().textContent!, /Copied/);
+    await d.click('tab-inspector-2');
+    assert.match(dialog().textContent!, /OpenAI \/ gpt-5-nano/);
+    await d.click('tab-inspector-3');
+    assert.match(dialog().textContent!, /A2A.*Not implemented.*MCP.*Not implemented/s);
+    assert.doesNotMatch(dialog().textContent!, /Connected/);
+    await d.click('tab-inspector-4');
+    assert.match(dialog().textContent!, /exact-run.*exact-correlation/s);
+    assert.doesNotMatch(dialog().textContent!, /old-version-run|other-agent-run/);
+    assert.match(dialog().textContent!, /not inference telemetry/);
+    await d.click('button-close-inspector');
+    assert.equal(dialog(), null);
+    // Programmatic click does not move focus; browser tests cover opener focus.
+    assert.equal(reads, 1, 'inspection must not send any model, tool or effect request');
+  }, async (_url, init) => {
+    assert.ok(!init?.method || init.method === 'GET');
+    reads++;
+    return new Response(JSON.stringify(inspectableSnapshot()), { headers: { 'Content-Type': 'application/json' } });
+  });
+});
+
+test('legacy links keep colliding role names distinct and search does not manufacture mappings', async () => {
+  await fixture(async d => {
+    d.dom.history.replaceState(null, '', '#payroll');
+    await d.renderCatalogue();
+    assert.equal(d.dom.document.querySelector('[role="dialog"]'), null);
+    assert.match(d.text('legacy-payroll'), /Historical payroll.*Historical team label/s);
+    assert.equal(d.dom.document.querySelector('[data-testid="legacy-references"]')?.getAttribute('open'), '');
+    assert.match(d.text('legacy-references'), /nothing here maps to a role, principal or executor/);
+    await d.renderCatalogue('Historical payroll');
+    assert.equal(d.dom.document.querySelectorAll('[data-testid^="card-role-"]').length, 0);
+    assert.match(d.text('legacy-payroll'), /Historical payroll/);
+    await act(async () => {
+      d.dom.history.replaceState(null, '', '#role:payroll');
+      d.dom.window.dispatchEvent(new d.dom.Event('hashchange'));
+      await settle();
+    });
+    await d.renderCatalogue();
+    assert.ok(d.dom.document.querySelector('[data-testid="inspector-payroll"]'));
+  }, async () => new Response(JSON.stringify(inspectableSnapshot()), { headers: { 'Content-Type': 'application/json' } }));
+});
+
+test('read failure and administrative loss remove inspector private state before retry', async () => {
+  let cat = inspectableSnapshot(), fail = false;
+  await fixture(async d => {
+    await d.renderCatalogue(); await d.click('button-inspect-onboarding'); await d.click('tab-inspector-4');
+    assert.match(d.dom.document.body.textContent!, /exact-correlation/);
+    fail = true; await d.refreshCatalogue();
+    assert.equal(d.dom.document.querySelector('[role="dialog"]'), null);
+    assert.doesNotMatch(d.dom.document.body.textContent!, /exact-correlation|Saved Alpha/);
+    fail = false; cat = { ...cat, canManage: false, principals: [], registrations: [], owners: [], activity: [] };
+    await d.click('button-retry-catalogue');
+    await d.click('button-inspect-onboarding'); await d.click('tab-inspector-4');
+    assert.match(d.dom.document.body.textContent!, /Activity is private/);
+    assert.doesNotMatch(d.dom.document.body.textContent!, /exact-correlation|Saved Alpha/);
+  }, async () => new Response(JSON.stringify(fail ? { message: 'Unavailable' } : cat), {
+    status: fail ? 503 : 200, headers: { 'Content-Type': 'application/json' },
+  }));
+});
+
+test('late prior-tenant response cannot restore private catalogue or inspector after session switch', async () => {
+  let release: ((response: Response) => void) | undefined, calls = 0;
+  await fixture(async d => {
+    await d.renderCatalogue('', { userId: 'old-user', sessionId: 'old-session', orgId: 'client-a' });
+    assert.ok(d.dom.document.querySelector('[data-testid="loading-catalogue"]'));
+    await d.renderCatalogue('', { userId: 'new-user', sessionId: 'new-session', orgId: 'client-b' });
+    assert.match(d.text('notice-no-manage'), /private to administrators/);
+    await act(async () => {
+      release!(new Response(JSON.stringify(inspectableSnapshot()), { headers: { 'Content-Type': 'application/json' } }));
+      await settle();
+    });
+    assert.doesNotMatch(d.dom.document.body.textContent!, /Saved Alpha|Accountable Alpha|exact-correlation/);
+    assert.equal(d.dom.document.querySelector('[data-testid="form-register-agent"]'), null);
+    assert.equal(d.dom.document.querySelector('[role="dialog"]'), null);
+    assert.equal(d.client.getQueryData(['agent-catalogue', 'old-user', 'old-session', 'client-a']), undefined);
+  }, async () => {
+    calls++;
+    if (calls === 1) return new Promise<Response>(resolve => { release = resolve; });
+    const cat = { ...inspectableSnapshot(), organizationId: 'client-b', canManage: false, principals: [], registrations: [], owners: [], activity: [] };
+    return new Response(JSON.stringify(cat), { headers: { 'Content-Type': 'application/json' } });
+  });
+});
+
+test('live administrative loss redacts an already-open inspector and family filters remain usable', async () => {
+  let cat = inspectableSnapshot();
+  cat.entries[0].productFamilies = ['Onboarding'];
+  cat.entries[1].productFamilies = ['Payroll'];
+  await fixture(async d => {
+    await d.renderCatalogue();
+    await d.choose('select-family-filter', 'Payroll');
+    assert.equal(d.dom.document.querySelectorAll('[data-testid^="card-role-"]').length, 1);
+    await d.choose('select-family-filter', '');
+    await d.click('button-inspect-onboarding');
+    assert.match(d.dom.document.body.textContent!, /Saved Alpha/);
+    cat = { ...cat, canManage: false, registrations: [], principals: [], owners: [], activity: [] };
+    await d.refreshCatalogue();
+    assert.doesNotMatch(d.dom.document.body.textContent!, /Saved Alpha|Accountable Alpha|principal-a/);
+    assert.match(d.dom.document.querySelector('[role="dialog"]')!.textContent!, /Binding details are private/);
+    await d.click('tab-inspector-4');
+    assert.match(d.dom.document.querySelector('[role="dialog"]')!.textContent!, /Activity is private/);
+  }, async () => new Response(JSON.stringify(cat), { headers: { 'Content-Type': 'application/json' } }));
 });

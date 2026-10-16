@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import express from "express";
 import { test } from "node:test";
 import { and, eq, sql } from "drizzle-orm";
 import {
-  accessAgents, accessGovernanceHistory, agentCatalogueBindings, customIntentsTable, db, onbSettings,
+  accessAgents, accessGovernanceHistory, agentCatalogueBindings, agentInvocationAudit, customIntentsTable, db, onbSettings,
   organizationMembershipsTable, organizationsTable,
 } from "@workspace/db";
 import { agentCatalogue, AGENT_CATALOGUE_VERSION } from "../lib/agent-catalogue";
@@ -20,9 +20,63 @@ import {
 } from "../lib/private-platform-admin";
 import { GetAgentCatalogueResponse, RegisterCatalogueAgentBody, RegisterCatalogueAgentResponse } from "@workspace/api-zod";
 import { z } from "zod";
+import { agentInspection, onboardingInspectionWorkflows, INTAKE_CONVERSION_CONTRACT } from "../lib/agent-inspection";
+import { listOnboardingAgents } from "../lib/onboarding/operational-agents";
+import { EXPLANATION_CATEGORIES, EXPLANATION_SYSTEM, EXPLANATION_MODEL_SETTINGS, PLAN_SYSTEM, planTemplate, WELCOME_SYSTEM, welcomeTemplate } from "../lib/onboarding/inspectable-prompts";
 type AgentCatalogue = z.infer<typeof GetAgentCatalogueResponse>;
 type CatalogueAgentRegistrationInput = z.infer<typeof RegisterCatalogueAgentBody>;
 type CatalogueRegistrationResult = z.infer<typeof RegisterCatalogueAgentResponse>;
+
+test("inspection is static, bounded, source-backed and never invents a role executor or protocol adapter", () => {
+  const roles = agentCatalogue();
+  for (const role of roles) {
+    const inspection = role.inspection;
+    assert.equal(inspection.workflows.length > 0, role.key === "onboarding");
+    for (const protocol of ["A2A", "MCP"]) assert.equal(inspection.protocols.find(p => p.name === protocol)?.status, "Not implemented");
+    assert.equal(inspection.tools[0].name, "tool.case.read");
+    assert.match(inspection.tools[0].access, /accountable owner initiation/);
+    assert.ok(inspection.unavailable.includes("Token spend"));
+    assert.ok(inspection.collaborations.every(c => !c.includes("Connected")));
+  }
+  assert.equal(agentInspection("intake-conversion").instructions, INTAKE_CONVERSION_CONTRACT);
+  assert.match(INTAKE_CONVERSION_CONTRACT, /Historical backlog remains manual/);
+  assert.match(INTAKE_CONVERSION_CONTRACT, /quarantined/);
+  assert.equal(agentInspection("intake-conversion").workflows.length, 0);
+  assert.match(agentInspection("documents-records").collaborations.join(" "), /case-free LLM calls are denied/);
+  const workflows = onboardingInspectionWorkflows();
+  assert.equal(workflows[0].system, PLAN_SYSTEM);
+  assert.equal(workflows[0].template, planTemplate("{{authorized_plan_evidence}}"));
+  assert.equal(workflows[1].system, WELCOME_SYSTEM);
+  assert.equal(workflows[1].template, welcomeTemplate({ role: "{{role}}", department: "{{department}}", joiningDate: "{{joiningDate}}", geography: "{{geography}}" }));
+  assert.equal(JSON.parse(workflows[0].settings).max_completion_tokens, 3200);
+  assert.equal(JSON.parse(workflows[1].settings).max_completion_tokens, 2900);
+  for (const [category, instruction] of Object.entries(EXPLANATION_CATEGORIES)) {
+    const workflow = workflows.find(w => w.name === `Case explanation · ${category}`)!;
+    assert.equal(workflow.system, EXPLANATION_SYSTEM);
+    assert.ok(workflow.template.includes(instruction));
+    assert.ok(workflow.template.includes("{{server_curated_evidence}}"));
+    assert.equal(JSON.parse(workflow.settings).model, EXPLANATION_MODEL_SETTINGS.model);
+    assert.equal(JSON.parse(workflow.settings).max_completion_tokens, EXPLANATION_MODEL_SETTINGS.max_completion_tokens);
+  }
+  for (const workflow of workflows) {
+    assert.match(workflow.association, /not the registered role's executor/);
+    assert.equal(workflow.hash, createHash("sha256").update(JSON.stringify({
+      system: workflow.system, template: workflow.template, settings: workflow.settings, model: workflow.model,
+    })).digest("hex"));
+  }
+  // Runtime must import the same static definitions, never inspector-only samples.
+  const engine = readFileSync("src/lib/onboarding/engine.ts", "utf8");
+  for (const usage of ["PLAN_SYSTEM,", "planTemplate(planEvidence)", "WELCOME_SYSTEM,", "welcomeTemplate(c)"]) assert.ok(engine.includes(usage));
+  const explanation = readFileSync("src/lib/onboarding/case-explainability.ts", "utf8");
+  for (const usage of ["EXPLANATION_SYSTEM as SYSTEM_PROMPT", "EXPLANATION_CATEGORIES as INTENT_PROMPT", "explanationTemplate(INTENT_PROMPT", "verificationParagraphTemplate(index"]) assert.ok(explanation.includes(usage));
+  const completion = readFileSync("src/lib/onboarding/case-explainability-completion.ts", "utf8");
+  assert.ok(completion.includes("...EXPLANATION_MODEL_SETTINGS"));
+  const llm = readFileSync("src/lib/onboarding/llm.ts", "utf8");
+  assert.ok(llm.includes("model: ONBOARDING_MODEL"));
+  assert.ok(llm.includes("maxTokens + TEXT_TOKEN_BUFFER"));
+  assert.ok(llm.includes('if (typeof caseOrSystem === "string") return null'), "dormant case-free paths remain denied");
+  assert.deepEqual(listOnboardingAgents().map(a => a.id), ["documentation", "access", "assets", "payroll", "learning"]);
+});
 
 test("additive intake conversion role preserves existing catalogue versions and coordination coverage", () => {
   const before = buildIntentCatalog();
@@ -167,6 +221,9 @@ test("isolated client catalogue setup: live administration, idempotency, conflic
     const catalogue = read.body as AgentCatalogue;
     assert.equal(catalogue.clientName, "Catalogue client");
     assert.equal(catalogue.canManage, true);
+    assert.deepEqual(catalogue.legacyIdentities?.map(l => l.id), ["documentation", "access", "assets", "payroll", "learning"]);
+    assert.deepEqual(catalogue.activity, []);
+    assert.ok(catalogue.entries.every(e => e.inspection?.protocols.find(p => p.name === "A2A")?.status === "Not implemented"));
     assert.deepEqual(catalogue.runtimeCapabilities, ["tool.case.read", "tool.context.read"]);
     assert.ok(catalogue.principals.every(row => row.id !== foreignId));
     assert.equal(catalogue.customMappings.length, 1);
@@ -176,7 +233,7 @@ test("isolated client catalogue setup: live administration, idempotency, conflic
     const memberRead = await request("/agent-catalogue", undefined, member);
     assert.equal(memberRead.status, 200);
     assert.equal(memberRead.body.canManage, false);
-    for (const key of ["principals", "owners", "registrations"]) assert.deepEqual(memberRead.body[key], []);
+    for (const key of ["principals", "owners", "registrations", "activity"]) assert.deepEqual(memberRead.body[key], []);
     assert.equal((await request("/agent-catalogue/registrations", input("onboarding"), member)).status, 403);
     const demoRead = await request("/agent-catalogue", undefined, demo, "demo");
     assert.equal(demoRead.body.canManage, false);
@@ -223,6 +280,22 @@ test("isolated client catalogue setup: live administration, idempotency, conflic
       signAdminGrant({ ...grant, issuedAt: issuedAt - ADMIN_LIFETIME_MS - 1, expiresAt: issuedAt - 1 }, secret))).status, 403);
     assert.equal((await request("/agent-catalogue/registrations", input("learning"), privateUser)).status, 403);
     assert.deepEqual(await unaffectedState(), before, "browsing and setup cannot change any operational table or membership");
+    const safeCorrelation = randomUUID();
+    const activityBase = { initiatingUserId: owner, runId: randomUUID(), correlationId: safeCorrelation,
+      purpose: "DO NOT DISCLOSE PRIVATE PURPOSE", caseId: 987654, toolKey: "tool.case.read",
+      action: "case.metadata.read", outcome: "success" as const };
+    await db.insert(agentInvocationAudit).values([
+      { ...activityBase, organizationId, agentId: existingId, agentVersion: 1 },
+      { ...activityBase, runId: randomUUID(), organizationId, agentId: existingId, agentVersion: 99 },
+      { ...activityBase, runId: randomUUID(), organizationId: otherOrg, agentId: existingId, agentVersion: 1 },
+    ]);
+    const activityRead = (await request<AgentCatalogue>("/agent-catalogue")).body.activity!;
+    assert.equal(activityRead.length, 1, "wrong tenant and principal versions are excluded, not relabelled");
+    assert.equal(activityRead[0].correlationId, safeCorrelation);
+    assert.equal(activityRead[0].agentVersion, 1);
+    assert.ok(!JSON.stringify(activityRead).includes("DO NOT DISCLOSE"));
+    assert.equal((activityRead[0] as unknown as Record<string, unknown>).caseId, undefined);
+    assert.deepEqual((await request<AgentCatalogue>("/agent-catalogue", undefined, member)).body.activity, []);
     const intakeSetup = input("intake-conversion");
     const intakeRegistration = await request<CatalogueRegistrationResult>("/agent-catalogue/registrations", intakeSetup);
     assert.equal(intakeRegistration.status, 201);

@@ -6,12 +6,12 @@ import {
   type ProviderGovernanceCase,
 } from "./governance-provider-boundary";
 
-const MODEL = "gpt-5-nano";
+import { ONBOARDING_MODEL, TEXT_TOKEN_BUFFER, DEFAULT_TEXT_MAX_TOKENS } from "./inspectable-prompts";
 
 async function complete(system: string, user: string, maxTokens: number, json = false) {
   return dispatchHroAi({
-    model: MODEL,
-    max_completion_tokens: maxTokens + 2500,
+    model: ONBOARDING_MODEL,
+    max_completion_tokens: maxTokens + TEXT_TOKEN_BUFFER,
     ...(json ? { response_format: { type: "json_object" as const } } : {}),
     messages: [
       { role: "system" as const, content: system },
@@ -59,7 +59,7 @@ export async function llmComplete(
   caseOrSystem: ProviderGovernanceCase | string,
   systemOrUser: string,
   userOrMax?: string | number,
-  configuredMaxTokens = 700,
+  configuredMaxTokens = DEFAULT_TEXT_MAX_TOKENS,
 ): Promise<string | null> {
   try {
     if (typeof caseOrSystem === "string") return null;
@@ -103,7 +103,7 @@ export async function llmCompleteJson<T>(
   caseOrSystem: ProviderGovernanceCase | string,
   systemOrUser: string,
   userOrMax?: string | number,
-  configuredMaxTokens = 700,
+  configuredMaxTokens = DEFAULT_TEXT_MAX_TOKENS,
 ): Promise<T | null> {
   try {
     if (typeof caseOrSystem === "string") return null;
