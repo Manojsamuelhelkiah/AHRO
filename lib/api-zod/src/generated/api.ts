@@ -8,6 +8,212 @@
 import * as zod from 'zod';
 
 
+export const GetWorkforceInsightsResponse = zod.object({
+  "organizationId": zod.string(),
+  "version": zod.number(),
+  "modelStatus": zod.enum(['not-connected']),
+  "canManage": zod.boolean(),
+  "subjects": zod.array(zod.object({
+  "caseId": zod.number(),
+  "reference": zod.string(),
+  "displayName": zod.string(),
+  "sourceRevision": zod.string()
+})),
+  "assessments": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.number(),
+  "kind": zod.enum(['talent-risk', 'resume-integrity']),
+  "band": zod.enum(['green', 'amber', 'red', 'unknown']),
+  "modelId": zod.string(),
+  "modelVersion": zod.string(),
+  "assessedAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "validUntil": zod.string().describe('ISO 8601 UTC timestamp'),
+  "sourceRevision": zod.string(),
+  "probability": zod.number().nullable(),
+  "horizonDays": zod.number().nullable(),
+  "factors": zod.array(zod.string()),
+  "recommendedActions": zod.array(zod.string())
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.string(),
+  "reference": zod.string(),
+  "caseId": zod.number(),
+  "kind": zod.enum(['talent-risk', 'resume-integrity']),
+  "priority": zod.enum(['standard', 'critical']),
+  "reason": zod.string(),
+  "recommendedAction": zod.string(),
+  "ownerUserId": zod.string(),
+  "dueDate": zod.string().describe('Calendar date in YYYY-MM-DD'),
+  "status": zod.enum(['open', 'in-progress', 'resolved', 'dismissed']),
+  "origin": zod.enum(['human', 'model']),
+  "assessmentId": zod.string().nullable(),
+  "createdAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "updatedAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "outcome": zod.string(),
+  "history": zod.array(zod.object({
+  "at": zod.string().describe('ISO 8601 UTC timestamp'),
+  "actor": zod.string(),
+  "action": zod.string(),
+  "outcome": zod.string()
+}))
+})),
+  "owners": zod.array(zod.object({
+  "userId": zod.string(),
+  "label": zod.string()
+})),
+  "coverageNote": zod.string()
+})
+
+
+export const createWorkforceReviewCaseBodyReasonMax = 2000;
+
+export const createWorkforceReviewCaseBodyRecommendedActionMax = 2000;
+
+
+
+
+export const CreateWorkforceReviewCaseBody = zod.object({
+  "version": zod.number(),
+  "caseId": zod.number(),
+  "kind": zod.enum(['talent-risk', 'resume-integrity']),
+  "priority": zod.enum(['standard', 'critical']),
+  "reason": zod.string().min(1).max(createWorkforceReviewCaseBodyReasonMax),
+  "recommendedAction": zod.string().min(1).max(createWorkforceReviewCaseBodyRecommendedActionMax),
+  "ownerUserId": zod.string().min(1),
+  "dueDate": zod.string().describe('Calendar date in YYYY-MM-DD')
+})
+
+export const CreateWorkforceReviewCaseResponse = zod.object({
+  "organizationId": zod.string(),
+  "version": zod.number(),
+  "modelStatus": zod.enum(['not-connected']),
+  "canManage": zod.boolean(),
+  "subjects": zod.array(zod.object({
+  "caseId": zod.number(),
+  "reference": zod.string(),
+  "displayName": zod.string(),
+  "sourceRevision": zod.string()
+})),
+  "assessments": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.number(),
+  "kind": zod.enum(['talent-risk', 'resume-integrity']),
+  "band": zod.enum(['green', 'amber', 'red', 'unknown']),
+  "modelId": zod.string(),
+  "modelVersion": zod.string(),
+  "assessedAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "validUntil": zod.string().describe('ISO 8601 UTC timestamp'),
+  "sourceRevision": zod.string(),
+  "probability": zod.number().nullable(),
+  "horizonDays": zod.number().nullable(),
+  "factors": zod.array(zod.string()),
+  "recommendedActions": zod.array(zod.string())
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.string(),
+  "reference": zod.string(),
+  "caseId": zod.number(),
+  "kind": zod.enum(['talent-risk', 'resume-integrity']),
+  "priority": zod.enum(['standard', 'critical']),
+  "reason": zod.string(),
+  "recommendedAction": zod.string(),
+  "ownerUserId": zod.string(),
+  "dueDate": zod.string().describe('Calendar date in YYYY-MM-DD'),
+  "status": zod.enum(['open', 'in-progress', 'resolved', 'dismissed']),
+  "origin": zod.enum(['human', 'model']),
+  "assessmentId": zod.string().nullable(),
+  "createdAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "updatedAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "outcome": zod.string(),
+  "history": zod.array(zod.object({
+  "at": zod.string().describe('ISO 8601 UTC timestamp'),
+  "actor": zod.string(),
+  "action": zod.string(),
+  "outcome": zod.string()
+}))
+})),
+  "owners": zod.array(zod.object({
+  "userId": zod.string(),
+  "label": zod.string()
+})),
+  "coverageNote": zod.string()
+})
+
+
+export const UpdateWorkforceReviewCaseParams = zod.object({
+  "reviewId": zod.coerce.string()
+})
+
+
+export const updateWorkforceReviewCaseBodyOutcomeMax = 2000;
+
+
+
+export const UpdateWorkforceReviewCaseBody = zod.object({
+  "version": zod.number(),
+  "status": zod.enum(['open', 'in-progress', 'resolved', 'dismissed']),
+  "ownerUserId": zod.string().min(1),
+  "dueDate": zod.string().describe('Calendar date in YYYY-MM-DD'),
+  "outcome": zod.string().max(updateWorkforceReviewCaseBodyOutcomeMax)
+})
+
+export const UpdateWorkforceReviewCaseResponse = zod.object({
+  "organizationId": zod.string(),
+  "version": zod.number(),
+  "modelStatus": zod.enum(['not-connected']),
+  "canManage": zod.boolean(),
+  "subjects": zod.array(zod.object({
+  "caseId": zod.number(),
+  "reference": zod.string(),
+  "displayName": zod.string(),
+  "sourceRevision": zod.string()
+})),
+  "assessments": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.number(),
+  "kind": zod.enum(['talent-risk', 'resume-integrity']),
+  "band": zod.enum(['green', 'amber', 'red', 'unknown']),
+  "modelId": zod.string(),
+  "modelVersion": zod.string(),
+  "assessedAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "validUntil": zod.string().describe('ISO 8601 UTC timestamp'),
+  "sourceRevision": zod.string(),
+  "probability": zod.number().nullable(),
+  "horizonDays": zod.number().nullable(),
+  "factors": zod.array(zod.string()),
+  "recommendedActions": zod.array(zod.string())
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.string(),
+  "reference": zod.string(),
+  "caseId": zod.number(),
+  "kind": zod.enum(['talent-risk', 'resume-integrity']),
+  "priority": zod.enum(['standard', 'critical']),
+  "reason": zod.string(),
+  "recommendedAction": zod.string(),
+  "ownerUserId": zod.string(),
+  "dueDate": zod.string().describe('Calendar date in YYYY-MM-DD'),
+  "status": zod.enum(['open', 'in-progress', 'resolved', 'dismissed']),
+  "origin": zod.enum(['human', 'model']),
+  "assessmentId": zod.string().nullable(),
+  "createdAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "updatedAt": zod.string().describe('ISO 8601 UTC timestamp'),
+  "outcome": zod.string(),
+  "history": zod.array(zod.object({
+  "at": zod.string().describe('ISO 8601 UTC timestamp'),
+  "actor": zod.string(),
+  "action": zod.string(),
+  "outcome": zod.string()
+}))
+})),
+  "owners": zod.array(zod.object({
+  "userId": zod.string(),
+  "label": zod.string()
+})),
+  "coverageNote": zod.string()
+})
+
+
 /**
  * @summary Read the bound executable definition and permission-scoped progress without starting work
  */

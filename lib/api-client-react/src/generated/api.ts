@@ -405,7 +405,10 @@ import type {
   VaultProductSettings,
   VaultReuse,
   VaultShareRequest,
-  VaultSourceEnvelope
+  VaultSourceEnvelope,
+  WorkforceInsights,
+  WorkforceReviewInput,
+  WorkforceReviewUpdate
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -461,6 +464,208 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetWorkforceInsightsUrl = () => {
+
+
+
+
+  return `/api/workforce-insights`
+}
+
+export const getWorkforceInsights = async ( options?: RequestInit): Promise<WorkforceInsights> => {
+
+  return customFetch<WorkforceInsights>(getGetWorkforceInsightsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkforceInsightsQueryKey = () => {
+    return [
+    `/api/workforce-insights`
+    ] as const;
+    }
+
+
+export const getGetWorkforceInsightsQueryOptions = <TData = Awaited<ReturnType<typeof getWorkforceInsights>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkforceInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkforceInsightsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkforceInsights>>> = ({ signal }) => getWorkforceInsights({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkforceInsights>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkforceInsightsQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkforceInsights>>>
+export type GetWorkforceInsightsQueryError = ErrorType<void>
+
+
+
+export function useGetWorkforceInsights<TData = Awaited<ReturnType<typeof getWorkforceInsights>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkforceInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkforceInsightsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateWorkforceReviewCaseUrl = () => {
+
+
+
+
+  return `/api/workforce-insights/reviews`
+}
+
+export const createWorkforceReviewCase = async (workforceReviewInput: WorkforceReviewInput, options?: RequestInit): Promise<WorkforceInsights> => {
+
+  return customFetch<WorkforceInsights>(getCreateWorkforceReviewCaseUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(workforceReviewInput)
+  }
+);}
+
+
+
+
+
+export const getCreateWorkforceReviewCaseMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWorkforceReviewCase>>, TError,{data: BodyType<WorkforceReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWorkforceReviewCase>>, TError,{data: BodyType<WorkforceReviewInput>}, TContext> => {
+
+const mutationKey = ['createWorkforceReviewCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWorkforceReviewCase>>, {data: BodyType<WorkforceReviewInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWorkforceReviewCase(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWorkforceReviewCaseMutationResult = NonNullable<Awaited<ReturnType<typeof createWorkforceReviewCase>>>
+    export type CreateWorkforceReviewCaseMutationBody = BodyType<WorkforceReviewInput>
+    export type CreateWorkforceReviewCaseMutationError = ErrorType<void>
+
+    export const useCreateWorkforceReviewCase = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWorkforceReviewCase>>, TError,{data: BodyType<WorkforceReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWorkforceReviewCase>>,
+        TError,
+        {data: BodyType<WorkforceReviewInput>},
+        TContext
+      > => {
+      return useMutation(getCreateWorkforceReviewCaseMutationOptions(options));
+    }
+
+export const getUpdateWorkforceReviewCaseUrl = (reviewId: string,) => {
+
+
+
+
+  return `/api/workforce-insights/reviews/${reviewId}`
+}
+
+export const updateWorkforceReviewCase = async (reviewId: string,
+    workforceReviewUpdate: WorkforceReviewUpdate, options?: RequestInit): Promise<WorkforceInsights> => {
+
+  return customFetch<WorkforceInsights>(getUpdateWorkforceReviewCaseUrl(reviewId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(workforceReviewUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateWorkforceReviewCaseMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWorkforceReviewCase>>, TError,{reviewId: string;data: BodyType<WorkforceReviewUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWorkforceReviewCase>>, TError,{reviewId: string;data: BodyType<WorkforceReviewUpdate>}, TContext> => {
+
+const mutationKey = ['updateWorkforceReviewCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWorkforceReviewCase>>, {reviewId: string;data: BodyType<WorkforceReviewUpdate>}> = (props) => {
+          const {reviewId,data} = props ?? {};
+
+          return  updateWorkforceReviewCase(reviewId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWorkforceReviewCaseMutationResult = NonNullable<Awaited<ReturnType<typeof updateWorkforceReviewCase>>>
+    export type UpdateWorkforceReviewCaseMutationBody = BodyType<WorkforceReviewUpdate>
+    export type UpdateWorkforceReviewCaseMutationError = ErrorType<void>
+
+    export const useUpdateWorkforceReviewCase = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWorkforceReviewCase>>, TError,{reviewId: string;data: BodyType<WorkforceReviewUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWorkforceReviewCase>>,
+        TError,
+        {reviewId: string;data: BodyType<WorkforceReviewUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateWorkforceReviewCaseMutationOptions(options));
+    }
 
 export const getGetCaseExecutableFlowUrl = (caseId: number,) => {
 

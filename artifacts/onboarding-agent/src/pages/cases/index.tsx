@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import { Plus, Search, SlidersHorizontal, Bot, User, Users, X, Check, AlertTriangle, Clock, ShieldCheck } from 'lucide-react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useClientOperationsSettings } from '../settings-client-operations';
+import { WorkforceReviewPanel } from '@/components/workforce-insights/workforce-review-panel';
 import { BatchIntakeForm } from './batch-intake';
 import { StandardIntakeForm } from './standard-intake';
 import { listJobProfiles, parseWorkforceTriState } from '@/lib/workforce-policy-api';
@@ -371,6 +372,8 @@ export function CasesPage() {
       {typeFilter !== 'Offboarding' && showNew && <NewCaseForm onClose={() => setShowNew(false)} />}
        {typeFilter !== 'Offboarding' && showBatch && <BatchIntakeForm onClose={() => setShowBatch(false)} />}
        {typeFilter !== 'Offboarding' && showStandardIntake && <StandardIntakeForm onClose={() => setShowStandardIntake(false)} />}
+
+      <WorkforceReviewPanel limit={3} />
 
       <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', overflow: 'visible' }}>
         {/* search + filters row */}

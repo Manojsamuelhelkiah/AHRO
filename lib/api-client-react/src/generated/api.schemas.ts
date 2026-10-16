@@ -5,6 +5,182 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type WorkforceWarningKind = typeof WorkforceWarningKind[keyof typeof WorkforceWarningKind];
+
+
+export const WorkforceWarningKind = {
+  'talent-risk': 'talent-risk',
+  'resume-integrity': 'resume-integrity',
+} as const;
+
+export type WorkforceRiskBand = typeof WorkforceRiskBand[keyof typeof WorkforceRiskBand];
+
+
+export const WorkforceRiskBand = {
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+  unknown: 'unknown',
+} as const;
+
+export interface WorkforceSubject {
+  caseId: number;
+  reference: string;
+  displayName: string;
+  sourceRevision: string;
+}
+
+export interface WorkforceAssessment {
+  id: string;
+  caseId: number;
+  kind: WorkforceWarningKind;
+  band: WorkforceRiskBand;
+  modelId: string;
+  modelVersion: string;
+  /** ISO 8601 UTC timestamp */
+  assessedAt: string;
+  /** ISO 8601 UTC timestamp */
+  validUntil: string;
+  sourceRevision: string;
+  /** @nullable */
+  probability: number | null;
+  /** @nullable */
+  horizonDays: number | null;
+  factors: string[];
+  recommendedActions: string[];
+}
+
+export type WorkforceReviewInputPriority = typeof WorkforceReviewInputPriority[keyof typeof WorkforceReviewInputPriority];
+
+
+export const WorkforceReviewInputPriority = {
+  standard: 'standard',
+  critical: 'critical',
+} as const;
+
+export interface WorkforceReviewInput {
+  version: number;
+  caseId: number;
+  kind: WorkforceWarningKind;
+  priority: WorkforceReviewInputPriority;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  reason: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  recommendedAction: string;
+  /** @minLength 1 */
+  ownerUserId: string;
+  /** Calendar date in YYYY-MM-DD */
+  dueDate: string;
+}
+
+export type WorkforceReviewUpdateStatus = typeof WorkforceReviewUpdateStatus[keyof typeof WorkforceReviewUpdateStatus];
+
+
+export const WorkforceReviewUpdateStatus = {
+  open: 'open',
+  'in-progress': 'in-progress',
+  resolved: 'resolved',
+  dismissed: 'dismissed',
+} as const;
+
+export interface WorkforceReviewUpdate {
+  version: number;
+  status: WorkforceReviewUpdateStatus;
+  /** @minLength 1 */
+  ownerUserId: string;
+  /** Calendar date in YYYY-MM-DD */
+  dueDate: string;
+  /** @maxLength 2000 */
+  outcome: string;
+}
+
+export type WorkforceReviewCasePriority = typeof WorkforceReviewCasePriority[keyof typeof WorkforceReviewCasePriority];
+
+
+export const WorkforceReviewCasePriority = {
+  standard: 'standard',
+  critical: 'critical',
+} as const;
+
+export type WorkforceReviewCaseStatus = typeof WorkforceReviewCaseStatus[keyof typeof WorkforceReviewCaseStatus];
+
+
+export const WorkforceReviewCaseStatus = {
+  open: 'open',
+  'in-progress': 'in-progress',
+  resolved: 'resolved',
+  dismissed: 'dismissed',
+} as const;
+
+export type WorkforceReviewCaseOrigin = typeof WorkforceReviewCaseOrigin[keyof typeof WorkforceReviewCaseOrigin];
+
+
+export const WorkforceReviewCaseOrigin = {
+  human: 'human',
+  model: 'model',
+} as const;
+
+export interface WorkforceReviewEvent {
+  /** ISO 8601 UTC timestamp */
+  at: string;
+  actor: string;
+  action: string;
+  outcome: string;
+}
+
+export interface WorkforceReviewCase {
+  id: string;
+  reference: string;
+  caseId: number;
+  kind: WorkforceWarningKind;
+  priority: WorkforceReviewCasePriority;
+  reason: string;
+  recommendedAction: string;
+  ownerUserId: string;
+  /** Calendar date in YYYY-MM-DD */
+  dueDate: string;
+  status: WorkforceReviewCaseStatus;
+  origin: WorkforceReviewCaseOrigin;
+  /** @nullable */
+  assessmentId: string | null;
+  /** ISO 8601 UTC timestamp */
+  createdAt: string;
+  /** ISO 8601 UTC timestamp */
+  updatedAt: string;
+  outcome: string;
+  history: WorkforceReviewEvent[];
+}
+
+export interface WorkforceReviewOwner {
+  userId: string;
+  label: string;
+}
+
+export type WorkforceInsightsModelStatus = typeof WorkforceInsightsModelStatus[keyof typeof WorkforceInsightsModelStatus];
+
+
+export const WorkforceInsightsModelStatus = {
+  'not-connected': 'not-connected',
+} as const;
+
+export interface WorkforceInsights {
+  organizationId: string;
+  version: number;
+  modelStatus: WorkforceInsightsModelStatus;
+  canManage: boolean;
+  subjects: WorkforceSubject[];
+  assessments: WorkforceAssessment[];
+  reviews: WorkforceReviewCase[];
+  owners: WorkforceReviewOwner[];
+  coverageNote: string;
+}
+
 export interface ExecutableFlowStage {
   id: string;
   label: string;

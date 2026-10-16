@@ -11,6 +11,7 @@ import { Link } from 'wouter';
 import { Activity, Bot, CheckCircle2, ShieldAlert, UserCheck, Layers, AlertOctagon, Timer } from 'lucide-react';
 import { EngineBadge } from '@/components/engine-badge';
 import { formatDistanceToNowStrict } from 'date-fns';
+import { WorkforceReviewPanel } from '@/components/workforce-insights/workforce-review-panel';
 import { statusOf, caseTypeOf, caseTitleOf } from './cases/index';
 import { operationalReportingPopulation } from '../lib/operational-reporting';
 
@@ -172,6 +173,8 @@ export function DashboardPage() {
           <StageSummaryCard loading={casesQ.isLoading} title="Day-1 Readiness" metrics={stageMetrics.c} />
         </div>
       )}
+
+      <WorkforceReviewPanel />
 
       {/* Agent Operations */}
       <section aria-labelledby="agent-ops-heading">

@@ -16,6 +16,7 @@ import { Link } from 'wouter';
 import { statusOf, caseTypeOf } from './cases/index';
 import { CASE_TYPES } from './cases/case-presentation';
 
+import { WorkforceInsightsSection } from '@/components/workforce-insights/workforce-insights-section';
 import { OutcomeKpis } from './analytics/outcome-kpis';
 import { BottleneckSimulator } from './analytics/bottleneck-simulator';
 import { EmailTurnaroundReport } from './analytics/email-turnaround';
@@ -235,6 +236,8 @@ export function AnalyticsPage() {
           <RefreshCw className="w-4 h-4" /> Refresh
         </Button>
       </div>
+
+      <WorkforceInsightsSection />
 
       <EmailTurnaroundReport />
 

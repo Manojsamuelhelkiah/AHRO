@@ -43,6 +43,60 @@ tags:
   - name: audit
     description: Protected audit integrity and independently archived audit readiness
 paths:
+  /workforce-insights:
+    get:
+      operationId: getWorkforceInsights
+      tags: [onboarding]
+      responses:
+        "200":
+          description: Client-scoped early-warning foundation; no prediction model is connected.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkforceInsights" }
+        "403": { description: Current client administrator access is required. }
+  /workforce-insights/reviews:
+    post:
+      operationId: createWorkforceReviewCase
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkforceReviewInput" }
+      responses:
+        "200":
+          description: Created, or an existing open review for this source and kind.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkforceInsights" }
+        "400": { description: Invalid review. }
+        "403": { description: Current client administrator and source-case permissions required. }
+        "404": { description: "Source case or owner unavailable." }
+        "409": { description: Revision conflict; reload before retrying. }
+  /workforce-insights/reviews/{reviewId}:
+    patch:
+      operationId: updateWorkforceReviewCase
+      tags: [onboarding]
+      parameters:
+        - in: path
+          name: reviewId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkforceReviewUpdate" }
+      responses:
+        "200":
+          description: Updated review.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkforceInsights" }
+        "400": { description: Invalid review. }
+        "403": { description: Current client administrator and source-case permissions required. }
+        "404": { description: "Review, source case or owner unavailable." }
+        "409": { description: Revision conflict; reload before retrying. }
   /onboarding/cases/{caseId}/flow:
     get:
       operationId: getCaseExecutableFlow
@@ -7445,6 +7499,115 @@ components:
         type: integer
         minimum: 1
   schemas:
+    WorkforceWarningKind:
+      type: string
+      enum: [talent-risk, resume-integrity]
+    WorkforceRiskBand:
+      type: string
+      enum: [green, amber, red, unknown]
+    WorkforceSubject:
+      type: object
+      required: [caseId, reference, displayName, sourceRevision]
+      properties:
+        caseId: { type: integer }
+        reference: { type: string }
+        displayName: { type: string }
+        sourceRevision: { type: string }
+    WorkforceAssessment:
+      type: object
+      required: [id, caseId, kind, band, modelId, modelVersion, assessedAt, validUntil, sourceRevision, probability, horizonDays, factors, recommendedActions]
+      properties:
+        id: { type: string }
+        caseId: { type: integer }
+        kind: { $ref: "#/components/schemas/WorkforceWarningKind" }
+        band: { $ref: "#/components/schemas/WorkforceRiskBand" }
+        modelId: { type: string }
+        modelVersion: { type: string }
+        assessedAt: { type: string, description: ISO 8601 UTC timestamp }
+        validUntil: { type: string, description: ISO 8601 UTC timestamp }
+        sourceRevision: { type: string }
+        probability: { type: ["number", "null"] }
+        horizonDays: { type: ["integer", "null"] }
+        factors: { type: array, items: { type: string } }
+        recommendedActions: { type: array, items: { type: string } }
+    WorkforceReviewInput:
+      type: object
+      required: [version, caseId, kind, priority, reason, recommendedAction, ownerUserId, dueDate]
+      properties:
+        version: { type: integer }
+        caseId: { type: integer }
+        kind: { $ref: "#/components/schemas/WorkforceWarningKind" }
+        priority: { type: string, enum: [standard, critical] }
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+        recommendedAction: { type: string, minLength: 1, maxLength: 2000 }
+        ownerUserId: { type: string, minLength: 1 }
+        dueDate: { type: string, description: Calendar date in YYYY-MM-DD }
+    WorkforceReviewUpdate:
+      type: object
+      required: [version, status, ownerUserId, dueDate, outcome]
+      properties:
+        version: { type: integer }
+        status: { type: string, enum: [open, in-progress, resolved, dismissed] }
+        ownerUserId: { type: string, minLength: 1 }
+        dueDate: { type: string, description: Calendar date in YYYY-MM-DD }
+        outcome: { type: string, maxLength: 2000 }
+    WorkforceReviewCase:
+      type: object
+      required: [id, reference, caseId, kind, priority, reason, recommendedAction, ownerUserId, dueDate, status, origin, assessmentId, createdAt, updatedAt, outcome, history]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        caseId: { type: integer }
+        kind: { $ref: "#/components/schemas/WorkforceWarningKind" }
+        priority: { type: string, enum: [standard, critical] }
+        reason: { type: string }
+        recommendedAction: { type: string }
+        ownerUserId: { type: string }
+        dueDate: { type: string, description: Calendar date in YYYY-MM-DD }
+        status: { type: string, enum: [open, in-progress, resolved, dismissed] }
+        origin: { type: string, enum: [human, model] }
+        assessmentId: { type: ["string", "null"] }
+        createdAt: { type: string, description: ISO 8601 UTC timestamp }
+        updatedAt: { type: string, description: ISO 8601 UTC timestamp }
+        outcome: { type: string }
+        history:
+          type: array
+          items: { $ref: "#/components/schemas/WorkforceReviewEvent" }
+    WorkforceReviewEvent:
+      type: object
+      required: [at, actor, action, outcome]
+      properties:
+        at: { type: string, description: ISO 8601 UTC timestamp }
+        actor: { type: string }
+        action: { type: string }
+        outcome: { type: string }
+    WorkforceReviewOwner:
+      type: object
+      required: [userId, label]
+      properties:
+        userId: { type: string }
+        label: { type: string }
+    WorkforceInsights:
+      type: object
+      required: [organizationId, version, modelStatus, canManage, subjects, assessments, reviews, owners, coverageNote]
+      properties:
+        organizationId: { type: string }
+        version: { type: integer }
+        modelStatus: { type: string, enum: [not-connected] }
+        canManage: { type: boolean }
+        subjects:
+          type: array
+          items: { $ref: "#/components/schemas/WorkforceSubject" }
+        assessments:
+          type: array
+          items: { $ref: "#/components/schemas/WorkforceAssessment" }
+        reviews:
+          type: array
+          items: { $ref: "#/components/schemas/WorkforceReviewCase" }
+        owners:
+          type: array
+          items: { $ref: "#/components/schemas/WorkforceReviewOwner" }
+        coverageNote: { type: string }
     ExecutableFlowStage:
       type: object
       required: [id, label, role, applies, prerequisites, completed]
