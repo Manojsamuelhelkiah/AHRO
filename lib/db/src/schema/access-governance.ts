@@ -386,6 +386,7 @@ export const agentCatalogueBindings = pgTable("agent_catalogue_bindings", {
   requestId: text("request_id").notNull(),
   requestDigest: text("request_digest").notNull(),
   actorUserId: text("actor_user_id").notNull(),
+  intakeAuthorization: jsonb("intake_authorization").$type<{ capability: "intake-conversion/v1"; ownerUserId: string; ownerMembershipRevision: number; activatedAt: string }>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [
   primaryKey({ columns: [t.organizationId, t.catalogueKey] }),

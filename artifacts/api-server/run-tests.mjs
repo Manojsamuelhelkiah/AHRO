@@ -52,6 +52,8 @@ const ownedWorkspaceSuites = new Set([
   "src/lib/onboarding/client-operations-settings.test.ts",
   "src/routes/user-group-super-admin.test.ts",
   "src/lib/hro-email-intake.test.ts",
+  "src/lib/intake-conversion.test.ts",
+  "src/lib/hro-email-turnaround.test.ts",
   "src/routes/email-intake-access.test.ts",
   "src/lib/onboarding/decision-authority.test.ts",
   "src/lib/onboarding/approval-versioning.test.ts",
@@ -100,7 +102,8 @@ if (entryPoints.length === 0) {
 if (!process.argv.includes("--isolated-child")) await prepareDatabaseBackedTests();
 
 await build({
-  entryPoints,
+  entryPoints: requestedTestFile === "src/lib/intake-conversion.test.ts"
+    ? [...entryPoints, path.join(dir, "src/test-support/intake-conversion-child.ts")] : entryPoints,
   outdir: path.join(dir, "dist-test"),
   bundle: true,
   platform: "node",

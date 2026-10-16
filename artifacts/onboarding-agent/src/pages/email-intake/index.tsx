@@ -184,9 +184,15 @@ export function EmailIntakePage() {
   const d = intake.data;
   return (
     <div className="mx-auto min-w-0 max-w-7xl space-y-5 pb-12">
-      <PageHeader title="Email intake" subtitle="Client requests received by email, reviewed by people before any case is created." />
+      <PageHeader title="Email intake" subtitle="Email requests become held cases through authorized automatic conversion or human review. Case approval and execution remain separate." />
       {intake.isLoading ? <Skeleton n={4} /> : intake.isError || !d ? <ErrorNote error={intake.error} onRetry={() => intake.refetch()} /> : (
         <>
+          {d.automation && <Card className="space-y-2 p-4" data-testid="section-intake-automation">
+            <h2 className="text-base font-semibold">Intake conversion: {d.automation.state}</h2>
+            <p className="text-sm">{d.automation.notice}</p>
+            {d.automation.activatedAt && <p className="text-xs text-[var(--text-muted)]">New email eligibility begins {fmtDate(d.automation.activatedAt)}. Previously queued generations and historical backlog are not re-admitted.</p>}
+            {d.canConfigure && <Link href="/agents" className="text-sm text-[var(--primary)] underline">Manage Intake Conversion Agent in AI Agents</Link>}
+          </Card>}
           <Card className="space-y-3 p-4" data-testid="section-readiness">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2"><Mail className="h-4 w-4 text-[var(--primary)]" /><h2 className="text-base font-semibold">Mailbox and readiness</h2></div>
@@ -233,6 +239,8 @@ export function EmailIntakePage() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-mono text-xs">{r.id.slice(0, 12)}</span>
                         <Pill tone={statusTone(r.status)}>{r.status}</Pill>
+                        <span className="text-xs">{r.conversionOrigin ? `${r.conversionOrigin} conversion` : r.automationState ?? 'manual'}</span>
+                        {r.automationReason && <p className="break-words text-xs">{r.automationReason}</p>}
                       </div>
                       {r.potentialDuplicates > 0 && <Pill tone="amber">{r.potentialDuplicates} possible duplicate</Pill>}
                       <dl className="grid grid-cols-2 gap-2 text-xs">
@@ -250,7 +258,10 @@ export function EmailIntakePage() {
                     <tbody>{reqs.data.map((r) => (
                       <tr key={r.id} className="border-t border-[var(--border)]" data-testid={`row-request-${r.id}`}>
                         <td className="py-2 pr-3 font-mono text-xs">{r.id.slice(0, 12)}</td>
-                        <td className="pr-3"><Pill tone={statusTone(r.status)}>{r.status}</Pill>{r.potentialDuplicates > 0 && <span className="ml-1"><Pill tone="amber">{r.potentialDuplicates} possible duplicate</Pill></span>}</td>
+                        <td className="pr-3"><Pill tone={statusTone(r.status)}>{r.status}</Pill>
+                          <p className="text-xs">{r.conversionOrigin ? `${r.conversionOrigin} conversion` : r.automationState ?? 'manual'}</p>
+                          {r.automationReason && <p className="max-w-xs break-words text-xs">{r.automationReason}</p>}
+                          {r.potentialDuplicates > 0 && <span className="ml-1"><Pill tone="amber">{r.potentialDuplicates} possible duplicate</Pill></span>}</td>
                         <td className="pr-3">{r.family ?? 'Unclassified'}</td>
                         <td className="pr-3">{r.missingFields.length}</td>
                         <td className="pr-3">{r.attachments.length}</td>

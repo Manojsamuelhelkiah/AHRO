@@ -2,7 +2,7 @@ import { bindNewCaseInTransaction } from "./flow-manager/manager";
 import { templateOriginalIntent } from "./onboarding/original-intent";
 import { randomBytes, randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { db, hroEmailRequests, hroEmailScan, hroMailboxIngress, onbCases, onbEvents, onbJobProfiles } from "@workspace/db";
+import { db, hroEmailRequests, hroEmailScan, hroMailboxIngress, onbCases, onbEvents, onbJobProfiles, agentInvocationAudit, agentCatalogueBindings } from "@workspace/db";
 import { access, confidentialRead, type Tx } from "./offboarding/authority";
 import { requireEmailIntakeRead, requireEmailRouteAdministrator, emailRouteReceiptCurrent as currentReceipt, emailRouteReceipt as receipt } from "./hro-email-authorization";
 import { SeparationError, object, text } from "./offboarding/model";
@@ -21,6 +21,8 @@ import { readinessFromChecklist } from "./onboarding/settings";
 import { resolveEffectiveAccessInTransaction } from "./access-governance";
 import { registeredDemoProfile } from "./demo-principal";
 import { emailReviewTurnaround } from "./hro-email-turnaround";
+import { resolveIntakeConversion, requireIntakeConversion, type IntakeConversionContext } from "./intake-conversion-authorization";
+import { appendProtectedAuditInTransaction } from "./onboarding/protected-audit";
 
 type RequestRow = typeof hroEmailRequests.$inferSelect;
 type RouteRow = typeof hroMailboxIngress.$inferSelect;
@@ -68,6 +70,7 @@ export async function emailIntakeReadiness(org: string, actor: string, provider?
     for (const route of routes) if (route.enabled === 1 && route.mailboxAddress === mailboxAddress &&
       route.activatedAt && await currentReceipt(tx, org, route.approval, "")) liveRoute = true;
     const result = {
+      automation: await emailAutomationView(tx, org),
       mailboxAddress, ready: Boolean(liveRoute && scan?.lastSuccessAt && Date.now() - scan.lastSuccessAt.getTime() < 180_000 && !scan.lastError),
       routes: canConfigure ? routes.map(emailRouteView) : routes.filter(r => r.enabled === 1).map(emailRouteView),
       templates: HRO_EMAIL_TEMPLATES.map(template => ({ template, example: emailExample(template) })),
@@ -173,6 +176,9 @@ export async function requestView(tx: Tx, org: string, row: RequestRow) {
     version: row.version, receivedAt: row.createdAt.toISOString(), attachments: row.attachments,
     caseId: row.caseId, caseKind: row.caseKind, sourceUrl: `/email-intake/${row.id}`,
     reviewed: Boolean(row.reviewedBy),
+    conversionOrigin: row.conversionOrigin ?? (row.status === "converted" ? "manual" : null),
+    conversionAgentId: row.conversionAgentId, conversionOwnerUserId: row.conversionOwnerUserId,
+    automationState: row.automationState, automationReason: row.automationReason,
     potentialDuplicates: await duplicateCount(tx, org, row),
   };
 }
@@ -213,7 +219,7 @@ export async function reviewEmailRequest(org: string, actor: string, id: string,
     if (row.version !== b.expectedVersion) throw new SeparationError("Request changed. Reload before saving.", 409);
     if (["converted", "rejected"].includes(row.status)) throw new SeparationError("This request is final; it cannot be edited.", 409);
     if (b.action === "reject") {
-      const [updated] = await tx.update(hroEmailRequests).set({ status: "rejected", version: row.version + 1, reviewedBy: actor, updatedAt: new Date(), reason: "Rejected by an authorized reviewer." }).where(eq(hroEmailRequests.id, id)).returning();
+      const [updated] = await tx.update(hroEmailRequests).set({ status: "rejected", automationState: row.automationState ? "manual" : null, version: row.version + 1, reviewedBy: actor, updatedAt: new Date(), reason: "Rejected by an authorized reviewer." }).where(eq(hroEmailRequests.id, id)).returning();
       await audit(tx, org, actor, "email-intake-rejected", id, updated.version);
       return requestView(tx, org, updated);
     }
@@ -234,6 +240,7 @@ export async function reviewEmailRequest(org: string, actor: string, id: string,
       templateId: b.templateId, fields, fieldSources: Object.fromEntries(Object.keys(fields).map(k => [k,
         row.fields[k] === fields[k] && row.fieldSources[k] === "email" ? "email" as const : "reviewer" as const])),
       status: "needs-review", reason: result.valid ? "Reviewed fields complete; explicit conversion still required." : "Required fields remain missing.",
+      automationState: row.automationState ? "manual" : null, automationReason: null,
       version: row.version + 1, routeRevision: route.revision, reviewedBy: actor, updatedAt: new Date(),
     }).where(eq(hroEmailRequests.id, id)).returning();
     await audit(tx, org, actor, "email-intake-reviewed", id, updated.version);
@@ -247,15 +254,36 @@ export async function convertEmailRequest(org: string, actor: string, id: string
     await requireReview(tx, org, actor, true);
     const row = await loadRequest(tx, org, id);
     await requireReview(tx, org, actor, true, row);
+    return convertEmailRequestInTransaction(tx, org, actor, row, b, mailbox);
+  }));
+}
+
+/** Same typed creator for both entry points; only the authority and explicit
+ * human acknowledgements differ. The tenant lock is held through final link. */
+export async function convertEmailRequestInTransaction(tx: Tx, org: string, actor: string, row: RequestRow,
+  b: Record<string, unknown>, mailbox: string | null, automation?: IntakeConversionContext) {
+    const id = row.id;
     if (row.status === "converted" && row.caseId) return requestView(tx, org, row);
+    if (automation) {
+      await requireIntakeConversion(tx, automation);
+      if (row.automationGeneration !== automation.generation || row.automationState !== "pending" ||
+          row.createdAt < automation.activatedAt)
+        throw new SeparationError("This request is outside the current registration boundary. Manual review is required.", 409);
+      if (row.reviewedBy || Object.values(row.fieldSources).some(source => source !== "email") ||
+          row.extraction.issues?.length || !row.fields.template_id || row.fields.template_id !== row.templateId)
+        throw new SeparationError("Source classification or fields need human review; automation does not acknowledge source exceptions.", 409);
+    }
     if (row.version !== b.expectedVersion) throw new SeparationError("Request changed. Reload before converting.", 409);
-    if (row.status !== "needs-review" || !row.reviewedBy || !row.templateId) throw new SeparationError("Save reviewed classification and fields before conversion.", 409);
-    if (await emailHasOtherOwnership(row.providerMessageId)) throw new SeparationError("This provider message belongs to an existing reply, approval, status or legacy intake consumer. It cannot create another case.", 409);
+    if (row.status !== "needs-review" || (!automation && !row.reviewedBy) || !row.templateId)
+      throw new SeparationError(automation ? row.reason || "Classification requires human review." : "Save reviewed classification and fields before conversion.", 409);
+    if (await emailHasOtherOwnership(row.providerMessageId, tx)) throw new SeparationError("This provider message belongs to an existing reply, approval, status or legacy intake consumer. It cannot create another case.", 409);
     const [route] = await tx.select().from(hroMailboxIngress).where(and(eq(hroMailboxIngress.id, row.ingressId!), eq(hroMailboxIngress.organizationId, org))).for("update");
     if (!route?.enabled || route.retiredAt || !route.activatedAt || route.revision !== row.routeRevision || route.mailboxAddress !== mailbox || !await currentReceipt(tx, org, route.approval, ""))
       throw new SeparationError("Mailbox routing is paused, revoked or changed. A fresh route review is required.", 409);
-    if (row.attachments.length && b.attachmentsAcknowledged !== true) throw new SeparationError("Acknowledge that private attachments remain quarantined and are not evidence.", 409);
-    if (await duplicateCount(tx, org, row) && b.duplicateAcknowledged !== true) throw new SeparationError("Potential independent duplicate requests need explicit review; no requests are automatically merged.", 409);
+    // Informational attachments are never read, imported or promoted by either
+    // path. Any required evidence reference remains a held-case human decision.
+    if (!automation && row.attachments.length && b.attachmentsAcknowledged !== true) throw new SeparationError("Acknowledge that private attachments remain quarantined and are not evidence.", 409);
+    if (await duplicateCount(tx, org, row) && (automation || b.duplicateAcknowledged !== true)) throw new SeparationError("Potential independent duplicate requests need explicit review; no requests are automatically merged.", 409);
     let validated;
     try { validated = validateEmailReview(row.templateId, row.fields); }
     catch { throw new SeparationError("Allowed fields require correction.", 400); }
@@ -275,7 +303,7 @@ export async function convertEmailRequest(org: string, actor: string, id: string
         lastWorkingDay: fields.last_working_date, terminationDate: fields.termination_date, timeZone: fields.time_zone,
         role: fields.role, department: fields.department, country: fields.work_country, legalEntity: fields.legal_entity,
         workerCategory: fields.worker_category, manager: fields.manager_name,
-      }, "mailbox", `email:${row.id}`);
+      }, "mailbox", `email:${row.id}`, undefined, automation);
       caseId = result.caseId; caseKind = "separation";
       const [envelope] = await tx.select({ policy: onbCases.processPolicySnapshot }).from(onbCases).where(and(eq(onbCases.organizationId, org), eq(onbCases.id, caseId)));
       await tx.update(onbCases).set({ processPolicySnapshot: { ...envelope.policy,
@@ -306,7 +334,7 @@ export async function convertEmailRequest(org: string, actor: string, id: string
       } : await resolveEffectiveWorkforcePolicyInTransaction(tx, org, context, person);
       const governance = await governanceSnapshotForNewCase(org, new Date(), tx);
       const [created] = await tx.insert(onbCases).values({
-        originalIntent: templateOriginalIntent(definition.id, "reviewed-email-intake"),
+        originalIntent: templateOriginalIntent(definition.id, automation ? "automatic-email-intake" : "reviewed-email-intake"),
         organizationId: org, workerName: fields.worker_name, workerEmail: fields.worker_email, ...person,
         managerName: fields.manager_name || "", recruiterName: fields.recruiter_name || "",
         // No fabricated onboarding date for service requests; effective_date stays in its typed request.
@@ -325,20 +353,54 @@ export async function convertEmailRequest(org: string, actor: string, id: string
         readiness: readinessFromChecklist(policy.effectiveItems), workstreams: [], lifecycleStage: "trigger-received",
         orchestrationStatus: specialist ? "hro-request-pending-review" : "batch-intake-pending-review", createdByUserId: actor,
       }).returning();
-      await requireReview(tx, org, actor, true, { ...row, caseId: created.id });
+      if (automation) await requireIntakeConversion(tx, automation, created.id);
+      else await requireReview(tx, org, actor, true, { ...row, caseId: created.id });
       if (!specialist) await bindNewCaseInTransaction(tx, org, created.id, "onboarding");
       caseId = created.id; caseKind = specialist ? "service-request" : "onboarding";
     }
     await tx.insert(onbEvents).values({
-      organizationId: org, caseId, agent: "email-intake", engine: "human", hitlPattern: "human-review-required",
-      title: "Email request converted to held case", detail: "An authorized reviewer converted a reviewed request. Email content is unverified; no contact, evidence approval or operational release was authorized.",
+      organizationId: org, caseId, agent: automation ? automation.agentId : "email-intake", engine: automation ? "rules" : "human", hitlPattern: "human-review-required",
+      title: "Email request converted to held case", detail: automation
+        ? "The registered Intake Conversion Agent converted validated source fields under the administrator's standing instruction. No human review was recorded. Attachments remain quarantined; evidence decisions and all operational work remain held."
+        : "An authorized reviewer converted a reviewed request. Email content is unverified; no contact, evidence approval or operational release was authorized.",
       idempotencyKey: `email-intake:${row.id}:converted`,
     }).onConflictDoNothing();
-    const [updated] = await tx.update(hroEmailRequests).set({ status: "converted", caseId, caseKind, version: row.version + 1, updatedAt: new Date() })
+    if (automation) await requireIntakeConversion(tx, automation, caseId);
+    const [updated] = await tx.update(hroEmailRequests).set({ status: "converted", caseId, caseKind,
+      reason: "Converted into a held case. Required human evidence decisions, approvals and operational work remain separate.",
+      conversionOrigin: automation ? "automatic" : "manual", conversionAgentId: automation?.agentId ?? null,
+      conversionOwnerUserId: automation?.ownerUserId ?? null,
+      automationState: automation ? "converted" : row.automationState ? "manual" : null, automationReason: null,
+      version: row.version + 1, updatedAt: new Date() })
       .where(eq(hroEmailRequests.id, id)).returning();
-    await audit(tx, org, actor, "email-intake-converted-held", id, updated.version);
+    if (automation) {
+      await tx.insert(agentInvocationAudit).values({
+        organizationId: org, agentId: automation.agentId, agentVersion: automation.agentVersion,
+        initiatingUserId: automation.ownerUserId, runId: `intake:${id}`, correlationId: id,
+        delegatedScope: ["intake-conversion/v1"], caseId, purpose: "Administrator standing intake conversion instruction",
+        toolKey: "intake-conversion/v1", action: "intake.convert-held", outcome: "success",
+      });
+      await appendProtectedAuditInTransaction(tx, {
+        organizationId: org, actorId: automation.agentId, actorKind: "system", actorAuthority: "registered-intake-conversion",
+        action: "email-intake.automatically-converted-held", outcome: "success", objectType: "email-intake", objectId: id,
+        source: "intake-conversion", correlationId: id, reviewedRevision: automation.generation,
+        payload: { safeStatus: "held", humanReview: false },
+      });
+    } else await audit(tx, org, actor, "email-intake-converted-held", id, updated.version);
     return requestView(tx, org, updated);
-  }));
+}
+export async function emailAutomationView(tx: Tx, org: string) {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${org}))`);
+  const active = await resolveIntakeConversion(tx, org);
+  const [binding] = await tx.select().from(agentCatalogueBindings).where(and(
+    eq(agentCatalogueBindings.organizationId, org), eq(agentCatalogueBindings.catalogueKey, "intake-conversion"),
+  ));
+  return { state: active ? "enabled" : binding ? "paused" : "manual",
+    activatedAt: active?.activatedAt.toISOString() ?? null,
+    notice: active
+      ? "New complete explicit email templates convert automatically into held cases. Exceptions require human review. Informational attachments stay quarantined; required evidence decisions remain human."
+      : binding ? "Automatic conversion is paused because registration or owner eligibility is no longer current. Existing requests remain available for manual review; re-registration admits only new mail."
+      : "Conversion is manual. An administrator can register an Intake Conversion Agent in AI Agents to authorize automatic conversion of new valid email templates." };
 }
 function triageView(row: RequestRow) {
   return { id: row.id, status: row.status, reason: row.reason, receivedAt: row.createdAt.toISOString(), version: row.version };

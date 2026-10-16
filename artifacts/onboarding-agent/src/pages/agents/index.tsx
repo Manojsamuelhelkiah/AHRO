@@ -40,7 +40,7 @@ export function AgentsPage() {
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">AI Agents</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1 max-w-2xl">
-             Review agent responsibilities and client-owned identities. Registration does not grant permissions or authorize work.
+             Review agent responsibilities and client-owned identities. Intake Conversion registration authorizes new valid email requests to become held cases; other registrations remain setup only.
           </p>
         </div>
         <div className="relative w-full sm:w-72 shrink-0">

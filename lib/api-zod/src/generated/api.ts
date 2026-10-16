@@ -1334,7 +1334,13 @@ export const GetAgentCatalogueResponse = zod.object({
   "agentId": zod.string(),
   "principalVersion": zod.number(),
   "version": zod.number(),
-  "state": zod.enum(['registered', 'principal-unavailable', 'owner-unavailable', 'review-required']).optional()
+  "state": zod.enum(['registered', 'principal-unavailable', 'owner-unavailable', 'review-required']).optional(),
+  "intakeAuthorization": zod.object({
+  "capability": zod.string(),
+  "ownerUserId": zod.string(),
+  "ownerMembershipRevision": zod.number(),
+  "activatedAt": zod.string()
+}).nullish()
 })),
   "principals": zod.array(zod.object({
   "id": zod.string(),
@@ -1400,7 +1406,13 @@ export const RegisterCatalogueAgentResponse = zod.object({
   "agentId": zod.string(),
   "principalVersion": zod.number(),
   "version": zod.number(),
-  "state": zod.enum(['registered', 'principal-unavailable', 'owner-unavailable', 'review-required']).optional()
+  "state": zod.enum(['registered', 'principal-unavailable', 'owner-unavailable', 'review-required']).optional(),
+  "intakeAuthorization": zod.object({
+  "capability": zod.string(),
+  "ownerUserId": zod.string(),
+  "ownerMembershipRevision": zod.number(),
+  "activatedAt": zod.string()
+}).nullish()
 })
 })
 
@@ -1876,6 +1888,11 @@ export const GetHroEmailPrivateSourceResponse = zod.object({
 
 
 export const GetHroEmailIntakeResponse = zod.object({
+  "automation": zod.object({
+  "state": zod.enum(['enabled', 'manual', 'paused']),
+  "activatedAt": zod.string().nullable(),
+  "notice": zod.string()
+}).optional(),
   "turnaround": zod.object({
   "asOf": zod.string(),
   "waiting": zod.object({
@@ -2201,6 +2218,11 @@ export const ListHroEmailRequestsQueryParams = zod.object({
 })
 
 export const ListHroEmailRequestsResponseItem = zod.object({
+  "conversionOrigin": zod.union([zod.literal('automatic'),zod.literal('manual'),zod.literal(null)]).nullish(),
+  "conversionAgentId": zod.string().nullish(),
+  "conversionOwnerUserId": zod.string().nullish(),
+  "automationState": zod.string().nullish(),
+  "automationReason": zod.string().nullish(),
   "extraction": zod.object({
   "issues": zod.array(zod.object({
   "field": zod.string(),
@@ -2237,6 +2259,11 @@ export const GetHroEmailRequestParams = zod.object({
 })
 
 export const GetHroEmailRequestResponse = zod.object({
+  "conversionOrigin": zod.union([zod.literal('automatic'),zod.literal('manual'),zod.literal(null)]).nullish(),
+  "conversionAgentId": zod.string().nullish(),
+  "conversionOwnerUserId": zod.string().nullish(),
+  "automationState": zod.string().nullish(),
+  "automationReason": zod.string().nullish(),
   "extraction": zod.object({
   "issues": zod.array(zod.object({
   "field": zod.string(),
@@ -2279,6 +2306,11 @@ export const ReviewHroEmailRequestBody = zod.object({
 })
 
 export const ReviewHroEmailRequestResponse = zod.object({
+  "conversionOrigin": zod.union([zod.literal('automatic'),zod.literal('manual'),zod.literal(null)]).nullish(),
+  "conversionAgentId": zod.string().nullish(),
+  "conversionOwnerUserId": zod.string().nullish(),
+  "automationState": zod.string().nullish(),
+  "automationReason": zod.string().nullish(),
   "extraction": zod.object({
   "issues": zod.array(zod.object({
   "field": zod.string(),
@@ -2341,6 +2373,11 @@ export const RetryHroEmailExtractionResponse = zod.object({
   "previewDigest": zod.string(),
   "preservedFields": zod.array(zod.string()),
   "request": zod.object({
+  "conversionOrigin": zod.union([zod.literal('automatic'),zod.literal('manual'),zod.literal(null)]).nullish(),
+  "conversionAgentId": zod.string().nullish(),
+  "conversionOwnerUserId": zod.string().nullish(),
+  "automationState": zod.string().nullish(),
+  "automationReason": zod.string().nullish(),
   "extraction": zod.object({
   "issues": zod.array(zod.object({
   "field": zod.string(),
@@ -2383,6 +2420,11 @@ export const ConvertHroEmailRequestBody = zod.object({
 })
 
 export const ConvertHroEmailRequestResponse = zod.object({
+  "conversionOrigin": zod.union([zod.literal('automatic'),zod.literal('manual'),zod.literal(null)]).nullish(),
+  "conversionAgentId": zod.string().nullish(),
+  "conversionOwnerUserId": zod.string().nullish(),
+  "automationState": zod.string().nullish(),
+  "automationReason": zod.string().nullish(),
   "extraction": zod.object({
   "issues": zod.array(zod.object({
   "field": zod.string(),

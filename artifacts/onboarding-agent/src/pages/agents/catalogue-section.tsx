@@ -125,7 +125,7 @@ function ScopedCatalogueSection({ queryKey, searchTerm }: {
                         {e.productFamilies.map(f => <span key={f} className="rounded border border-[var(--border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px]">{f}</span>)}
                       </div>
                       {e.prerequisites.length > 0 && <div className="text-xs text-[var(--text-secondary)]"><b>Prerequisites:</b> {e.prerequisites.join('; ')}</div>}
-                      <div className="text-xs text-[var(--text-muted)]"><b>Operational capability (unavailable):</b> {e.operationalCapability}</div>
+                      <div className="text-xs text-[var(--text-muted)]"><b>Operational capability:</b> {e.operationalCapability}</div>
                       <details className="text-xs">
                         <summary className="cursor-pointer font-semibold text-[var(--text-primary)] min-h-8">{e.mappings.length} canonical intent mappings</summary>
                         <ul className="mt-2 space-y-2">

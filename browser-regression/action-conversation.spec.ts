@@ -44,8 +44,15 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 820, height: 1180 
     await expect(page.getByText("Unavailable", { exact: true })).toBeVisible();
     const stateResponse = await page.request.post("/api/test/action-conversation-fixture", { data: { action: "state", caseId: data.caseId } });
     expect(await stateResponse.json()).toMatchObject({ communications: 0, work: 1, events: 0, stage: "trigger-received" });
+    const workThreadLoaded = page.waitForResponse(response => {
+      const requested = new URL(response.url());
+      return response.request().method() === "GET" &&
+        requested.pathname.endsWith(`/cases/${data.caseId}/conversation`) &&
+        requested.searchParams.get("workItemId") === String(data.workItemId);
+    });
     await page.goto(`${url}&workItemId=${data.workItemId}`);
-    await expect(page.getByText("No messages on this case yet.", { exact: false })).toBeVisible();
+    expect((await workThreadLoaded).ok()).toBeTruthy();
+    await expect(page.getByText("No messages on this case yet.", { exact: false })).toBeVisible({ timeout: 15_000 });
     await page.getByRole("radiogroup", { name: "Message type" }).getByText("Human note", { exact: true }).click();
     await page.locator("#conv-text").fill("Work-item-specific annotation");
     await page.getByRole("button", { name: "Record note", exact: true }).click();

@@ -8,6 +8,7 @@ import { isPlatformSuperAdmin } from "../lib/private-platform-admin";
 import { demoPrincipalSettingKey, parseRegisteredDemoProfile } from "../lib/demo-principal";
 import { enrichMemberIdentities, isInternalAccount } from "../lib/member-identities";
 import { EXECUTABLE_AGENT_TOOL_KEYS } from "../lib/agent-invocation";
+import { INTAKE_CONVERSION_KEY, intakeOwnerEligible, intakeOwnerMembershipRevision, resolveIntakeConversion } from "../lib/intake-conversion-authorization";
 import { GetAgentCatalogueResponse, RegisterCatalogueAgentBody, RegisterCatalogueAgentResponse } from "@workspace/api-zod";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -66,7 +67,8 @@ router.get("/agent-catalogue", async (req, res, next) => {
           ...binding,
           state: !principal || principal.status !== "active" || principal.revokedAt ? "principal-unavailable"
             : !await eligible(tx, organizationId, principal.ownerUserId) ? "owner-unavailable"
-            : principal.version !== binding.principalVersion || binding.catalogueVersion !== AGENT_CATALOGUE_VERSION ? "review-required" : "registered",
+             : principal.version !== binding.principalVersion || binding.catalogueVersion !== AGENT_CATALOGUE_VERSION ||
+               (binding.catalogueKey === INTAKE_CONVERSION_KEY && !await resolveIntakeConversion(tx, organizationId)) ? "review-required" : "registered",
         });
       }
       return {
@@ -75,7 +77,7 @@ router.get("/agent-catalogue", async (req, res, next) => {
         owners: owners.map(row => ({ clerkUserId: row.clerkUserId, role: row.role })),
         customMappings: custom.map(row => ({ intentKey: `custom:${row.id}`, name: row.name, sourceVersion: row.registryVersion, status: row.status, reviewStatus: "review-required" })),
         runtimeCapabilities: [...EXECUTABLE_AGENT_TOOL_KEYS],
-        runtimeNotice: "Only case metadata read is implemented. Separate agent and owner permissions, owner initiation and case scope remain mandatory. Registration grants no access; no domain execution is implemented.",
+         runtimeNotice: "Intake Conversion registration is a standing instruction to convert new valid email templates into held cases only. Other roles retain separate permissions and owner-initiation requirements. No approval, contact, workstream release or closure is authorized.",
       };
     });
     const owners = await enrichOwners(snapshot.owners);
@@ -113,6 +115,8 @@ router.post("/agent-catalogue/registrations", async (req, res, next) => {
       const definition = agentCatalogue().find(row => row.key === body.catalogueKey);
       if (!definition || body.catalogueVersion !== AGENT_CATALOGUE_VERSION) reject(409, "CATALOGUE_VERSION_CONFLICT", "Catalogue changed. Reload and review the current definition.");
       if (!await eligible(tx, organizationId, body.ownerUserId)) reject(409, "CATALOGUE_OWNER_REQUIRED", "Choose an active eligible human member of this client. No membership or owner promotion will be created.");
+       if (body.catalogueKey === INTAKE_CONVERSION_KEY && !await intakeOwnerEligible(tx, organizationId, body.ownerUserId))
+         reject(409, "CATALOGUE_OWNER_REQUIRED", "Automatic intake conversion requires an active named owner with current intake read/edit and confidential-field permissions. Temporary Super Admin access is not background authority.");
       const [priorRequest] = await tx.select().from(agentCatalogueSetupReceipts).where(and(eq(agentCatalogueSetupReceipts.organizationId, organizationId), eq(agentCatalogueSetupReceipts.requestId, body.requestId)));
       const [existing] = await tx.select().from(agentCatalogueBindings).where(and(eq(agentCatalogueBindings.organizationId, organizationId), eq(agentCatalogueBindings.catalogueKey, body.catalogueKey)));
       if (priorRequest && priorRequest.requestDigest !== digest) reject(409, "CATALOGUE_REQUEST_CONFLICT", "This request identifier already belongs to a different setup action.");
@@ -145,6 +149,10 @@ router.post("/agent-catalogue/registrations", async (req, res, next) => {
         organizationId, catalogueKey: body.catalogueKey, catalogueVersion: body.catalogueVersion,
         agentId: principal!.id, principalVersion: principal!.version, version: (existing?.version ?? 0) + 1,
         requestId: body.requestId, requestDigest: digest, actorUserId: actor,
+         intakeAuthorization: body.catalogueKey === INTAKE_CONVERSION_KEY
+           ? { capability: "intake-conversion/v1" as const, ownerUserId: body.ownerUserId,
+             ownerMembershipRevision: (await intakeOwnerMembershipRevision(tx, organizationId, body.ownerUserId))!,
+             activatedAt: new Date().toISOString() } : null,
       };
       if (!await administrator(tx, organizationId, actor)) reject(403, "CATALOGUE_ADMIN_REQUIRED", "Administrator access ended. Reload and verify again.");
       const [binding] = await tx.insert(agentCatalogueBindings).values(values).onConflictDoUpdate({
@@ -157,7 +165,7 @@ router.post("/agent-catalogue/registrations", async (req, res, next) => {
       await tx.insert(accessGovernanceHistory).values({
         organizationId, actorUserId: actor, eventType: existing ? "agent.catalogue.rebound" : "agent.catalogue.registered",
         entityType: "agent", entityId: principal!.id,
-        detail: { catalogueKey: body.catalogueKey, catalogueVersion: body.catalogueVersion, bindingVersion: binding!.version, principalVersion: principal!.version, ownerUserId: body.ownerUserId, previousAgentId: existing?.agentId ?? null, createdPrincipal: !body.agentId },
+         detail: { catalogueKey: body.catalogueKey, catalogueVersion: body.catalogueVersion, bindingVersion: binding!.version, principalVersion: principal!.version, ownerUserId: body.ownerUserId, previousAgentId: existing?.agentId ?? null, createdPrincipal: !body.agentId, intakeAuthorization: values.intakeAuthorization },
       });
       return { created: !existing, createdPrincipal: !body.agentId, binding };
     });

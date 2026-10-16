@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { clerkClient, getAuth } from "@clerk/express";
 import type { Request, Response, NextFunction } from "express";
-import { isDevelopmentSuperAdmin, bindDevelopmentSuperAdminTenant, enterDevelopmentAdminContext } from "./development-super-admin";
+import { isDevelopmentSuperAdmin, bindDevelopmentSuperAdminTenant, enterDevelopmentAdminContext, withoutDevelopmentAdminContext } from "./development-super-admin";
 import { rawRegisteredDemoProfile } from "./demo-principal";
 
 export const ADMIN_APPROVAL_KEY = "hroPrivatePlatformAdmin";
@@ -12,6 +12,10 @@ type Approval = { userId: string; primaryEmailId: string; environment: string; g
 type Grant = { userId: string; sessionId: string; generation: string; environment: string; issuedAt: number; expiresAt: number };
 type Context = Grant & { organizationId?: string; active: boolean };
 const context = new AsyncLocalStorage<Context>();
+/** Background capabilities must never inherit a request's temporary elevation. */
+export function withoutPlatformAdminContext<T>(action: () => T): T {
+  return context.exit(() => withoutDevelopmentAdminContext(action));
+}
 
 export type PrivateIdentity = {
   id: string; primaryEmailAddressId: string | null; twoFactorEnabled: boolean;

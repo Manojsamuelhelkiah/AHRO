@@ -136,7 +136,9 @@ export function RegistrationForm({ catalogue, queryScope, selection, retryState 
     <form onSubmit={submit} className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5" data-testid="form-register-agent">
       <div>
         <h3 className="text-sm font-bold text-[var(--text-primary)]">Register catalogue role</h3>
-        <p className="mt-1 text-xs text-[var(--text-secondary)]">Setup only. Registering records a binding to a principal; it does not run, grant permissions, change membership or send anything.</p>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]" data-testid="registration-capability-notice">{catKey === 'intake-conversion'
+          ? 'Registering is your standing instruction: new complete, explicit email templates in this client will automatically become held cases without Save Review or Convert clicks. Existing backlog is excluded. Owner eligibility and registration are checked on every conversion. Attachments stay quarantined; no evidence approval, contact, workstream release or closure is authorized.'
+          : 'Setup only. Registering records a binding to a principal; it does not run, grant permissions, change membership or send anything.'}</p>
       </div>
       <fieldset disabled={locked || busy} className="grid gap-4 md:grid-cols-2 min-w-0">
         <div className="md:col-span-2">

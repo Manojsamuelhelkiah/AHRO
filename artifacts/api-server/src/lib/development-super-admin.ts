@@ -8,6 +8,9 @@ const MAX_AGE = 4 * 60 * 60 * 1000;
 type Proof = { userId: string; issuedAt: number; expiresAt: number; sessionId?: string };
 type Scope = { userId: string; sessionId: string; organizationId?: string; active: boolean; expiresAt: number };
 const scope = new AsyncLocalStorage<Scope>();
+export function withoutDevelopmentAdminContext<T>(action: () => T): T {
+  return scope.exit(action);
+}
 const attempts = new Map<string, { count: number; until: number }>();
 const transitions = new Map<string, Promise<void>>();
 

@@ -40,7 +40,7 @@ export async function emailReviewTurnaround(tx: Tx, org: string, asOf = new Date
   await tx.execute(sql`analyze ${refs}`);
   const result = await tx.execute(sql`
     with requests as (
-      select r.id, refs.audit_id, r.status, r.created_at, r.reviewed_by is not null as review_recorded
+       select r.id, refs.audit_id, r.status, r.created_at, r.conversion_origin, r.reviewed_by is not null as review_recorded
       from ${hroEmailRequests} r join ${refs} refs on refs.request_id = r.id
       where r.organization_id = ${org} and r.created_at <= ${asOf}
         and not exists (
@@ -60,7 +60,7 @@ export async function emailReviewTurnaround(tx: Tx, org: string, asOf = new Date
         and a.occurred_at >= r.created_at and a.occurred_at <= ${asOf}
       group by a.object_id
     ), measured as (
-      select r.status, r.review_recorded,
+       select r.status, r.review_recorded, r.conversion_origin,
         date_trunc('week', r.created_at at time zone 'UTC') as week_start,
         date_trunc('month', r.created_at at time zone 'UTC') as month_start,
         extract(epoch from (${asOf}::timestamptz - r.created_at)) / 3600.0 as age,
@@ -79,12 +79,12 @@ export async function emailReviewTurnaround(tx: Tx, org: string, asOf = new Date
       count(*) filter (where status in ('received','needs-review','blocked') and age >= 72 and age < 168)::integer as from72,
       count(*) filter (where status in ('received','needs-review','blocked') and age >= 168)::integer as from168,
       count(review_hours)::integer as review_count,
-      count(*) filter (where (review_recorded or status in ('converted','rejected')) and review_hours is null)::integer as review_missing,
+       count(*) filter (where (review_recorded or status in ('converted','rejected')) and conversion_origin is distinct from 'automatic' and review_hours is null)::integer as review_missing,
       avg(review_hours)::double precision as review_mean,
       percentile_cont(0.5) within group (order by review_hours) as review_median,
       percentile_cont(0.9) within group (order by review_hours) as review_p90,
       count(conversion_hours)::integer as conversion_count,
-      count(*) filter (where status = 'converted' and conversion_hours is null)::integer as conversion_missing,
+       count(*) filter (where status = 'converted' and conversion_origin is distinct from 'automatic' and conversion_hours is null)::integer as conversion_missing,
       avg(conversion_hours)::double precision as conversion_mean,
       percentile_cont(0.5) within group (order by conversion_hours) as conversion_median,
       percentile_cont(0.9) within group (order by conversion_hours) as conversion_p90

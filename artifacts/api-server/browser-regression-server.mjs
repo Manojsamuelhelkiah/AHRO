@@ -334,6 +334,7 @@ for (const [id, label] of [
 }
 const { withControlledEmailIntakeProvider, receiveIntakeMessage } = await import("./src/lib/hro-email-ingestion.ts");
 const { HRO_EMAIL_TEMPLATES, emailExample } = await import("./src/lib/hro-email-registry.ts");
+const { runIntakeConversions } = await import("./src/lib/intake-conversion-worker.ts");
 const { tableEmailFixture } = await import("./src/test-utils/hro-email-table-fixtures.ts");
 const { withControlledEmailExtractionScan } = await import("./src/lib/hro-email-reextraction.ts");
 const controlledMailbox = `email-intake-${suffix}@example.invalid`;
@@ -345,6 +346,12 @@ const intakeProvider = { get: async path => {
   const msg = controlledIntakeMessages.get(decodeURIComponent(match[1]));
   return { ok: Boolean(msg), json: async () => msg };
 }};
+// Dedicated opt-in, owned-schema timer proves conversion does not depend on an
+// open page or a browser-originated conversion request. Never scans real mail.
+const conversionTimer = process.env.INTAKE_AUTOMATION_BROWSER === "true" ? setInterval(() => {
+  void runWithProviderDeny(() => runIntakeConversions(intakeProvider, offboardingFixture.org)).catch(() => {});
+}, 250) : null;
+conversionTimer?.unref();
 // Admit the test dependency while this process is still in test mode.
 // The admin-proof adapter later models development/production semantics.
 // Bind both scopes together: capturing only the provider would discard the
@@ -366,9 +373,14 @@ app.post("/api/test/email-intake-message", async (req, res, next) => {
     const template = HRO_EMAIL_TEMPLATES.find(t => t.id === req.body.templateId);
     if (!template) return res.status(400).json({ error: "Unknown controlled template" });
     const id = `controlled-email-${randomUUID()}`;
+    let example = emailExample(template);
+    if (req.body.unique === true) example = example.replace(/request_id: .*/, `request_id: ${randomUUID()}`)
+      .replace(/worker_email: .*/, `worker_email: worker-${randomUUID()}@example.invalid`)
+      .replace(/employee_id: .*/, `employee_id: employee-${randomUUID()}`);
+    if (req.body.missingWorker === true) example = example.replace(/worker_name: .*\n/, "");
     const msg = { id, internalDate: String(Date.now()), payload: {
       mimeType: "text/plain", headers: [{ name: "From", value: "requester@example.invalid" }, { name: "Subject", value: `[HRO-INTAKE:${route.token}] Controlled request` }],
-      body: { data: Buffer.from(emailExample(template)).toString("base64url") },
+      body: { data: Buffer.from(example).toString("base64url") },
     }};
     if (req.body.table === true) {
       const fixture = tableEmailFixture(template);
@@ -376,6 +388,12 @@ app.post("/api/test/email-intake-message", async (req, res, next) => {
         { mimeType: "text/plain", body: { data: Buffer.from(fixture.plain).toString("base64url") } },
         { mimeType: "text/html", body: { data: Buffer.from(fixture.html).toString("base64url") } },
       ] };
+    }
+    if (req.body.attachment === true) {
+      msg.payload.parts = [{ mimeType: "text/plain", body: msg.payload.body },
+        { filename: "private-informational.txt", mimeType: "text/plain", body: { data: Buffer.from("unverified informational attachment").toString("base64url"), size: 35 } }];
+      msg.payload.mimeType = "multipart/mixed";
+      delete msg.payload.body;
     }
     controlledIntakeMessages.set(id, msg);
     await receiveIntakeMessage(controlledMailbox, msg, [], intakeProvider, { storage: { save: async () => {}, read: async () => Buffer.alloc(0), delete: async () => {} },

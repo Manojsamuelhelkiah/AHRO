@@ -841,8 +841,10 @@ export const runInboundEmailTick = makeSharedTick(async () => {
   monitorStatus.lastPollAt = new Date();
   try {
     if (!await withGmailConsumerCoordination(async () => {
+      await (await import("../intake-conversion-worker")).runIntakeConversions();
       await pollOnce();
       await (await import("../hro-email-ingestion")).runHroEmailIntakeScan();
+      await (await import("../intake-conversion-worker")).runIntakeConversions();
       await (await import("../hro-email-private-source")).runEmailIntakeRetention();
     })) return;
     monitorStatus.lastSuccessAt = new Date();

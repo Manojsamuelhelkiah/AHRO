@@ -9,6 +9,7 @@ import { access, lockTenant, authority, confidentialRead, payrollRead, receipt, 
 import { CLOSURE_BLOCKED, SENSITIVE_TRIGGERS, compilePlan, facts, initialState, object, text, SeparationError } from "./model";
 import { db, offbCases, offbSources, offbPolicies, offbCheckpoints, offbExchangePilots, onbCases, organizationsTable, type SeparationCase, type SeparationPolicy, type SeparationState } from "@workspace/db";
 import { bindNewCaseInTransaction, guardSeparationAction, recordTransitionInTransaction } from "../flow-manager/manager";
+import { requireIntakeConversion, type IntakeConversionContext } from "../intake-conversion-authorization";
 export const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 async function checkpoint(tx: Tx, row: SeparationCase, actor: string, action: string) {
   await tx.insert(offbCheckpoints).values({ organizationId: row.organizationId, caseId: row.id, version: row.version, generation: row.generation, status: row.status, facts: row.facts, state: row.state, actor, action }).onConflictDoNothing();
@@ -18,11 +19,15 @@ export async function audit(tx: Tx, org: string, actor: string, action: string, 
 }
 
 const FIXED_PILOT_METADATA = Symbol("fixed-offboarding-pilot-metadata");
-export async function createSeparationInTransaction(tx: Tx, org: string, actor: string, raw: unknown, channel: string, sourceReference: string, metadataToken?: typeof FIXED_PILOT_METADATA) {
+export async function createSeparationInTransaction(tx: Tx, org: string, actor: string, raw: unknown, channel: string, sourceReference: string, metadataToken?: typeof FIXED_PILOT_METADATA, intake?: IntakeConversionContext) {
   const f = facts(raw);
-  await access(tx, org, actor, true);
+  if (intake) {
+    if (intake.organizationId !== org || actor !== `agent:${intake.agentId}` || channel !== "mailbox" || !sourceReference.startsWith("email:"))
+      throw new SeparationError("Invalid standing intake context.", 403);
+    await requireIntakeConversion(tx, intake);
+  } else await access(tx, org, actor, true);
   const scope = channel === "security-request" ? "it-security-approve" : channel === "manager-request" ? "manager-approve" : "hr-compliance-approve";
-  await authority(tx, org, actor, scope, f.country);
+  if (!intake) await authority(tx, org, actor, scope, f.country);
   if (metadataToken !== FIXED_PILOT_METADATA) {
     const lifecycle = await evaluateCaseDerivedLifecycleGateInTransaction(tx, { organizationId: org, jurisdiction: f.country });
     if (!lifecycle.allowed) throw new SeparationError(lifecycle.reason);
@@ -32,6 +37,7 @@ export async function createSeparationInTransaction(tx: Tx, org: string, actor: 
   const fingerprint = hash(f);
   const [previous] = await tx.select().from(offbSources).where(and(eq(offbSources.organizationId, org), eq(offbSources.channel, channel), eq(offbSources.sourceReference, sourceReference)));
   if (previous) {
+    if (intake) throw new SeparationError("An independent separation source already exists; human duplicate review is required.", 409);
     await access(tx, org, actor, false, previous.caseId);
     if (previous.fingerprint !== fingerprint) throw new SeparationError("Source reference was already used with different values. Record a new attributable event; do not overwrite history.");
     const [existing] = await tx.select().from(offbCases).where(and(eq(offbCases.organizationId, org), eq(offbCases.id, previous.caseId)));
@@ -40,6 +46,7 @@ export async function createSeparationInTransaction(tx: Tx, org: string, actor: 
   let [row] = await tx.select().from(offbCases).where(and(eq(offbCases.organizationId, org), eq(offbCases.activeKey, f.employeeId))).for("update");
   let conflict = false;
   if (row) {
+    if (intake) throw new SeparationError("An active separation already exists for this worker; human duplicate review is required.", 409);
     await access(tx, org, actor, true, row.id);
     await authority(tx, org, actor, scope, row.facts.country, row.id);
     conflict = hash(row.facts) !== fingerprint;
@@ -53,14 +60,15 @@ export async function createSeparationInTransaction(tx: Tx, org: string, actor: 
     const [envelope] = await tx.insert(onbCases).values({ originalIntent: { label: "Controlled separation request", source: "separation-intake" }, organizationId: org, hireType: "separation", workerName: f.workerName, workerEmail: "", workerCategory: f.workerCategory, role: f.role, department: f.department, geography: f.country, legalEntity: f.legalEntity, managerName: f.manager, recruiterName: "", joiningDate: f.lastWorkingDay, lifecycleStage: "separation-held", orchestrationStatus: "separation-only", workforceContext: { workCountry: f.country }, readiness: [], workstreams: [], checklistSnapshot: [], processPolicySnapshot: { lifecycle: "separation", closureSpecification: "pending" }, createdByUserId: actor }).returning();
     [row] = await tx.insert(offbCases).values({ id: envelope.id, organizationId: org, employeeId: f.employeeId, activeKey: f.employeeId, facts: f, state: initialState() }).returning();
     await bindNewCaseInTransaction(tx, org, envelope.id, "separation");
-    await access(tx, org, actor, true, envelope.id);
+    if (intake) await requireIntakeConversion(tx, intake, envelope.id);
+    else await access(tx, org, actor, true, envelope.id);
   }
   if ((channel === "security-request" || channel === "compliance-request") && !row.state.sensitiveTriggers.includes("unknown")) {
     const state = { ...row.state, gatewayA: "restricted" as const, screening: null, sensitiveTriggers: [...new Set([...row.state.sensitiveTriggers, "unknown"])] };
     [row] = await tx.update(offbCases).set({ state, status: "restricted", version: row.version + 1, generation: row.generation + 1, updatedAt: new Date() }).where(eq(offbCases.id, row.id)).returning();
   }
   await tx.insert(offbSources).values({ id: randomUUID(), organizationId: org, caseId: row.id, channel, sourceReference, fingerprint, facts: f, actor, provenance: channel === "mailbox" ? "mailbox-unverified-hris" : "authenticated-human-not-hris-feed" });
-  await audit(tx, org, actor, conflict ? "source-conflict" : "intake", row.id, row.version);
+  if (!intake) await audit(tx, org, actor, conflict ? "source-conflict" : "intake", row.id, row.version);
   await checkpoint(tx, row, actor, "intake");
   return { caseId: row.id, status: conflict ? "conflict-held" : "created-or-linked", conflict };
 }

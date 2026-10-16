@@ -109,3 +109,4 @@
 - [Demo working-list boundaries](demo-working-list-boundaries.md) — explicit reversible Onboarding/Offboarding list curation only; never select cases or fabricate future genuine requests.
 - [HRO case cleanup boundaries](hro-case-cleanup-boundaries.md) — one-time main-development Demo cleanup; HRO references are not fictional-data markers; preserve S examples and protected evidence.
 - [Workforce early warnings](workforce-early-warning-scope.md) — attrition indicators with HR follow-up; critical signals and resume-integrity concerns can become review cases.
+- [Standing intake conversion](standing-intake-conversion.md) — registration authorizes new typed email intake conversion only, never human review or downstream work.

@@ -8040,6 +8040,14 @@ components:
         principalVersion: { type: integer }
         version: { type: integer }
         state: { type: string, enum: [registered, principal-unavailable, owner-unavailable, review-required] }
+        intakeAuthorization:
+          type: [object, "null"]
+          required: [capability, ownerUserId, ownerMembershipRevision, activatedAt]
+          properties:
+            capability: { type: string }
+            ownerUserId: { type: string }
+            ownerMembershipRevision: { type: integer }
+            activatedAt: { type: string }
     CatalogueRegistrationResult:
       type: object
       required: [created, createdPrincipal, binding]
@@ -8320,6 +8328,13 @@ components:
       type: object
       required: [mailboxAddress, ready, routes, templates, monitor, lastSuccessAt, lastError, backlog, blocked, paginationPending, attachmentPolicy, canConfigure, canReview, canTriage, turnaround]
       properties:
+        automation:
+          type: object
+          required: [state, activatedAt, notice]
+          properties:
+            state: { type: string, enum: [enabled, manual, paused] }
+            activatedAt: { type: [string, "null"] }
+            notice: { type: string }
         turnaround: { $ref: "#/components/schemas/HroEmailTurnaround" }
         mailboxAddress: { type: [string, "null"] }
         ready: { type: boolean }
@@ -8391,6 +8406,11 @@ components:
       type: object
       required: [id, templateId, family, status, reason, fields, fieldSources, missingFields, version, receivedAt, attachments, caseId, caseKind, sourceUrl, potentialDuplicates]
       properties:
+        conversionOrigin: { type: [string, "null"], enum: [automatic, manual, null] }
+        conversionAgentId: { type: [string, "null"] }
+        conversionOwnerUserId: { type: [string, "null"] }
+        automationState: { type: [string, "null"] }
+        automationReason: { type: [string, "null"] }
         extraction: { $ref: "#/components/schemas/HroEmailExtractionMetadata" }
         reviewed: { type: boolean }
         id: { type: string }

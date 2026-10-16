@@ -10,8 +10,13 @@ const chromiumExecutable =
 
 export default defineConfig({
   testDir: "./browser-regression",
-  testIgnore: "uat-isolation.spec.ts",
+  // These journeys own dedicated server configurations and are run separately
+  // by test:browser-regression.
+  testIgnore: ["uat-isolation.spec.ts", "intake-conversion.spec.ts"],
   timeout: 120_000,
+  // Tenant switches and signed-in projections can exceed the five-second
+  // default while validation also builds/typechecks the workspace.
+  expect: { timeout: 15_000 },
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,

@@ -18,6 +18,8 @@ type InvocationTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export const AGENT_TOOL_CATALOG = ACCESS_GOVERNANCE_CATALOG.tools;
 export const EXECUTABLE_AGENT_TOOL_KEYS = ["tool.case.read", "tool.context.read"] as const;
+// Standing intake conversion is a separate, server-resolved capability, not a
+// generally invocable agent tool. Do not relax owner-initiation checks here.
 const TOOL_REQUIRED_SCOPE: Record<ExecutableAgentToolKey, readonly string[]> = {
   "tool.case.read": ["tool.case.read", "data.case.readiness.read"],
   "tool.context.read": ["tool.context.read", "flow.case.read"],

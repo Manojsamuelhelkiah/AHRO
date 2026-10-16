@@ -24,24 +24,24 @@ type AgentCatalogue = z.infer<typeof GetAgentCatalogueResponse>;
 type CatalogueAgentRegistrationInput = z.infer<typeof RegisterCatalogueAgentBody>;
 type CatalogueRegistrationResult = z.infer<typeof RegisterCatalogueAgentResponse>;
 
-test("all fifteen catalogue roles preserve canonical versioned coordination associations without increasing coverage", () => {
+test("additive intake conversion role preserves existing catalogue versions and coordination coverage", () => {
   const before = buildIntentCatalog();
   const roles = agentCatalogue();
-  assert.equal(roles.length, 15);
+  assert.equal(roles.length, 16);
   assert.equal(roles.filter(row => row.kind === "domain").length, 12);
-  assert.equal(roles.filter(row => row.kind === "supporting").length, 3);
-  assert.equal(new Set(roles.map(row => row.key)).size, 15);
+  assert.equal(roles.filter(row => row.kind === "supporting").length, 4);
+  assert.equal(new Set(roles.map(row => row.key)).size, 16);
   assert.deepEqual(roles.map(row => row.name), [
     "Onboarding Agent", "Offboarding Agent", "Employee Changes Agent", "Payroll Agent", "Benefits Agent",
     "Leave Agent", "Compliance Agent", "IT Access Agent", "Learning Agent", "Mobility Agent",
     "Documents & Records Agent", "HR Helpdesk Agent", "Assets & Workplace Agent",
-    "Document Verification Agent", "Systems Watcher Agent",
+    "Document Verification Agent", "Systems Watcher Agent", "Intake Conversion Agent",
   ]);
   for (const role of roles) {
     assert.ok(role.responsibility && role.prerequisites.length);
-    assert.ok(role.key === "systems-watcher" || role.mappings.length > 0, `${role.key} requires canonical associations`);
+    assert.ok(["systems-watcher", "intake-conversion"].includes(role.key) || role.mappings.length > 0, `${role.key} requires canonical associations`);
     assert.equal(role.version, AGENT_CATALOGUE_VERSION);
-    assert.equal(role.operationalCapability, "unavailable");
+    assert.equal(role.operationalCapability === "unavailable", role.key !== "intake-conversion");
     assert.equal(new Set(role.mappings.map(row => row.intentKey)).size, role.mappings.length);
     for (const mapping of role.mappings) {
       const intent = before.definitions.find(row => row.key === mapping.intentKey);
@@ -223,6 +223,17 @@ test("isolated client catalogue setup: live administration, idempotency, conflic
       signAdminGrant({ ...grant, issuedAt: issuedAt - ADMIN_LIFETIME_MS - 1, expiresAt: issuedAt - 1 }, secret))).status, 403);
     assert.equal((await request("/agent-catalogue/registrations", input("learning"), privateUser)).status, 403);
     assert.deepEqual(await unaffectedState(), before, "browsing and setup cannot change any operational table or membership");
+    const intakeSetup = input("intake-conversion");
+    const intakeRegistration = await request<CatalogueRegistrationResult>("/agent-catalogue/registrations", intakeSetup);
+    assert.equal(intakeRegistration.status, 201);
+    assert.equal(intakeRegistration.body.binding.intakeAuthorization?.capability, "intake-conversion/v1");
+    assert.equal(intakeRegistration.body.binding.intakeAuthorization?.ownerUserId, owner);
+    const intakeRetry = await request<CatalogueRegistrationResult>("/agent-catalogue/registrations", intakeSetup);
+    assert.deepEqual(intakeRetry.body.binding.intakeAuthorization, intakeRegistration.body.binding.intakeAuthorization,
+      "An identical retry must not reset the new-intake eligibility boundary");
+    assert.equal((await request("/agent-catalogue/registrations", input("intake-conversion", {
+      ownerUserId: privateUser, expectedBindingVersion: 1, replaceExisting: true,
+    }), privateUser, organizationId, proof)).status, 409, "Temporary platform elevation cannot supply the owner's standing permissions");
     assert.equal((await request("/agent-catalogue", undefined, member, otherOrg)).status, 403);
     const binding = (await db.select().from(agentCatalogueBindings).where(and(eq(agentCatalogueBindings.organizationId, organizationId), eq(agentCatalogueBindings.catalogueKey, "payroll"))))[0];
     await db.update(accessAgents).set({ version: 2 }).where(and(eq(accessAgents.organizationId, organizationId), eq(accessAgents.id, existingId)));

@@ -18,6 +18,7 @@ const roles = [
   ["assets-workplace", "Assets & Workplace Agent", "", "Support equipment custody, facilities and workplace handoffs.", ["device-facilities-setup"]],
   ["document-verification", "Document Verification Agent", "", "Support document evidence review; local checks are not source authentication.", ["identity-right-to-work", "background-screening", "benefits-evidence"]],
   ["systems-watcher", "Systems Watcher Agent", "", "Support system health observation and escalation. Existing connector watchers are not this registered principal.", []],
+  ["intake-conversion", "Intake Conversion Agent", "", "Registration authorizes automatic conversion of new, complete, unambiguous email templates into held cases for this client. No human review, evidence approval, contact, execution or closure is performed.", []],
 ] as const;
 
 /** Lightweight catalogue identity lookup for read projections. No principal,
@@ -34,12 +35,14 @@ export function agentCatalogue() {
     key, name, version: AGENT_CATALOGUE_VERSION, kind: index < 12 ? "domain" : "supporting",
     productFamilies: family ? [family] : key === "assets-workplace" ? ["Onboarding", "Offboarding", "Employee Changes"] : key === "document-verification" ? ["Onboarding", "Compliance", "Benefits", "Documents"] : roles.slice(0, 12).map(role => role[2]),
     responsibility,
-    prerequisites: ["Active eligible accountable human member in this client", "Separately approved permissions and owner initiation for any future invocation", "Approved policy, evidence and capability-specific prerequisites before operational work"],
+     prerequisites: key === "intake-conversion"
+       ? ["Active eligible accountable owner with current intake read/edit permissions", "Registration is the standing instruction for new email intake conversion only", "Current mailbox ownership, valid explicit template, no unresolved duplicates or source problems; attachments remain quarantined"]
+       : ["Active eligible accountable human member in this client", "Separately approved permissions and owner initiation for any future invocation", "Approved policy, evidence and capability-specific prerequisites before operational work"],
     mappings: taxonomy.definitions.filter(row => row.definitionClass !== "custom" && row.serviceKeys.some(service => (services as readonly string[]).includes(service))).map(row => ({
       intentKey: row.key, intentName: row.name, intentVersion: row.version,
       sourceVersion: taxonomy.version, provenance: row.provenance,
       reviewStatus: "reviewed", rationale: "Reviewed service-level coordination association only; does not approve outcome execution, coverage or professional authority.",
     })),
-    operationalCapability: "unavailable",
+     operationalCapability: key === "intake-conversion" ? "intake-conversion/v1 — new email requests to held cases only" : "unavailable",
   }));
 }

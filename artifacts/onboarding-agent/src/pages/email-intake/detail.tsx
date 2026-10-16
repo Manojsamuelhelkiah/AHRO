@@ -124,6 +124,10 @@ function Editor({ request, templates, canReview, headers, scope, reload }: { req
           </div>
           {newerSavedVersion && <p role="status" className="text-sm text-[var(--status-amber-fg)]">A newer saved version is available. Your unsaved fields have been kept. Reload latest before saving or converting.</p>}
           {current.reason && <p className="rounded-md bg-[var(--status-amber-bg)] p-2 text-xs text-[var(--status-amber-fg)]">{current.reason}</p>}
+          {current.automationState && <div data-testid="intake-automation-state" className="space-y-1 text-xs">
+            <p>Automatic conversion: {current.automationState}</p>
+            {current.automationReason && <p className="break-words text-[var(--status-amber-fg)]">{current.automationReason}</p>}
+          </div>}
           <div className="space-y-1"><label htmlFor="tpl-select" className="text-xs font-medium">Template (family: {current.family ?? 'unclassified'})</label>
             <select id="tpl-select" data-testid="select-template" disabled={readOnly} className={inputCls} value={templateId} onChange={(e) => pickTemplate(e.target.value)}>
               <option value="">Select a template</option>
@@ -210,10 +214,13 @@ function Editor({ request, templates, canReview, headers, scope, reload }: { req
           <h2 className="text-base font-semibold">Convert to case</h2>
           {current.status === 'converted' ? (
             <div data-testid="text-case-result" className="space-y-1 text-sm"><Pill tone="green">converted</Pill>
+              <p>{current.conversionOrigin === 'automatic' ? 'Automatically converted by the registered Intake Conversion Agent. No human review was recorded.' : 'Manually converted by an authorized reviewer.'}</p>
+              {current.conversionAgentId && <p className="break-all text-xs">Agent: {current.conversionAgentId} · Accountable owner: {current.conversionOwnerUserId}</p>}
+              <p className="text-xs">Case remains held for the required human decisions. Conversion does not approve evidence or authorize execution.</p>
               {current.caseId != null && <p>Case {current.caseId}{current.caseKind ? ` (${current.caseKind})` : ''}: <Link className="font-medium text-[var(--primary)] underline" href={current.caseKind === 'separation' ? `/cases/separations/${current.caseId}` : `/cases/${current.caseId}`}>Open case</Link></p>}</div>
           ) : current.status === 'rejected' ? <p className="text-sm">This request was rejected.</p> : (
             <>
-              <p className="text-xs text-[var(--text-muted)]">Complete mail still needs a reviewer save first. Conversion is checked against version {current.version}.</p>
+              <p className="text-xs text-[var(--text-muted)]">Manual conversion requires a saved review. Eligible new requests may convert automatically under an active registration; exceptions remain for human correction. Conversion is checked against version {current.version}.</p>
               {hasAttach && <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" data-testid="checkbox-ack-attachments" checked={ackFiles} onChange={(e) => setAckFiles(e.target.checked)} disabled={readOnly} />I acknowledge the attachments stay quarantined and are not imported.</label>}
               {dup && <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" data-testid="checkbox-ack-duplicate" checked={ackDup} onChange={(e) => setAckDup(e.target.checked)} disabled={readOnly} />I reviewed {current.potentialDuplicates} possible duplicate request(s) and still want to convert.</label>}
               <Button data-testid="button-convert" disabled={!canConvert || convert.isPending} onClick={doConvert}>{convert.isPending ? 'Converting...' : 'Convert to case'}</Button>

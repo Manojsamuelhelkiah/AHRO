@@ -106,6 +106,7 @@ export async function retryEmailExtraction(org: string, actor: string, id: strin
     const [updated] = await tx.update(hroEmailRequests).set({
       templateId, fields, fieldSources: Object.fromEntries(Object.keys(fields).map(k => [k, preservedFields.includes(k) ? "reviewer" as const : "email" as const])),
       extraction: metadata, reviewedBy: null, status: "needs-review", reason: "Source suggestions adopted. A fresh human review is required before conversion.",
+      automationState: row.automationState ? "manual" : null, automationReason: null,
       version: row.version + 1, updatedAt: new Date(),
     }).where(eq(hroEmailRequests.id, id)).returning();
     await audit(tx, org, actor, "email-intake-extraction-adopted", id, updated.version);

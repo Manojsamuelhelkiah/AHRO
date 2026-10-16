@@ -11,6 +11,7 @@ import { boundedEmailContent } from "./hro-email-content";
 export { boundedEmailContent, MAX_EMAIL_BYTES } from "./hro-email-content";
 import { emailRouteReceiptCurrent as currentReceipt } from "./hro-email-authorization";
 import { withSensitiveLifecycleFence, evaluateCaseDerivedLifecycleGateInTransaction } from "./onboarding/sensitive-lifecycle";
+import { resolveIntakeConversion } from "./intake-conversion-authorization";
 
 const connectors = new ReplitConnectors();
 export type EmailProvider = { get: (path: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }> };
@@ -56,12 +57,12 @@ export function resolveEmailRoute(
     r.activatedAt !== null && r.backfillFrom !== null && sentAt >= r.backfillFrom && sentAt.getTime() <= Date.now() + 1000);
   return matches.length === 1 ? matches[0] : null;
 }
-export async function emailHasOtherOwnership(id: string) {
-  const results = await Promise.all([
-    db.select({ id: onbCommunications.id }).from(onbCommunications).where(eq(onbCommunications.externalMessageId, id)).limit(1),
-    db.select({ id: onbWatchEmails.id }).from(onbWatchEmails).where(eq(onbWatchEmails.gmailMessageId, id)).limit(1),
-    db.select({ id: hroMailboxRequests.id }).from(hroMailboxRequests).where(eq(hroMailboxRequests.providerMessageId, id)).limit(1),
-  ]);
+ export async function emailHasOtherOwnership(id: string, connection: Pick<typeof db, "select"> = db) {
+  const results = [
+     await connection.select({ id: onbCommunications.id }).from(onbCommunications).where(eq(onbCommunications.externalMessageId, id)).limit(1),
+     await connection.select({ id: onbWatchEmails.id }).from(onbWatchEmails).where(eq(onbWatchEmails.gmailMessageId, id)).limit(1),
+     await connection.select({ id: hroMailboxRequests.id }).from(hroMailboxRequests).where(eq(hroMailboxRequests.providerMessageId, id)).limit(1),
+  ];
   return results.some(rows => rows.length);
 }
 async function alreadyOwned(id: string) {
@@ -107,6 +108,7 @@ export async function receiveIntakeMessage(mailbox: string, msg: GmailMessage, r
     return;
   }
   await withSensitiveLifecycleFence(route.organizationId, () => db.transaction(async tx => {
+     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${route.organizationId}))`);
     const [live] = await tx.select().from(hroMailboxIngress).where(eq(hroMailboxIngress.id, route.id)).for("update");
     if (!live || !resolveEmailRoute(subject, mailbox, sentAt, [live]) || live.revision !== route.revision ||
       !await currentReceipt(tx, live.organizationId, live.approval, "")) {
@@ -123,6 +125,8 @@ export async function receiveIntakeMessage(mailbox: string, msg: GmailMessage, r
       organizationId: live.organizationId, jurisdiction: classified.fields.work_country || "unknown",
     });
     const fields = gate.allowed && !content.blocked ? classified.fields : {};
+     const automation = await resolveIntakeConversion(tx, live.organizationId);
+     const newlyEligible = automation && sentAt >= automation.activatedAt;
     await tx.insert(hroEmailRequests).values({
       id: randomUUID(), organizationId: live.organizationId, ingressId: live.id, routeRevision: live.revision,
       originalIngressId: live.id, originalRouteRevision: live.revision,
@@ -130,6 +134,9 @@ export async function receiveIntakeMessage(mailbox: string, msg: GmailMessage, r
       fields, fieldSources: Object.fromEntries(Object.keys(fields).map(k => [k, "email" as const])),
       extraction: !content.blocked ? { issues: classified.issues, provenance: gate.allowed ? classified.provenance : {} } : {},
       attachments: content.attachments,
+       automationGeneration: newlyEligible ? automation.generation : null,
+       automationState: newlyEligible ? "pending" : null,
+       createdAt: new Date(),
       status: !gate.allowed || content.blocked || classified.blockedReason ? "blocked" : "needs-review",
       reason: content.blocked ? "MIME content exceeds safe processing limits." : !gate.allowed
         ? "Country collection review required; no employee content has been retained." : classified.blockedReason ?? classified.uncertainty,

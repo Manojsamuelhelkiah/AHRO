@@ -14,8 +14,10 @@ import { sql } from "drizzle-orm";
 export type AgentInvocationOutcome = "success" | "denied" | "failure";
 
 /**
- * Payload-free, append-only record of an authenticated human's delegated
- * invocation of a registered tenant agent.
+ * Payload-free, append-only registered-agent attribution. initiatingUserId is
+ * the actual initiating human for interactive tools; for intake-conversion/v1
+ * it identifies the accountable owner under the recorded standing instruction,
+ * not a human review or an impersonated session.
  */
 export const agentInvocationAudit = pgTable("agent_invocation_audit", {
   id: serial("id").primaryKey(),

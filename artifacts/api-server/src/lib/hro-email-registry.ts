@@ -146,6 +146,7 @@ export function classifyEmail(subject: string, body: string, structure?: EmailSt
     fields,
     issues,
     provenance,
+    explicitTemplate: Boolean(explicit),
     uncertainty: explicit ? "Explicit template still requires human review." : candidates.length === 1 ? "Keyword suggestion only; confirm classification." : "Classification is uncertain; choose a request template.",
     blockedReason: sensitive ? "Potential sensitive values detected. Supply secure collection references, not bank, medical or identity values." : issues.some(i => i.kind === "conflict") ? "Repeated fields require manual correction." : null,
     missingFields: template ? missingEmailFields(template.id, fields) : ["template_id"],

@@ -856,6 +856,16 @@ export const CatalogueBindingState = {
   'review-required': 'review-required',
 } as const;
 
+/**
+ * @nullable
+ */
+export type CatalogueBindingIntakeAuthorization = {
+  capability: string;
+  ownerUserId: string;
+  ownerMembershipRevision: number;
+  activatedAt: string;
+} | null;
+
 export interface CatalogueBinding {
   catalogueKey: string;
   catalogueVersion: string;
@@ -863,6 +873,8 @@ export interface CatalogueBinding {
   principalVersion: number;
   version: number;
   state?: CatalogueBindingState;
+  /** @nullable */
+  intakeAuthorization?: CatalogueBindingIntakeAuthorization;
 }
 
 export interface CatalogueRegistrationResult {
@@ -1289,6 +1301,22 @@ export interface HroEmailTemplate {
   example: string;
 }
 
+export type HroEmailReadinessAutomationState = typeof HroEmailReadinessAutomationState[keyof typeof HroEmailReadinessAutomationState];
+
+
+export const HroEmailReadinessAutomationState = {
+  enabled: 'enabled',
+  manual: 'manual',
+  paused: 'paused',
+} as const;
+
+export type HroEmailReadinessAutomation = {
+  state: HroEmailReadinessAutomationState;
+  /** @nullable */
+  activatedAt: string | null;
+  notice: string;
+};
+
 export interface HroEmailWaitingBands {
   under24Hours: number;
   from24To72Hours: number;
@@ -1390,6 +1418,7 @@ export interface OnbInboundEmailMonitor {
 }
 
 export interface HroEmailReadiness {
+  automation?: HroEmailReadinessAutomation;
   turnaround: HroEmailTurnaround;
   /** @nullable */
   mailboxAddress: string | null;
@@ -1409,6 +1438,17 @@ export interface HroEmailReadiness {
   canReview: boolean;
   canTriage: boolean;
 }
+
+/**
+ * @nullable
+ */
+export type HroEmailRequestConversionOrigin = typeof HroEmailRequestConversionOrigin[keyof typeof HroEmailRequestConversionOrigin] | null;
+
+
+export const HroEmailRequestConversionOrigin = {
+  automatic: 'automatic',
+  manual: 'manual',
+} as const;
 
 export type HroEmailRequestStatus = typeof HroEmailRequestStatus[keyof typeof HroEmailRequestStatus];
 
@@ -1444,6 +1484,16 @@ export interface HroEmailAttachment {
 }
 
 export interface HroEmailRequest {
+  /** @nullable */
+  conversionOrigin?: HroEmailRequestConversionOrigin;
+  /** @nullable */
+  conversionAgentId?: string | null;
+  /** @nullable */
+  conversionOwnerUserId?: string | null;
+  /** @nullable */
+  automationState?: string | null;
+  /** @nullable */
+  automationReason?: string | null;
   extraction?: HroEmailExtractionMetadata;
   reviewed?: boolean;
   id: string;
