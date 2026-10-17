@@ -1,0 +1,565 @@
+<migration_failure>
+   Failed to run database migration statement
+ALTER TABLE "offb_sources" ADD CONSTRAINT "offb_source_tenant_fk" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."offb_cases"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+there is no unique constraint matching given keys for referenced table "offb_cases"
+   </migration_failure>
+
+   <generated_migration_diff>
+   CREATE TABLE "onb_hr_policy_imports" (
+"id" text PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"uploaded_by_user_id" text NOT NULL,
+"filename" text NOT NULL,
+"media_type" text NOT NULL,
+"byte_size" integer NOT NULL,
+"sha256" text NOT NULL,
+"object_path" text NOT NULL,
+"status" text NOT NULL,
+"malware_verdict" text DEFAULT 'pending' NOT NULL,
+"extraction" jsonb,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+CONSTRAINT "onb_hr_policy_import_status_check" CHECK (status = ANY (ARRAY['processing'::text, 'quarantined'::text, 'ready'::text, 'consumed'::text, 'discarded'::text])),
+CONSTRAINT "onb_hr_policy_imports_byte_size_check" CHECK ((byte_size > 0) AND (byte_size <= 10485760))
+);
+
+
+CREATE TABLE "offb_policies" (
+"id" text NOT NULL,
+"organization_id" text NOT NULL,
+"version" integer NOT NULL,
+"policy" jsonb NOT NULL,
+"status" text DEFAULT 'proposal' NOT NULL,
+"approval" jsonb,
+"created_by" text NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+CREATE TABLE "hro_email_scan" (
+"mailbox_address" text PRIMARY KEY NOT NULL,
+"query" text NOT NULL,
+"page_token" text,
+"cycle_until" timestamp with time zone NOT NULL,
+"last_success_at" timestamp with time zone,
+"last_error" text,
+"processed" integer DEFAULT 0 NOT NULL,
+"watermark_at" timestamp with time zone,
+"routes_revision" text
+);
+
+
+CREATE TABLE "offb_sources" (
+"id" text PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"channel" text NOT NULL,
+"source_reference" text NOT NULL,
+"fingerprint" text NOT NULL,
+"facts" jsonb NOT NULL,
+"actor" text NOT NULL,
+"provenance" text NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+CREATE TABLE "offb_checkpoints" (
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"version" integer NOT NULL,
+"generation" integer NOT NULL,
+"status" text NOT NULL,
+"facts" jsonb NOT NULL,
+"state" jsonb NOT NULL,
+"actor" text NOT NULL,
+"action" text NOT NULL,
+"recorded_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+CREATE TABLE "hro_mailbox_requests" (
+"id" text PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"ingress_id" text NOT NULL,
+"provider_message_id" text NOT NULL,
+"sender" text NOT NULL,
+"fields" jsonb NOT NULL,
+"attachments" jsonb DEFAULT '[]'::jsonb NOT NULL,
+"status" text DEFAULT 'pending-review' NOT NULL,
+"case_id" integer,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+CREATE TABLE "offb_cases" (
+"id" integer PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"employee_id" text NOT NULL,
+"version" integer DEFAULT 1 NOT NULL,
+"generation" integer DEFAULT 1 NOT NULL,
+"status" text DEFAULT 'held' NOT NULL,
+"active_key" text,
+"facts" jsonb NOT NULL,
+"state" jsonb NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+CONSTRAINT "offb_active_key_required" CHECK (((status = ANY (ARRAY['cancelled'::text, 'transfer-review'::text])) AND (active_key IS NULL)) OR ((status <> ALL (ARRAY['cancelled'::text, 'transfer-review'::text])) AND (active_key = employee_id))),
+CONSTRAINT "offb_finalization_unavailable" CHECK ((status = ANY (ARRAY['held'::text, 'restricted'::text, 'active'::text, 'paused'::text, 'cancelled'::text, 'transfer-review'::text, 'closure-preparation'::text])) AND ((state ->> 'closureBlocker'::text) = 'section-4.6-pending'::text))
+);
+
+
+CREATE TABLE "hro_email_sources" (
+"id" text PRIMARY KEY NOT NULL,
+"request_id" text NOT NULL,
+"organization_id" text NOT NULL,
+"kind" text NOT NULL,
+"object_path" text NOT NULL,
+"state" text DEFAULT 'reserved' NOT NULL,
+"checksum" text,
+"byte_size" integer,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+CREATE TABLE "human_permission_decisions" (
+"id" serial PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"actor_user_id" text NOT NULL,
+"reviewed_revision" integer NOT NULL,
+"authorization" jsonb NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+CONSTRAINT "human_permission_decisions_revision_check" CHECK (reviewed_revision >= 0)
+);
+
+
+CREATE TABLE "offb_exchanges" (
+"id" text PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"task_id" text NOT NULL,
+"generation" integer NOT NULL,
+"task_revision" integer NOT NULL,
+"enrollment_revision" integer NOT NULL,
+"reference" text NOT NULL,
+"direction" text NOT NULL,
+"kind" text NOT NULL,
+"status" text NOT NULL,
+"recipient" text NOT NULL,
+"member_id" text NOT NULL,
+"operator" text NOT NULL,
+"agent_id" text NOT NULL,
+"persona" text NOT NULL,
+"mailbox" text NOT NULL,
+"subject" text NOT NULL,
+"body" text NOT NULL,
+"provider_message_id" text,
+"provider_thread_id" text,
+"reply_to_id" text,
+"observation" jsonb,
+"source_transport_verified" integer DEFAULT 0 NOT NULL,
+"applied" integer DEFAULT 0 NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+"attempted_at" timestamp with time zone
+);
+
+
+CREATE TABLE "action_conversation_messages" (
+"id" serial PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"work_item_id" integer,
+"version" integer DEFAULT 1 NOT NULL,
+"submission_id" text NOT NULL,
+"request_digest" text NOT NULL,
+"author" text NOT NULL,
+"text" text NOT NULL,
+"mode" text NOT NULL,
+"agent_key" text,
+"agent_fingerprint" text,
+"state" text NOT NULL,
+"outcome" text,
+"reply" text,
+"explanation" jsonb,
+"evidence_fingerprint" text,
+"review_href" text,
+"dispatch_started_at" timestamp with time zone,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+CONSTRAINT "action_conversation_submission_unique" UNIQUE("organization_id","author","submission_id"),
+CONSTRAINT "action_conversation_messages_mode_check" CHECK (mode = ANY (ARRAY['note'::text, 'triage'::text])),
+CONSTRAINT "action_conversation_messages_state_check" CHECK (state = ANY (ARRAY['recorded'::text, 'pending'::text, 'completed'::text, 'failed'::text, 'uncertain'::text, 'withheld'::text]))
+);
+
+
+CREATE TABLE "transaction_handoff_revisions" (
+"id" serial PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"revision" integer NOT NULL,
+"kind" text NOT NULL,
+"body" text NOT NULL,
+"author_user_id" text NOT NULL,
+"source_revision" text NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+CREATE TABLE "offb_exchange_mailbox_state" (
+"id" text PRIMARY KEY NOT NULL,
+"query" text NOT NULL,
+"page_token" text,
+"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+CREATE TABLE "case_list_visibility_changes" (
+"id" serial PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"hidden" boolean NOT NULL,
+"version" integer NOT NULL,
+"actor_user_id" text NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+CONSTRAINT "case_list_visibility_changes_demo_only" CHECK (organization_id = 'demo'::text)
+);
+
+
+CREATE TABLE "hro_email_requests" (
+"id" text PRIMARY KEY NOT NULL,
+"organization_id" text,
+"ingress_id" text,
+"route_revision" integer,
+"mailbox_address" text NOT NULL,
+"provider_message_id" text NOT NULL,
+"template_id" text,
+"fields" jsonb DEFAULT '{}'::jsonb NOT NULL,
+"field_sources" jsonb DEFAULT '{}'::jsonb NOT NULL,
+"attachments" jsonb DEFAULT '[]'::jsonb NOT NULL,
+"status" text DEFAULT 'received' NOT NULL,
+"reason" text,
+"version" integer DEFAULT 1 NOT NULL,
+"case_id" integer,
+"case_kind" text,
+"reviewed_by" text,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+"original_ingress_id" text,
+"original_route_revision" integer,
+"routing_admissions" jsonb DEFAULT '[]'::jsonb NOT NULL,
+"extraction" jsonb DEFAULT '{}'::jsonb NOT NULL,
+"automation_generation" integer,
+"automation_state" text,
+"automation_reason" text,
+"automation_attempts" integer DEFAULT 0 NOT NULL,
+"automation_retry_at" timestamp with time zone,
+"conversion_origin" text,
+"conversion_agent_id" text,
+"conversion_owner_user_id" text,
+CONSTRAINT "hro_email_attribution" CHECK (((organization_id IS NULL) AND (ingress_id IS NULL) AND (fields = '{}'::jsonb)) OR ((organization_id IS NOT NULL) AND (ingress_id IS NOT NULL)))
+);
+
+
+CREATE TABLE "hro_mailbox_ingress" (
+"id" text PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"token" text NOT NULL,
+"allowed_senders" jsonb NOT NULL,
+"approval" jsonb NOT NULL,
+"created_by" text NOT NULL,
+"enabled" integer DEFAULT 1 NOT NULL,
+"mailbox_address" text,
+"activated_at" timestamp with time zone,
+"backfill_from" timestamp with time zone,
+"revision" integer DEFAULT 1 NOT NULL,
+"retired_at" timestamp with time zone,
+"replacement_of_id" text,
+"rotation_reference" text
+);
+
+
+CREATE TABLE "offb_exchange_quarantine" (
+"provider_message_id" text PRIMARY KEY NOT NULL,
+"reason" text NOT NULL,
+"reference_hashes" jsonb NOT NULL,
+"received_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+CREATE TABLE "case_list_visibility" (
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"hidden" boolean DEFAULT false NOT NULL,
+"version" integer DEFAULT 1 NOT NULL,
+CONSTRAINT "case_list_visibility_pkey" PRIMARY KEY("organization_id","case_id"),
+CONSTRAINT "case_list_visibility_demo_only" CHECK (organization_id = 'demo'::text),
+CONSTRAINT "case_list_visibility_version_positive" CHECK (version > 0)
+);
+
+
+CREATE TABLE "offb_exchange_pilots" (
+"case_id" integer PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"provenance" text NOT NULL,
+"scenario" text NOT NULL,
+"version" integer DEFAULT 1 NOT NULL,
+"generation" integer DEFAULT 1 NOT NULL,
+"state" jsonb NOT NULL,
+"created_by" text NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+CONSTRAINT "offb_exchange_pilot_demo_only" CHECK ((organization_id = 'demo'::text) AND (provenance = 'offboarding-contextual/v1'::text) AND (scenario = ANY (ARRAY['success'::text, 'delayed'::text, 'exception'::text])))
+);
+
+
+CREATE TABLE "demo_case_list_visibility_changes" (
+"id" serial PRIMARY KEY NOT NULL,
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"hidden" boolean NOT NULL,
+"version" integer NOT NULL,
+"actor_user_id" text NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+CONSTRAINT "demo_case_list_visibility_changes_demo_only" CHECK (organization_id = 'demo'::text)
+);
+
+
+CREATE TABLE "demo_case_list_visibility" (
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"hidden" boolean DEFAULT false NOT NULL,
+"version" integer DEFAULT 1 NOT NULL,
+CONSTRAINT "demo_case_list_visibility_pkey" PRIMARY KEY("organization_id","case_id"),
+CONSTRAINT "demo_case_list_visibility_demo_only" CHECK (organization_id = 'demo'::text),
+CONSTRAINT "demo_case_list_visibility_version_positive" CHECK (version > 0)
+);
+
+
+CREATE TABLE "case_flow_definitions" (
+"id" text NOT NULL,
+"version" integer NOT NULL,
+"family" text NOT NULL,
+"digest" text NOT NULL,
+"definition" jsonb NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+CONSTRAINT "case_flow_definitions_pkey" PRIMARY KEY("id","version"),
+CONSTRAINT "case_flow_definition_family" CHECK (family = ANY (ARRAY['onboarding'::text, 'separation'::text])),
+CONSTRAINT "case_flow_definition_version" CHECK (version > 0)
+);
+
+
+CREATE TABLE "case_flow_bindings" (
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"definition_id" text,
+"definition_version" integer,
+"compatibility" text NOT NULL,
+"reason" text NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+CONSTRAINT "case_flow_bindings_pkey" PRIMARY KEY("organization_id","case_id"),
+CONSTRAINT "case_flow_binding_compatibility" CHECK (compatibility = ANY (ARRAY['bound'::text, 'review-required'::text, 'review-only'::text])),
+CONSTRAINT "case_flow_binding_identity" CHECK ((definition_id IS NULL) = (definition_version IS NULL))
+);
+
+
+CREATE TABLE "agent_catalogue_setup_receipts" (
+"organization_id" text NOT NULL,
+"request_id" text NOT NULL,
+"request_digest" text NOT NULL,
+"catalogue_key" text NOT NULL,
+"binding_version" integer NOT NULL,
+CONSTRAINT "agent_catalogue_setup_receipts_pkey" PRIMARY KEY("organization_id","request_id")
+);
+
+
+CREATE TABLE "agent_catalogue_bindings" (
+"organization_id" text NOT NULL,
+"catalogue_key" text NOT NULL,
+"catalogue_version" text NOT NULL,
+"agent_id" text NOT NULL,
+"principal_version" integer NOT NULL,
+"version" integer DEFAULT 1 NOT NULL,
+"request_id" text NOT NULL,
+"request_digest" text NOT NULL,
+"actor_user_id" text NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+"intake_authorization" jsonb,
+CONSTRAINT "agent_catalogue_bindings_pkey" PRIMARY KEY("organization_id","catalogue_key"),
+CONSTRAINT "agent_catalogue_bindings_principal_unique" UNIQUE("organization_id","agent_id"),
+CONSTRAINT "agent_catalogue_bindings_request_unique" UNIQUE("organization_id","request_id"),
+CONSTRAINT "agent_catalogue_bindings_versions_check" CHECK ((version > 0) AND (principal_version > 0))
+);
+
+
+CREATE TABLE "case_flow_transitions" (
+"organization_id" text NOT NULL,
+"case_id" integer NOT NULL,
+"operation_key" text NOT NULL,
+"definition_id" text NOT NULL,
+"definition_version" integer NOT NULL,
+"action_id" text NOT NULL,
+"domain_version" integer NOT NULL,
+"generation" integer NOT NULL,
+"outcome" text NOT NULL,
+"reason" text NOT NULL,
+"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+CONSTRAINT "case_flow_transitions_pkey" PRIMARY KEY("organization_id","case_id","operation_key"),
+CONSTRAINT "case_flow_transition_outcome" CHECK (outcome = ANY (ARRAY['validated'::text, 'recorded'::text, 'held'::text]))
+);
+
+
+ALTER TABLE "onb_cases" ADD COLUMN "controller_retired" boolean DEFAULT false NOT NULL;
+
+ALTER TABLE "onb_cases" ADD COLUMN "operational_preparation" jsonb;
+
+ALTER TABLE "onb_cases" ADD COLUMN "operational_activation" jsonb;
+
+ALTER TABLE "onb_cases" ADD COLUMN "original_intent" jsonb;
+
+ALTER TABLE "onb_approvals" ADD COLUMN "permission_decision" jsonb;
+
+ALTER TABLE "onb_documents" ADD COLUMN "created_at" timestamp with time zone DEFAULT now() NOT NULL;
+
+ALTER TABLE "onb_outcome_evidence_authority_receipts" ADD COLUMN "permission_decision" jsonb;
+
+ALTER TABLE "onb_system_checks" ADD COLUMN "created_at" timestamp with time zone DEFAULT now() NOT NULL;
+
+ALTER TABLE "access_user_groups" ADD COLUMN "starter_id" text;
+
+ALTER TABLE "onb_hr_policy_versions" ADD COLUMN "import_provenance" jsonb;
+
+ALTER TABLE "onb_hr_policy_imports" ADD CONSTRAINT "onb_hr_policy_imports_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE "offb_policies" ADD CONSTRAINT "offb_policies_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "offb_sources" ADD CONSTRAINT "offb_source_tenant_fk" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."offb_cases"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "offb_sources" ADD CONSTRAINT "offb_sources_case_id_fkey" FOREIGN KEY ("case_id") REFERENCES "public"."offb_cases"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "offb_sources" ADD CONSTRAINT "offb_sources_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "offb_checkpoints" ADD CONSTRAINT "offb_checkpoint_tenant_fk" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."offb_cases"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "offb_checkpoints" ADD CONSTRAINT "offb_checkpoints_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_mailbox_requests" ADD CONSTRAINT "hro_mailbox_case_tenant_fk" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."offb_cases"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_mailbox_requests" ADD CONSTRAINT "hro_mailbox_ingress_tenant_fk" FOREIGN KEY ("organization_id","ingress_id") REFERENCES "public"."hro_mailbox_ingress"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_mailbox_requests" ADD CONSTRAINT "hro_mailbox_requests_case_id_fkey" FOREIGN KEY ("case_id") REFERENCES "public"."offb_cases"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_mailbox_requests" ADD CONSTRAINT "hro_mailbox_requests_ingress_id_fkey" FOREIGN KEY ("ingress_id") REFERENCES "public"."hro_mailbox_ingress"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_mailbox_requests" ADD CONSTRAINT "hro_mailbox_requests_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "offb_cases" ADD CONSTRAINT "offb_case_tenant_fk" FOREIGN KEY ("organization_id","id") REFERENCES "public"."onb_cases"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "offb_cases" ADD CONSTRAINT "offb_cases_id_fkey" FOREIGN KEY ("id") REFERENCES "public"."onb_cases"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "offb_cases" ADD CONSTRAINT "offb_cases_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_email_sources" ADD CONSTRAINT "hro_email_sources_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_email_sources" ADD CONSTRAINT "hro_email_sources_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "public"."hro_email_requests"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "human_permission_decisions" ADD CONSTRAINT "human_permission_decisions_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "offb_exchanges" ADD CONSTRAINT "offb_exchange_tenant_fk" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."offb_exchange_pilots"("organization_id","case_id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "action_conversation_messages" ADD CONSTRAINT "action_conversation_messages_organization_id_case_id_fkey" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."onb_cases"("organization_id","id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "transaction_handoff_revisions" ADD CONSTRAINT "transaction_handoff_case_fk" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."onb_cases"("organization_id","id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "case_list_visibility_changes" ADD CONSTRAINT "case_list_visibility_changes_organization_id_case_id_fkey" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."onb_cases"("organization_id","id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE "hro_email_requests" ADD CONSTRAINT "hro_email_case_tenant_fk" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."onb_cases"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_email_requests" ADD CONSTRAINT "hro_email_original_route_tenant_fk" FOREIGN KEY ("organization_id","original_ingress_id") REFERENCES "public"."hro_mailbox_ingress"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_email_requests" ADD CONSTRAINT "hro_email_requests_case_id_fkey" FOREIGN KEY ("case_id") REFERENCES "public"."onb_cases"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_email_requests" ADD CONSTRAINT "hro_email_requests_ingress_id_fkey" FOREIGN KEY ("ingress_id") REFERENCES "public"."hro_mailbox_ingress"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_email_requests" ADD CONSTRAINT "hro_email_requests_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_email_requests" ADD CONSTRAINT "hro_email_route_tenant_fk" FOREIGN KEY ("organization_id","ingress_id") REFERENCES "public"."hro_mailbox_ingress"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_mailbox_ingress" ADD CONSTRAINT "hro_mailbox_ingress_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "hro_mailbox_ingress" ADD CONSTRAINT "hro_mailbox_replacement_tenant_fk" FOREIGN KEY ("organization_id","replacement_of_id") REFERENCES "public"."hro_mailbox_ingress"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "case_list_visibility" ADD CONSTRAINT "case_list_visibility_organization_id_case_id_fkey" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."onb_cases"("organization_id","id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE "offb_exchange_pilots" ADD CONSTRAINT "offb_exchange_pilot_tenant_fk" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."offb_cases"("organization_id","id") ON DELETE restrict ON UPDATE no action;
+
+ALTER TABLE "demo_case_list_visibility_changes" ADD CONSTRAINT "demo_case_list_visibility_changes_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE "demo_case_list_visibility" ADD CONSTRAINT "demo_case_list_visibility_organization_id_case_id_fkey" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."onb_cases"("organization_id","id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "case_flow_bindings" ADD CONSTRAINT "case_flow_bindings_definition_id_definition_version_fkey" FOREIGN KEY ("definition_id","definition_version") REFERENCES "public"."case_flow_definitions"("id","version") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE "case_flow_bindings" ADD CONSTRAINT "case_flow_bindings_organization_id_case_id_fkey" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."onb_cases"("organization_id","id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "agent_catalogue_setup_receipts" ADD CONSTRAINT "agent_catalogue_setup_receipts_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "agent_catalogue_bindings" ADD CONSTRAINT "agent_catalogue_bindings_organization_id_agent_id_fkey" FOREIGN KEY ("organization_id","agent_id") REFERENCES "public"."access_agents"("organization_id","id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE "agent_catalogue_bindings" ADD CONSTRAINT "agent_catalogue_bindings_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+
+ALTER TABLE "case_flow_transitions" ADD CONSTRAINT "case_flow_transitions_definition_id_definition_version_fkey" FOREIGN KEY ("definition_id","definition_version") REFERENCES "public"."case_flow_definitions"("id","version") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE "case_flow_transitions" ADD CONSTRAINT "case_flow_transitions_organization_id_case_id_fkey" FOREIGN KEY ("organization_id","case_id") REFERENCES "public"."case_flow_bindings"("organization_id","case_id") ON DELETE cascade ON UPDATE no action;
+
+CREATE INDEX "onb_hr_policy_import_tenant_idx" ON "onb_hr_policy_imports" USING btree ("organization_id","created_at");
+
+CREATE UNIQUE INDEX "offb_policy_version" ON "offb_policies" USING btree ("organization_id","id","version");
+
+CREATE UNIQUE INDEX "offb_source_retry" ON "offb_sources" USING btree ("organization_id","channel","source_reference");
+
+CREATE UNIQUE INDEX "offb_checkpoint_once" ON "offb_checkpoints" USING btree ("organization_id","case_id","version");
+
+CREATE UNIQUE INDEX "hro_mailbox_message_once" ON "hro_mailbox_requests" USING btree ("provider_message_id");
+
+CREATE UNIQUE INDEX "offb_one_active_employee" ON "offb_cases" USING btree ("organization_id","active_key");
+
+CREATE INDEX "offb_tenant_cases" ON "offb_cases" USING btree ("organization_id","status");
+
+CREATE UNIQUE INDEX "hro_email_source_once" ON "hro_email_sources" USING btree ("request_id","kind");
+
+CREATE UNIQUE INDEX "hro_email_source_path" ON "hro_email_sources" USING btree ("object_path");
+
+CREATE INDEX "human_permission_decisions_org_id_idx" ON "human_permission_decisions" USING btree ("organization_id","id");
+
+CREATE UNIQUE INDEX "offb_exchange_outbound_reference" ON "offb_exchanges" USING btree ("reference") WHERE (direction = 'outbound'::text);
+
+CREATE UNIQUE INDEX "offb_exchange_provider_message" ON "offb_exchanges" USING btree ("provider_message_id");
+
+CREATE UNIQUE INDEX "offb_exchange_reference" ON "offb_exchanges" USING btree ("reference","direction","id");
+
+CREATE INDEX "action_conversation_history_idx" ON "action_conversation_messages" USING btree ("organization_id","case_id","id");
+
+CREATE INDEX "transaction_handoff_lifecycle_idx" ON "transaction_handoff_revisions" USING btree ("organization_id","case_id","created_at");
+
+CREATE UNIQUE INDEX "transaction_handoff_revision_unique" ON "transaction_handoff_revisions" USING btree ("organization_id","case_id","kind","revision");
+
+CREATE INDEX "hro_email_automation_pending" ON "hro_email_requests" USING btree ("automation_retry_at","created_at","id") WHERE (automation_state = 'pending'::text);
+
+CREATE UNIQUE INDEX "hro_email_case_once" ON "hro_email_requests" USING btree ("organization_id","case_id");
+
+CREATE UNIQUE INDEX "hro_email_provider_once" ON "hro_email_requests" USING btree ("mailbox_address","provider_message_id");
+
+CREATE INDEX "hro_email_tenant_queue" ON "hro_email_requests" USING btree ("organization_id","created_at","id");
+
+CREATE UNIQUE INDEX "hro_mailbox_one_replacement" ON "hro_mailbox_ingress" USING btree ("replacement_of_id");
+
+CREATE UNIQUE INDEX "hro_mailbox_token" ON "hro_mailbox_ingress" USING btree ("token");
+
+CREATE UNIQUE INDEX "offb_exchange_pilot_scenario" ON "offb_exchange_pilots" USING btree ("organization_id","scenario");
+
+CREATE INDEX "case_flow_transition_history" ON "case_flow_transitions" USING btree ("organization_id","case_id","created_at");
+
+ALTER TABLE "access_user_groups" ADD CONSTRAINT "access_user_groups_org_starter_unique" UNIQUE("organization_id","starter_id");
+
+ALTER TABLE "onb_cases" ADD CONSTRAINT "onb_separation_envelope_no_completion" CHECK ((hire_type <> 'separation'::text) OR ((lifecycle_stage ~~ 'separation-%'::text) AND (orchestration_status = 'separation-only'::text) AND (offer_acceptance_complete = false)));
+   </generated_migration_diff>
+
+   <migration_warnings>
+   No additional migration warnings were generated.
+   </migration_warnings>
