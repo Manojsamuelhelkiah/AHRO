@@ -43,6 +43,7 @@ import { HrPolicyLibraryDetailPage } from './pages/hr-policy-library/detail';
 import { AuditPage } from './pages/audit';
 import { PolicyReviewPage } from './pages/policy-review';
 import { LearningGuidePage } from './pages/learning-guide';
+import { FlowSimulatorPage } from './pages/flow-simulator';
 import { ClerkProvider, SignIn, SignUp, Show, useUser } from '@clerk/react';
 import { SeparationsListPage } from './pages/cases/separations/list';
 import { SeparationNewPage } from './pages/cases/separations/new';
@@ -415,6 +416,9 @@ function Router() {
       </Route>
       <Route path="/uat-test-center/*?">
         <UatRelocation />
+      </Route>
+      <Route path="/learning-guide/flow-simulator">
+        <Protected><FlowSimulatorPage /></Protected>
       </Route>
       <Route path="/learning-guide">
         <Protected><LearningGuidePage /></Protected>

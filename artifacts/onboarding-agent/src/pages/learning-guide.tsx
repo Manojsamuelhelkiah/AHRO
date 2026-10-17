@@ -149,6 +149,7 @@ export function LearningGuidePage() {
 
   return <div className="mx-auto max-w-6xl space-y-6 pb-16">
     <PageHeader title="Learning Guide" subtitle="Canonical, searchable role and topic guidance—what to do, what evidence to inspect, and where the safety boundary remains." />
+    <Link href="/learning-guide/flow-simulator" className="flex items-center justify-between gap-3 rounded-xl border-2 border-[#0f766e] bg-[#e6f4f0] p-4 text-[#0f3b3a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0f766e]" data-testid="link-flow-simulator"><span><strong className="block text-sm">Flow Simulator</strong><span className="text-xs">Certification / course assignment only. Practise workflow gates, responsibility and evidence in a learning-only exercise.</span></span><ExternalLink className="h-4 w-4 shrink-0" /></Link>
     <Card className="overflow-hidden p-0">
       <div className="grid gap-5 bg-[var(--surface-alt)] p-5 md:grid-cols-[1.45fr_1fr]">
         <div><p className="text-xs font-bold uppercase tracking-wide text-[var(--primary)]">Canonical product guide · {catalog.catalogVersion}</p><h2 className="mt-1 text-xl font-semibold">Find the operational path before acting</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">Every server-provided topic links roles, entry points, features, scenarios, evidence and exceptions. Search all of those fields—not just a page name.</p></div>
